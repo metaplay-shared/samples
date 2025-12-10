@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "249921295034",
+    "firebase_url": "https://example-project-idler.firebaseio.com",
+    "project_id": "example-project-idler",
+    "storage_bucket": "example-project-idler.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:249921295034:android:4d21a73e433cc475236883",
+        "android_client_info": {
+          "package_name": "io.metaplay.idler"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "249921295034-vc623va5k5tiv20ilbbs56k64rkdrio2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDND7bQS8F-BkHs7EwohY_yA4n2-fe3b4M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "249921295034-vc623va5k5tiv20ilbbs56k64rkdrio2.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "249921295034-vd460ve3uqeg31rrrlicq1am5j88s86k.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "io.metaplay.idler"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

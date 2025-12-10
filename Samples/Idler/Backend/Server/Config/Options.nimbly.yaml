@@ -1,0 +1,28 @@
+# Options specifically for Idler's 'nimbly' environment.
+
+# Create secret with: metaplay secrets create nimbly user-maxmind-license-key --from-literal=license-key=<key>
+Geolocation:
+  Enabled: true
+  MaxMindLicenseKeyPath: "kube-secret://user-maxmind-license-key#license-key"
+
+GooglePlayStore:
+  EnableGoogleAuthentication: true
+  GooglePlayApplicationId: example-project-idler
+  GooglePlayOAuth2ClientCredentialsPath: kube-secret://user-google-oauth#json
+  AndroidPublisherApiServiceAccountPath: kube-secret://user-idler-sa#credentials
+  EnableAndroidPublisherApi: true
+  GooglePlayPublicKey: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsFUIqCqO/pshWaSYYPhyMdgO3BBPmnu76MyUjqexT+IUr22li7z/2YUJKO7o0YWDhubbDxv932x94O0jjoKgJ9q9Cv3rj8IEWeGuqkJNMh1rYfkDfA8qv4g4Alb5oYEU3ASGjjlXTFuvZ9HcctGA5ylYkSSktDYgywbsx7RZyK/ruMII3e1PoA2sdz4nnsopUykl6DHBuk6l/aBZcpARbmPcoDTE1kxlwbJlhpasCiwHm8BYFNrdu9elgPD/ro2QqcWvp+elbyEMUCs37L/xBns37NbPL447TItR4UQe3oVH8afQ4n4VN3GsnT94uandRoV618LD3CQiZoYmZ3vWGwIDAQAB"
+
+WebLogin:
+  Clients:
+    "UnityWebGL":
+      Scopes: "game.session"
+      AllowedRedirectUrls: "https://lovely-wombats-build-nimbly-assets.p2-eu.metaplay.dev/"
+
+# Create secret with: metaplay secrets create nimbly user-push-credentials --from-file=firebase-credentials=<filename>
+PushNotification:
+  Enabled:                 true
+  FirebaseCredentialsPath: "kube-secret://user-push-credentials#firebase-credentials"
+
+ClientConnection:
+  CommitIdCheckRule: OnlyIfDefined

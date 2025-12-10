@@ -1,0 +1,24 @@
+# Only used for testing the legacy metaplay-shared/github-workflows/setup-auth-cli and metaplay-auth tools from CI!
+
+# Environment name and family
+environment: tinysquids
+environmentFamily: Development
+
+# Configuration files to use
+config:
+  files:
+    - "./Config/Options.base.yaml"
+    - "./Config/Options.dev.yaml"
+
+# Enable config discovery from infra
+tenant:
+  discoveryEnabled: true
+
+publicWebApi:
+  enabled: true
+
+experimental:
+  websockets:
+    enabled: true
+  gameserversV0Api:
+    enabled: true

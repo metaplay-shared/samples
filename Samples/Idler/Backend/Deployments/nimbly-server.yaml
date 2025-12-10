@@ -1,0 +1,49 @@
+# Configuration files to use
+config:
+  files:
+    - "./Config/Options.base.yaml"
+    - "./Config/Options.dev.yaml"
+    - "./Config/Options.nimbly.yaml"
+
+service:
+  annotations:
+    # enable the Global Accelerator
+    aws-global-accelerator-controller.h3poteto.dev/global-accelerator-managed: "true"
+
+    # set a sensible DNS name for the GA endpoint
+    aws-global-accelerator-controller.h3poteto.dev/route53-hostname: lovely-wombats-build-nimbly.p2-eu.metaplay.dev
+
+  ports:
+    - name: game
+      port: 9339
+      tls: true
+    - name: game-443
+      port: 443
+      tls: true
+
+publicWebApi:
+  enabled: true
+
+experimental:
+  websockets:
+    enabled: true
+  gameserversV0Api:
+    enabled: true
+
+# Configure simple distributed setup
+# \todo Disabled for now as the environment doesn't have size for multi-shard deploy
+# shards:
+#   - name: logic
+#     nodeCount: 2
+#     requests:
+#       cpu: 250m
+#       memory: 500Mi
+#     entityKinds:
+#       - Connection
+#   - name: service
+#     nodeCount: 1
+#     requests:
+#       cpu: 150m
+#       memory: 750Mi
+#     entityKinds:
+#       - AdminApi

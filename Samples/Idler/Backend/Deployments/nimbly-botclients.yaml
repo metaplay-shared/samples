@@ -1,0 +1,5 @@
+# Override default parameters for environment 'nimbly'
+# botclients:
+#   replicas: 1
+#   maxBotId: 1000
+#   botsPerPod: 10

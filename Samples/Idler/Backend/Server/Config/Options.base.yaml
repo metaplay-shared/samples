@@ -1,0 +1,216 @@
+### Base options file, included for all platforms
+WebSockets:Enabled: true
+
+## Clustering
+
+# Artificial example for specifying a custom battle cluster by overriding the entity placements
+# \todo Move this to Rocket sample or somewhere else more sensible?
+# Clustering:
+#   EntityPlacementOverrides:
+#     # Override battle-related entities to the 'battle' shard (artificial example!)
+#     UdpPassthrough: [ battle-eu, battle-us ]
+#     Guild:          [ battle-eu, battle-us ]
+
+## GooglePlayStore
+
+GooglePlayStore:
+  AndroidPackageName:                      io.metaplay.idler
+  #GooglePlayPublicKey:                    "MIIBI...."
+
+  #EnableGoogleAuthentication              true
+  #GooglePlayOAuth2ClientCredentialsPath:  ./config/path-to-your-file.json or kube-secret://<secret-name>#<key-name>
+  #GooglePlayApplicationId                 "123"
+
+  #EnableAndroidPublisherApi:              false
+  #AndroidPublisherApiServiceAccountPath": ./config/path-to-your-file.json or kube-secret://<secret-name>#<key-name>
+  #EnableGooglePlayInAppPurchaseRefunds:   false
+
+## AppleStore
+
+AppleStore:
+  IosBundleId:                             io.metaplay.idler
+  EnableAppleAuthentication:               true
+  #AppleSharedSecret:                      ""
+
+## Database
+
+Database:
+  # Master database version: bump version to force the older versions of the database to be reset.
+  # Useful during development, but should never be done in production.
+  MasterVersion: 17
+
+  # When your game goes live, we recommend disabling (uncommenting) NukeOnVersionMismatch so
+  # databases are never accidentally nuked!
+  # NukeOnVersionMismatch: false
+
+## AdminApi
+
+AdminApi:
+  Roles:
+    # Choose which built-in roles are enabled for the game
+    - game-admin
+    - game-viewer
+    - customer-support-senior
+    - customer-support-agent
+    # Specify a game-specific example role
+    - my-custom-role
+  Permissions:
+    # Metaplay core permissions
+    api.general.view:                    [ game-admin, game-viewer, customer-support-senior, customer-support-agent, my-custom-role ]
+    api.notifications.view:              [ game-admin, game-viewer                                                                  ]
+    api.notifications.edit:              [ game-admin                                                                               ]
+    api.broadcasts.view:                 [ game-admin, game-viewer                                                                  ]
+    api.broadcasts.edit:                 [ game-admin                                                                               ]
+    api.analytics_events.view:           [ game-admin, game-viewer                                                                  ]
+    api.audit_logs.view:                 [ game-admin, game-viewer, customer-support-senior, customer-support-agent                 ]
+    api.audit_logs.search:               [ game-admin, game-viewer                                                                  ]
+    api.segmentation.view:               [ game-admin, game-viewer, customer-support-senior, customer-support-agent                 ]
+    api.activables.view:                 [ game-admin, game-viewer, customer-support-senior, customer-support-agent                 ]
+    api.game_config.view:                [ game-admin, game-viewer                                                                  ]
+    api.game_config.edit:                [ game-admin                                                                               ]
+    api.game_config.delete:              [ game-admin                                                                               ]
+    api.localization.view:               [ game-admin, game-viewer                                                                  ]
+    api.localization.edit:               [ game-admin                                                                               ]
+    api.localization.delete:             [ game-admin                                                                               ]
+    api.experiments.view:                [ game-admin, game-viewer, customer-support-senior, customer-support-agent                 ]
+    api.experiments.edit:                [ game-admin                                                                               ]
+    api.system.edit_logicversioning:     [ game-admin                                                                               ]
+    api.system.edit_maintenance:         [ game-admin                                                                               ]
+    api.system.player_redelete:          [ game-admin                                                                               ]
+    api.scan_jobs.manage:                [ game-admin                                                                               ]
+    api.system.view_error_logs:          [ game-admin, game-viewer                                                                  ]
+    api.system.view_telemetry_messages:  [ game-admin, game-viewer                                                                  ]
+    api.system.view_cluster_nodes:       [ game-admin, game-viewer                                                                  ]
+    api.runtime_options.view:            [ game-admin                                                                               ]
+    api.quick_links.view:                [ game-admin,              customer-support-senior,                                        ]
+    api.database.status:                 [ game-admin                                                                               ]
+    api.database.inspect_entity:         [ game-admin                                                                               ]
+    api.scan_jobs.view:                  [ game-admin                                                                               ]
+    api.scan_jobs.cancel:                [ game-admin                                                                               ]
+    api.entity_archive.export:           [ game-admin,              customer-support-senior, customer-support-agent                 ]
+    api.entity_archive.import:           [ game-admin                                                                               ]
+    api.incident_reports.view:           [ game-admin, game-viewer, customer-support-senior, customer-support-agent                 ]
+    api.schema.view:                     [ game-admin, game-viewer, customer-support-senior, customer-support-agent, my-custom-role ]
+    api.schema.validate:                 [ game-admin,              customer-support-senior, customer-support-agent                 ]
+    api.players.view:                    [ game-admin, game-viewer, customer-support-senior, customer-support-agent, my-custom-role ]
+    api.players.gentle:                  [ game-admin,              customer-support-senior, customer-support-agent                 ]
+    api.players.disruptive:              [ game-admin,              customer-support-senior, customer-support-agent                 ]
+    api.players.dangerous:               [ game-admin,              customer-support-senior                                         ]
+    api.players.ban:                     [ game-admin,              customer-support-senior, customer-support-agent                 ]
+    api.players.edit_name:               [ game-admin,              customer-support-senior, customer-support-agent                 ]
+    api.players.edit_scheduled_deletion: [ game-admin,              customer-support-senior, customer-support-agent                 ]
+    api.players.gdpr_export:             [ game-admin,              customer-support-senior, customer-support-agent                 ]
+    api.players.iap_refund:              [ game-admin,              customer-support-senior, customer-support-agent                 ]
+    api.players.overwrite:               [ game-admin                                                                               ]
+    api.players.reconnect_account:       [ game-admin,              customer-support-senior, customer-support-agent                 ]
+    api.players.reset_player:            [ game-admin,              customer-support-senior                                         ]
+    api.players.mail:                    [ game-admin,              customer-support-senior, customer-support-agent                 ]
+    api.players.trigger_generic_action:  [ game-admin                                                                               ]
+    api.players.set_developer:           [ game-admin                                                                               ]
+    api.players.view_developers:         [ game-admin, game-viewer, customer-support-senior                                         ]
+    api.players.guild_tools:             [ game-admin,              customer-support-senior, customer-support-agent                 ]
+    api.players.auth:                    [ game-admin,              customer-support-senior, customer-support-agent                 ]
+    api.players.edit_experiment_groups:  [ game-admin,              customer-support-senior, customer-support-agent                 ]
+    api.players.force_activable_phase:   [ game-admin                                                                               ]
+    api.players.remove_iap_subscription: [ game-admin                                                                               ]
+    api.players.toggle_debug_mode:       [ game-admin                                                                               ]
+    api.guilds.view:                     [ game-admin, game-viewer, customer-support-senior, customer-support-agent                 ]
+    api.guilds.kick_member:              [ game-admin,              customer-support-senior, customer-support-agent                 ]
+    api.guilds.edit_details:             [ game-admin,              customer-support-senior, customer-support-agent                 ]
+    api.guilds.edit_roles:               [ game-admin,              customer-support-senior, customer-support-agent                 ]
+    api.guilds.inspect_recommender:      [ game-admin,                                                                              ]
+    api.matchmakers.view:                [ game-admin, game-viewer, customer-support-senior, customer-support-agent                 ]
+    api.matchmakers.test:                [ game-admin, game-viewer                                                                  ]
+    api.matchmakers.admin:               [ game-admin                                                                               ]
+    api.leagues.view:                    [ game-admin, game-viewer, customer-support-senior, customer-support-agent                 ]
+    api.leagues.phase_debug:             [ game-admin                                                                               ]
+    api.leagues.participant_edit:        [ game-admin             , customer-support-senior, customer-support-agent                 ]
+    api.liveops_events.view:             [ game-admin, game-viewer, customer-support-senior, customer-support-agent                 ]
+    api.liveops_events.edit:             [ game-admin                                                                               ]
+    api.liveops_events.export:           [ game-admin,              customer-support-senior, customer-support-agent                 ]
+    api.liveops_events.import:           [ game-admin                                                                               ]
+    api.liveops_timeline.edit:           [ game-admin                                                                               ]
+    api.game_time_offset.edit:           [ game-admin                                                                               ]
+    api.metrics.view:                    [ game-admin, game-viewer                                                                  ]
+    api.metrics.view_sensitive:          [ game-admin                                                                               ]
+    dashboard.view:                      [ game-admin, game-viewer, customer-support-senior, customer-support-agent, my-custom-role ]
+    dashboard.developer_mode:            [ game-admin                                                                               ]
+    dashboard.environment.view:          [ game-admin, game-viewer                                                                  ]
+    dashboard.grafana.view:              [ game-admin, game-viewer                                                                  ]
+    dashboard.system.view:               [ game-admin, game-viewer                                                                  ]
+    api.tests.all:                       [ game-admin                                                                               ]
+    # Game-specific permissions
+    api.players.unlock_producer:         [ game-admin,              customer-support-senior, customer-support-agent                 ]
+    api.players.set_wallet:              [ game-admin,              customer-support-senior, customer-support-agent                 ]
+    private_blob_file_serve.read:        [ game-admin, game-viewer, customer-support-senior, customer-support-agent, my-custom-role ]
+    api.players.update_logic_version:    [ game-admin, game-viewer                                                                  ]
+
+GoogleSheets:
+  CredentialsPath:   ./Secrets/idler-sa-identity.json
+
+Session:
+  MaximumSessionLength: null
+
+
+## Analytics events
+
+AnalyticsSinkJsonBlobStorage:
+  Enabled:            false
+  FilePath:           "ServerAnalytics/{Year}/{Month}/{Day}/{HostName}-{Hour}{Minute}{Second}-{UniqueId}.json{CompressSuffix}"
+  CompressMode:       Gzip      # None to disable compression
+  EventsPerChunk:     100000    # Target number of events per chunk (100k ~= 20MB uncompressed, assuming 200 bytes/event)
+  MaxPendingDuration: 00:05:00  # Maximum amount of time an event can be buffered before the batch is flushed
+  NumChunkBuffers:    10        # Number of chunk upload buffers to use (if all become filled due to slow/failed uploads, subsequent events are dropped)
+
+  # Use these to write to a custom S3 bucket
+  #S3BucketName: custom-bucket-name
+  #S3Region:     eu-west-1
+
+
+## Links to  other environments
+
+Environment:
+  QuickLinks:
+    - Icon: "@game-icon"
+      Title: Develop Environment
+      Uri: https://lovely-wombats-build-nimbly-admin.p2-eu.metaplay.dev/
+    - Title: Metaplay Documentation
+      Uri: https://docs.metaplay.io/
+      Color: rgb(134, 199, 51)
+    - Title: Metaplay Homepage
+      Uri: https://metaplay.io/
+      Color: rgb(134, 199, 51)
+
+
+## Leagues
+
+Leagues:
+  SeasonCycleStartDate: "2022-11-28 00:00:00Z"
+  SeasonCycleRecurrence: 7d
+  SeasonCycleRestPeriod: 1d
+  SeasonCycleEndingSoonPeriod: 1d
+
+PvPLeagues:
+  SeasonCycleStartDate: "2022-11-28 00:00:00Z"
+  SeasonCycleRecurrence: 3d
+  SeasonCycleRestPeriod: 1h
+  SeasonCycleEndingSoonPeriod: 12h
+
+PlayerIncident:
+  UploadPercentagesPerIncidentType:
+    "HandledErrorPlayerIncident": 100
+
+EventLogForPlayer:
+  IncludeAnalyticsContext: true
+  IncludeAnalyticsLabels: true
+
+EventLogForGuild:
+  IncludeAnalyticsContext: true
+  IncludeAnalyticsLabels: true
+
+
+## Kubernetes secrets example (commented out as secret doesn't exist by default)
+
+# SecretExample:
+#   Enabled: true
+#   KubernetesSecretPath: kube-secret://user-secret-name#key-name

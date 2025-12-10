@@ -1,0 +1,226 @@
+[
+  {
+    "MyExtendedInt": 0,
+    "Version": 1,
+    "Id": "offline",
+    "DisplayName": "",
+    "Description": "",
+    "ConnectionEndpointConfig": {
+      "ServerHost": "",
+      "ServerPort": 0,
+      "ServerPortForWebSocket": 0,
+      "EnableTls": false,
+      "CdnBaseUrl": "",
+      "PublicWebApiUrl": "",
+      "BackupGateways": [],
+      "IsOfflineMode": true
+    },
+    "ClientLoggingConfig": {
+      "LogLevel": "Debug",
+      "LogLevelOverrides": []
+    },
+    "ClientGameConfigBuildApiConfig": {
+      "AdminApiBaseUrl": "",
+      "AdminApiAuthenticationTokenProvider": "None",
+      "AdminApiCredentialsPath": "",
+      "AdminApiOAuth2Settings": {
+        "ClientId": "",
+        "ClientSecret": "",
+        "AuthorizationEndpoint": "",
+        "TokenEndpoint": "",
+        "Audience": "",
+        "LocalCallbackUrls": [],
+        "UseStateParameter": false
+      }
+    }
+  },
+  {
+    "MyExtendedInt": 0,
+    "Version": 1,
+    "Id": "localhost",
+    "DisplayName": "",
+    "Description": "",
+    "ConnectionEndpointConfig": {
+      "ServerHost": "localhost",
+      "ServerPort": 9339,
+      "ServerPortForWebSocket": 9380,
+      "EnableTls": false,
+      "CdnBaseUrl": "http://localhost:5552/",
+      "PublicWebApiUrl": "http://localhost:5560/",
+      "BackupGateways": [],
+      "IsOfflineMode": false
+    },
+    "ClientLoggingConfig": {
+      "LogLevel": "Debug",
+      "LogLevelOverrides": []
+    },
+    "ClientGameConfigBuildApiConfig": {
+      "AdminApiBaseUrl": "http://localhost:5550/api/",
+      "AdminApiAuthenticationTokenProvider": "None",
+      "AdminApiCredentialsPath": "",
+      "AdminApiOAuth2Settings": {
+        "ClientId": "",
+        "ClientSecret": "",
+        "AuthorizationEndpoint": "",
+        "TokenEndpoint": "",
+        "Audience": "",
+        "LocalCallbackUrls": [],
+        "UseStateParameter": false
+      }
+    }
+  },
+  {
+    "MyExtendedInt": 0,
+    "Version": 1,
+    "Id": "quickly",
+    "DisplayName": "test1 [p1] (quickly)",
+    "Description": "",
+    "ConnectionEndpointConfig": {
+      "ServerHost": "lovely-wombats-build-quickly.p1.metaplay.io",
+      "ServerPort": 9339,
+      "ServerPortForWebSocket": 9380,
+      "EnableTls": true,
+      "CdnBaseUrl": "https://lovely-wombats-build-quickly-assets.p1.metaplay.io/",
+      "PublicWebApiUrl": "https://lovely-wombats-build-quickly-public.p1.metaplay.io/",
+      "BackupGateways": [],
+      "IsOfflineMode": false
+    },
+    "ClientLoggingConfig": {
+      "LogLevel": "Debug",
+      "LogLevelOverrides": []
+    },
+    "ClientGameConfigBuildApiConfig": {
+      "AdminApiBaseUrl": "https://lovely-wombats-build-quickly-admin.p1.metaplay.io/api/",
+      "AdminApiAuthenticationTokenProvider": "OAuth2",
+      "AdminApiCredentialsPath": "",
+      "AdminApiOAuth2Settings": {
+        "ClientId": "metaplay.idler.testenvironment",
+        "ClientSecret": "QvOAJmvQR4I9H0tIv45Rj9QrL6",
+        "AuthorizationEndpoint": "https://auth.metaplay.dev/oauth2/auth",
+        "TokenEndpoint": "https://auth.metaplay.dev/oauth2/token",
+        "Audience": "metaplay.idler.testenvironment",
+        "LocalCallbackUrls": [
+          "http://localhost:42543/oauth2/"
+        ],
+        "UseStateParameter": true
+      }
+    }
+  },
+  {
+    "MyExtendedInt": 0,
+    "Version": 1,
+    "Id": "nimbly",
+    "DisplayName": "New Develop [p2] (nimbly)",
+    "Description": "",
+    "ConnectionEndpointConfig": {
+      "ServerHost": "lovely-wombats-build-nimbly.p2-eu.metaplay.dev",
+      "ServerPort": 9339,
+      "ServerPortForWebSocket": 9380,
+      "EnableTls": true,
+      "CdnBaseUrl": "https://lovely-wombats-build-nimbly-assets.p2-eu.metaplay.dev/",
+      "PublicWebApiUrl": "https://lovely-wombats-build-nimbly-public.p2-eu.metaplay.dev/",
+      "BackupGateways": [
+        {
+          "Id": "",
+          "ServerHost": "lovely-wombats-build-nimbly.p2-eu.metaplay.dev",
+          "ServerPort": 443
+        }
+      ],
+      "IsOfflineMode": false
+    },
+    "ClientLoggingConfig": {
+      "LogLevel": "Debug",
+      "LogLevelOverrides": []
+    },
+    "ClientGameConfigBuildApiConfig": {
+      "AdminApiBaseUrl": "https://lovely-wombats-build-nimbly-admin.p2-eu.metaplay.dev/api/",
+      "AdminApiAuthenticationTokenProvider": "OAuth2",
+      "AdminApiCredentialsPath": "",
+      "AdminApiOAuth2Settings": {
+        "ClientId": "lovely-wombats-build-nimbly",
+        "ClientSecret": "vRZVybPZqMCZV-Zqaql0qH7-6G",
+        "AuthorizationEndpoint": "https://auth.metaplay.dev/oauth2/auth",
+        "TokenEndpoint": "https://auth.metaplay.dev/oauth2/token",
+        "Audience": "lovely-wombats-build-nimbly",
+        "LocalCallbackUrls": [
+          "http://localhost:42543/oauth2/"
+        ],
+        "UseStateParameter": true
+      }
+    }
+  },
+  {
+    "MyExtendedInt": 0,
+    "Version": 1,
+    "Id": "demo",
+    "DisplayName": "",
+    "Description": "",
+    "ConnectionEndpointConfig": {
+      "ServerHost": "idler-demo.p1.metaplay.io",
+      "ServerPort": 9339,
+      "ServerPortForWebSocket": 9380,
+      "EnableTls": true,
+      "CdnBaseUrl": "https://idler-demo-assets.p1.metaplay.io/",
+      "PublicWebApiUrl": "",
+      "BackupGateways": [],
+      "IsOfflineMode": false
+    },
+    "ClientLoggingConfig": {
+      "LogLevel": "Debug",
+      "LogLevelOverrides": []
+    },
+    "ClientGameConfigBuildApiConfig": {
+      "AdminApiBaseUrl": "https://idler-demo-admin.p1.metaplay.io/api/",
+      "AdminApiAuthenticationTokenProvider": "OAuth2",
+      "AdminApiCredentialsPath": "",
+      "AdminApiOAuth2Settings": {
+        "ClientId": "metaplay.idler.demo",
+        "ClientSecret": "5UDdo1qYvaoy~k2-IZT9Q2gB1c",
+        "AuthorizationEndpoint": "https://auth.metaplay.dev/oauth2/auth",
+        "TokenEndpoint": "https://auth.metaplay.dev/oauth2/token",
+        "Audience": "metaplay.idler.demo",
+        "LocalCallbackUrls": [
+          "http://localhost:42543/oauth2/"
+        ],
+        "UseStateParameter": true
+      }
+    }
+  },
+  {
+    "MyExtendedInt": 0,
+    "Version": 1,
+    "Id": "tough-falcons",
+    "DisplayName": "test2 [p2] (tough-falcons)",
+    "Description": "",
+    "ConnectionEndpointConfig": {
+      "ServerHost": "tough-falcons.p2-eu.metaplay.dev",
+      "ServerPort": 9339,
+      "ServerPortForWebSocket": 9380,
+      "EnableTls": true,
+      "CdnBaseUrl": "https://tough-falcons-assets.p2-eu.metaplay.dev/",
+      "PublicWebApiUrl": "",
+      "BackupGateways": [],
+      "IsOfflineMode": false
+    },
+    "ClientLoggingConfig": {
+      "LogLevel": "Debug",
+      "LogLevelOverrides": []
+    },
+    "ClientGameConfigBuildApiConfig": {
+      "AdminApiBaseUrl": "https://tough-falcons-admin.p2-eu.metaplay.dev/api/",
+      "AdminApiAuthenticationTokenProvider": "OAuth2",
+      "AdminApiCredentialsPath": "",
+      "AdminApiOAuth2Settings": {
+        "ClientId": "tough-falcons",
+        "ClientSecret": "4Sly7-MucNbe7884vLftcDAixG",
+        "AuthorizationEndpoint": "https://auth.metaplay.dev/oauth2/auth",
+        "TokenEndpoint": "https://auth.metaplay.dev/oauth2/token",
+        "Audience": "tough-falcons",
+        "LocalCallbackUrls": [
+          "http://localhost:42543/oauth2/"
+        ],
+        "UseStateParameter": true
+      }
+    }
+  }
+]

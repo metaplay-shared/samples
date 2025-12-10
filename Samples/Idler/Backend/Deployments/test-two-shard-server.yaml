@@ -1,0 +1,40 @@
+# Note: Still need to configure these because we deploy auth AuthCLI at least in
+# portal preview deploy platform tests.
+environment: test-env
+environmentFamily: Development
+
+config:
+  files:
+    - "./Config/Options.base.yaml"
+    - "./Config/Options.dev.yaml"
+    - "./Config/Options.tough.yaml"
+
+tenant:
+  discoveryEnabled: true
+
+# Debugging
+debug:
+  headerEcho: true
+
+# Configure simple distributed setup
+shards:
+  - name: logic
+    nodeCount: 1
+    requests:
+      cpu: 200m
+      memory: 500Mi
+    # for new operator
+    connection: true
+    # for old operator
+    entityKinds:
+      - Connection
+  - name: service
+    nodeCount: 1
+    requests:
+      cpu: 200m
+      memory: 500Mi
+    # for new operator
+    admin: true
+    # for old operator
+    entityKinds:
+      - AdminApi

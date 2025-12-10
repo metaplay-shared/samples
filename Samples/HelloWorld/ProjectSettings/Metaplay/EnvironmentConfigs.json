@@ -1,0 +1,138 @@
+[
+  {
+    "Version": 1,
+    "Id": "offline",
+    "DisplayName": null,
+    "Description": "",
+    "ConnectionEndpointConfig": {
+      "ServerHost": "",
+      "ServerPort": 0,
+      "ServerPortForWebSocket": 0,
+      "EnableTls": false,
+      "CdnBaseUrl": "",
+      "PublicWebApiUrl": null,
+      "BackupGateways": [],
+      "IsOfflineMode": true
+    },
+    "ClientLoggingConfig": {
+      "LogLevel": "Debug",
+      "LogLevelOverrides": []
+    },
+    "ClientGameConfigBuildApiConfig": {
+      "AdminApiBaseUrl": "",
+      "AdminApiAuthenticationTokenProvider": "None",
+      "AdminApiCredentialsPath": "",
+      "AdminApiOAuth2Settings": {
+        "ClientId": "",
+        "ClientSecret": "",
+        "AuthorizationEndpoint": "",
+        "TokenEndpoint": "",
+        "Audience": "",
+        "LocalCallbackUrls": [],
+        "UseStateParameter": false
+      }
+    }
+  },
+  {
+    "Version": 1,
+    "Id": "localhost",
+    "DisplayName": null,
+    "Description": "",
+    "ConnectionEndpointConfig": {
+      "ServerHost": "localhost",
+      "ServerPort": 9339,
+      "ServerPortForWebSocket": 9380,
+      "EnableTls": false,
+      "CdnBaseUrl": "http://localhost:5552/",
+      "PublicWebApiUrl": null,
+      "BackupGateways": [],
+      "IsOfflineMode": false
+    },
+    "ClientLoggingConfig": {
+      "LogLevel": "Debug",
+      "LogLevelOverrides": []
+    },
+    "ClientGameConfigBuildApiConfig": {
+      "AdminApiBaseUrl": "http://localhost:5550/api/",
+      "AdminApiAuthenticationTokenProvider": "None",
+      "AdminApiCredentialsPath": "",
+      "AdminApiOAuth2Settings": {
+        "ClientId": "",
+        "ClientSecret": "",
+        "AuthorizationEndpoint": "",
+        "TokenEndpoint": "",
+        "Audience": "",
+        "LocalCallbackUrls": [],
+        "UseStateParameter": false
+      }
+    }
+  },
+  {
+    "Version": 1,
+    "Id": "develop",
+    "DisplayName": null,
+    "Description": "Example cloud-based development environment (Not deployed for HelloWorld). To use this, replace the server domains with your own.",
+    "ConnectionEndpointConfig": {
+      "ServerHost": "helloworld-develop.p1.metaplay.io",
+      "ServerPort": 9339,
+      "ServerPortForWebSocket": 9380,
+      "EnableTls": true,
+      "CdnBaseUrl": "https://helloworld-develop-assets.p1.metaplay.io",
+      "PublicWebApiUrl": null,
+      "BackupGateways": [],
+      "IsOfflineMode": false
+    },
+    "ClientLoggingConfig": {
+      "LogLevel": "Debug",
+      "LogLevelOverrides": []
+    },
+    "ClientGameConfigBuildApiConfig": {
+      "AdminApiBaseUrl": "https://helloworld-develop-admin.p1.metaplay.io/api/",
+      "AdminApiAuthenticationTokenProvider": "OAuth2",
+      "AdminApiCredentialsPath": "",
+      "AdminApiOAuth2Settings": {
+        "ClientId": "",
+        "ClientSecret": "",
+        "AuthorizationEndpoint": "",
+        "TokenEndpoint": "",
+        "Audience": "",
+        "LocalCallbackUrls": [],
+        "UseStateParameter": false
+      }
+    }
+  },
+  {
+    "Version": 1,
+    "Id": "stable",
+    "DisplayName": null,
+    "Description": "Example cloud-based stable environment (Not deployed for HelloWorld). To use this, replace the server domains with your own.",
+    "ConnectionEndpointConfig": {
+      "ServerHost": "helloworld-stable.p1.metaplay.io",
+      "ServerPort": 9339,
+      "ServerPortForWebSocket": 9380,
+      "EnableTls": true,
+      "CdnBaseUrl": "https://helloworld-stable-assets.p1.metaplay.io",
+      "PublicWebApiUrl": null,
+      "BackupGateways": [],
+      "IsOfflineMode": false
+    },
+    "ClientLoggingConfig": {
+      "LogLevel": "Debug",
+      "LogLevelOverrides": []
+    },
+    "ClientGameConfigBuildApiConfig": {
+      "AdminApiBaseUrl": "https://helloworld-stable-admin.p1.metaplay.io/api/",
+      "AdminApiAuthenticationTokenProvider": "OAuth2",
+      "AdminApiCredentialsPath": "",
+      "AdminApiOAuth2Settings": {
+        "ClientId": "",
+        "ClientSecret": "",
+        "AuthorizationEndpoint": "",
+        "TokenEndpoint": "",
+        "Audience": "",
+        "LocalCallbackUrls": [],
+        "UseStateParameter": false
+      }
+    }
+  }
+]

@@ -1,0 +1,28 @@
+### Option overrides when running server locally
+
+## Database
+
+#Database:
+  # Backend:         MySql
+  # NumActiveShards: 4
+
+## Leagues
+
+Leagues:
+  SeasonCycleStartDate: "2020-01-01 00:00:00Z"
+  SeasonCycleRecurrence: 2d
+  SeasonCycleRestPeriod: 2h
+  SeasonCycleEndingSoonPeriod: 1h
+  TimelineColor: 'Crimson'
+  
+PvPLeagues:
+  SeasonCycleStartDate: "2020-01-01 00:00:00Z"
+  SeasonCycleRecurrence: 1d
+  SeasonCycleRestPeriod: 30m
+  SeasonCycleEndingSoonPeriod: 2h
+  DivisionAcceptPlayersPeriod: 1m
+  DivisionRunDuration: 10m
+  DivisionEndingSoonPeriod: 1m
+
+BlobStorage:
+  ExposedPrivatePathPrefix: shared

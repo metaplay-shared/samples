@@ -1,0 +1,16 @@
+# Note: Still need to configure these because we deploy auth AuthCLI at least in
+# portal preview deploy platform tests.
+environment: test-env
+environmentFamily: Development
+
+config:
+  files:
+    - "./Config/Options.base.yaml"
+    - "./Config/Options.dev.yaml"
+
+tenant:
+  discoveryEnabled: true
+
+# Debugging
+debug:
+  headerEcho: true

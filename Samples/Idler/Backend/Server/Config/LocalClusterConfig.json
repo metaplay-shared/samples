@@ -1,0 +1,19 @@
+// Example ClusterConfig file for a local cluster topology with one `service` node and two `logic` nodes.
+// Start the server instances with the following commands (each in its own terminal):
+// Backend/Server$ dotnet run -RemotingPort=6000 -ShardingConfig="Config/LocalClusterConfig.json"
+// Backend/Server$ dotnet run --no-build -RemotingPort=6010 -ShardingConfig="Config/LocalClusterConfig.json" --System:ClientPorts:0=9339 --WebSockets:ListenPorts:0=9380 --PublicWebApi:ListenPort=5560 -EnableMetrics=false
+// Backend/Server$ dotnet run --no-build -RemotingPort=6011 -ShardingConfig="Config/LocalClusterConfig.json" --System:ClientPorts:0=9340 --WebSockets:ListenPorts:0=9381 --PublicWebApi:ListenPort=5561 -EnableMetrics=false
+[
+  {
+    "name": "service",
+    "hostName": "127.0.0.1",
+    "remotingPort": 6000,
+    "nodeCount": 1
+  },
+  {
+    "name": "logic",
+    "hostName": "127.0.0.1",
+    "remotingPort": 6010,
+    "nodeCount": 2
+  }
+]

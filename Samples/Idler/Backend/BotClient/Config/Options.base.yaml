@@ -1,0 +1,12 @@
+
+Bot:
+  MaxBots:                  1
+  SpawnRate:                10
+  ExpectedSessionDuration:  00:02:00
+  #ForceConflictingPlayerId: true
+  DummyIncidentReportProbabilityPerTick: 0.001
+
+  # Server overrides (uncomment to use)
+  #ServerHost: lovely-wombats-build-quickly.p1.metaplay.io, EnableTls: true
+  # Or:
+  # dotnet run --Bot:ServerHost=lovely-wombats-build-quickly.p1.metaplay.io --Bot:EnableTls=true

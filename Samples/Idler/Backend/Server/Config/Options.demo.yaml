@@ -1,0 +1,8 @@
+# Options for demo environment.
+Steam:
+  EnableSteam: true
+  AppId: 3275640
+  PublisherAuthenticationKeyPath: kube-secret://user-steam#apikey
+
+ClientConnection:
+  CommitIdCheckRule: OnlyIfDefined

@@ -1,0 +1,78 @@
+# Configure schema to use.
+# yaml-language-server: $schema=../../MetaplaySDK/projectConfigSchema.json
+$schema: "../../MetaplaySDK/projectConfigSchema.json"
+
+# Configure project.
+projectID: lovely-wombats-build
+buildRootDir: ../..
+sdkRootDir: ../../MetaplaySDK
+backendDir: Backend
+sharedCodeDir: Assets/SharedCode
+unityProjectDir: .
+
+# Specify .NET runtime version to build project for, only '<major>.<minor>'.
+dotnetRuntimeVersion: "9.0"
+
+# Specify Helm chart versions to use for server and bot deployments.
+serverChartVersion: latest-prerelease
+botClientChartVersion: latest-prerelease
+
+# Additional authentication providers (besides Metaplay Portal).
+authProviders:
+  idler-auth0:
+    name: Idler Auth0
+    clientId: ktWZITsg0huCvRt3JMFXyR6x4uAWszAK
+    authEndpoint: https://metaplay.auth0.com/authorize
+    tokenEndpoint: https://metaplay.auth0.com/oauth/token
+    userInfoEndpoint: https://metaplay.auth0.com/userinfo
+    scopes: openid profile email offline_access
+    audience: managed-gameservers
+
+# Customize Metaplay features used in the game.
+features:
+  # Configure LiveOps Dashboard.
+  dashboard:
+    useCustom: true
+    rootDir: Backend/Dashboard
+
+# Project environments.
+environments:
+  - name: Legacy platform tests 🐙🐙 <p1>
+    hostingType: metaplay-hosted
+    humanId: tiny-squids
+    type: development
+    stackDomain: p1.metaplay.io
+    serverValuesFile: Backend/Deployments/test-singleton-server.yaml
+  - name: New platform tests 🦅🦅 <{[p2-eu]}>
+    hostingType: metaplay-hosted
+    humanId: tough-falcons
+    type: development
+    stackDomain: p2-eu.metaplay.dev
+    serverValuesFile: Backend/Deployments/test-two-shard-server.yaml
+  - name: demo
+    hostingType: metaplay-hosted
+    humanId: idler-demo
+    type: development
+    stackDomain: p1.metaplay.io
+    serverValuesFile: Backend/Deployments/demo-server.yaml
+    botclientValuesFile: Backend/Deployments/demo-botclients.yaml
+  - name: Ad hoc tests (quickly) {◉_◉} <p1>
+    hostingType: metaplay-hosted
+    humanId: lovely-wombats-build-quickly
+    type: development
+    stackDomain: p1.metaplay.io
+    serverValuesFile: Backend/Deployments/quickly-server.yaml
+  - name: Auto-deploy from develop {p2-eu}
+    hostingType: metaplay-hosted
+    humanId: lovely-wombats-build-nimbly
+    type: development
+    stackDomain: p2-eu.metaplay.dev
+    serverValuesFile: Backend/Deployments/nimbly-server.yaml
+    botclientValuesFile: Backend/Deployments/nimbly-botclients.yaml
+  - name: d1
+    hostingType: self-hosted
+    humanId: idler-develop
+    type: development
+    stackDomain: d1.metaplay.io
+    serverValuesFile: Backend/Deployments/test-two-shard-server.yaml
+    authProvider: idler-auth0

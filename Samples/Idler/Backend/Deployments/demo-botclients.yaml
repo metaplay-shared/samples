@@ -1,0 +1,21 @@
+environmentFamily: Development
+botclients:
+  # image: # to be overridden by CI/CD
+  #   repository: 252344532344.dkr.ecr.eu-west-1.amazonaws.com/metaplay-idler-demo-botclient
+  #   tag: latest
+  targetHost: idler-demo.p1.metaplay.io
+  targetEnableTls: true
+  cdnBaseUrl: https://idler-demo-assets.p1.metaplay.io/
+  replicas: 1
+  maxBotId: 1000
+  botsPerPod: 50
+  prometheus:
+    enabled: true
+    port: 9090
+  resources:
+    limits:
+      memory: 1024Mi
+      cpu: 1
+    requests:
+      memory: 128Mi
+      cpu: 0.1
