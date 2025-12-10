@@ -1,0 +1,3 @@
+packages:
+  - Samples/Idler/Backend/Dashboard
+  - MetaplaySDK/Frontend/*
