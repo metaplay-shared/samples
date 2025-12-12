@@ -1,0 +1,8 @@
+### Option overrides when running server locally
+
+Web3:
+  # \note Setting options which affect metadata URL, so that the "initialize
+  #       NFTs based on existing metadata" feature can be tested locally,
+  #       even though the local server writes metadata to local files.
+  NftBucketUrl: https://meta-dev.metaplay.dev/nft
+  NftBasePath: web3-develop

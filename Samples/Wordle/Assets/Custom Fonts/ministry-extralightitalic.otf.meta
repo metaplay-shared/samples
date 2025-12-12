@@ -1,0 +1,24 @@
+fileFormatVersion: 2
+guid: b426112e48275be4db12429fe36777d0
+TrueTypeFontImporter:
+  externalObjects: {}
+  serializedVersion: 4
+  fontSize: 16
+  forceTextureCase: -2
+  characterSpacing: 0
+  characterPadding: 1
+  includeFontData: 1
+  fontNames:
+  - Ministry
+  fallbackFontReferences:
+  - {fileID: 12800000, guid: 213053c9111f22d458b7a7b20ebb1e2f, type: 3}
+  - {fileID: 12800000, guid: 31c41023c88ff834ca3475879d89950e, type: 3}
+  - {fileID: 12800000, guid: 91a94bfa77619634ca5415f75b76bf37, type: 3}
+  customCharacters: 
+  fontRenderingMode: 0
+  ascentCalculationMode: 1
+  useLegacyBoundsCalculation: 0
+  shouldRoundAdvanceValue: 1
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

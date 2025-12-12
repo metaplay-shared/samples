@@ -1,0 +1,27 @@
+### Base options file, included for all platforms
+
+## Database
+
+Database:
+  # Master database version: bump version to force the older versions of the database to be reset.
+  # Useful during development, but should never be done in production.
+  MasterVersion: 2
+
+  # When your game goes live, we recommend disabling (uncommenting) NukeOnVersionMismatch so
+  # databases are never accidentally nuked!
+  # NukeOnVersionMismatch: false
+
+Web3:
+  ImmutableXNetwork: GoerliTestnet
+  EnableImmutableXPlayerAuthentication: true
+  ImmutableXPlayerAuthenticationProductName: "HelloNFT"
+  ImmutableXPlayerAuthenticationChallengeHmacSecret: "<random string>-8f9971e2-bb69-4e70-b86e-12bfc3eabe8f"
+
+  NftCollections:
+    Test:
+      Ledger: ImmutableX
+      ContractAddress: 0x0c61Baa20CfC1d5fAa3e732d7a14F3971C0c1529
+      MetadataFolder: "metadata/test"
+
+WebSockets:
+  Enabled: true

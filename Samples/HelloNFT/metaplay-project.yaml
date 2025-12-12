@@ -1,0 +1,33 @@
+# Configure schema to use.
+# yaml-language-server: $schema=../../MetaplaySDK/projectConfigSchema.json
+$schema: "../../MetaplaySDK/projectConfigSchema.json"
+
+# Configure project.
+projectID: green-eagles-cheat
+buildRootDir: ../..
+sdkRootDir: ../../MetaplaySDK
+backendDir: Backend
+sharedCodeDir: Assets/SharedCode
+unityProjectDir: .
+
+# Specify .NET runtime version to build project for, only '<major>.<minor>'.
+dotnetRuntimeVersion: "9.0"
+
+# Specify Helm chart versions to use for server and bot deployments.
+serverChartVersion: latest-prerelease
+botClientChartVersion: latest-prerelease
+
+# Customize Metaplay features used in the game.
+features:
+  # Configure LiveOps Dashboard.
+  dashboard:
+    useCustom: true
+    rootDir: Backend/Dashboard
+
+# Project environments.
+environments:
+  - name: develop
+    humanId: green-eagles-cheat-quickly
+    type: development
+    stackDomain: p2-eu.metaplay.dev
+    serverValuesFile: Backend/Deployments/develop-server.yaml

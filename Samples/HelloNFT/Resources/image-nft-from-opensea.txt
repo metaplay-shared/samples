@@ -1,0 +1,220 @@
+// Fetched via: https://docs.opensea.io/reference/retrieving-a-single-asset
+// - contract_address: 0x495f947276749Ce646f68AC8c248420045cb7b5e
+// - token_id: 102098303363755234374052812920681006658660627712009815367537353723421929766913
+
+// Curl (requires access key):
+// curl https://api.opensea.io/api/v1/asset/0x495f947276749Ce646f68AC8c248420045cb7b5e/102098303363755234374052812920681006658660627712009815367537353723421929766913/?include_orders=false
+
+JSON:
+{
+  "id": 443614113,
+  "num_sales": 1,
+  "background_color": null,
+  "image_url": "https://lh3.googleusercontent.com/fxsTVEHxXlsp3zEupkKypJ6Jsaq0Y1kOOeRyK1e4_8shwEO3MRiME5pi2wPjl8hwizq8lds6xCKql7PcFpcvfqPmnt5IAs_4qh0h",
+  "image_preview_url": "https://lh3.googleusercontent.com/fxsTVEHxXlsp3zEupkKypJ6Jsaq0Y1kOOeRyK1e4_8shwEO3MRiME5pi2wPjl8hwizq8lds6xCKql7PcFpcvfqPmnt5IAs_4qh0h=s250",
+  "image_thumbnail_url": "https://lh3.googleusercontent.com/fxsTVEHxXlsp3zEupkKypJ6Jsaq0Y1kOOeRyK1e4_8shwEO3MRiME5pi2wPjl8hwizq8lds6xCKql7PcFpcvfqPmnt5IAs_4qh0h=s128",
+  "image_original_url": null,
+  "animation_url": null,
+  "animation_original_url": null,
+  "name": "run time no.1",
+  "description": null,
+  "external_link": null,
+  "asset_contract": {
+    "address": "0x495f947276749ce646f68ac8c248420045cb7b5e",
+    "asset_contract_type": "semi-fungible",
+    "created_date": "2020-12-02T17:40:53.232025",
+    "name": "OpenSea Collection",
+    "nft_version": null,
+    "opensea_version": "2.0.0",
+    "owner": 102384,
+    "schema_name": "ERC1155",
+    "symbol": "OPENSTORE",
+    "total_supply": null,
+    "description": "",
+    "external_link": null,
+    "image_url": "https://lh3.googleusercontent.com/HMeSm6mM47Wkap8it2rXBbyCIF0wiAXpamQJQidiCmF4wL-zL5sS2UXZuH6jm65kpXy2XwaS1T9gkD7x2UbB34qlwTLMTBHmyqx5qA=s120",
+    "default_to_fiat": false,
+    "dev_buyer_fee_basis_points": 0,
+    "dev_seller_fee_basis_points": 0,
+    "only_proxied_transfers": false,
+    "opensea_buyer_fee_basis_points": 0,
+    "opensea_seller_fee_basis_points": 250,
+    "buyer_fee_basis_points": 0,
+    "seller_fee_basis_points": 250,
+    "payout_address": null
+  },
+  "permalink": "https://opensea.io/assets/ethereum/0x495f947276749ce646f68ac8c248420045cb7b5e/102098303363755234374052812920681006658660627712009815367537353723421929766913",
+  "collection": {
+    "payment_tokens": [
+      {
+        "id": 13689077,
+        "symbol": "ETH",
+        "address": "0x0000000000000000000000000000000000000000",
+        "image_url": "https://openseauserdata.com/files/6f8e2979d428180222796ff4a33ab929.svg",
+        "name": "Ether",
+        "decimals": 18,
+        "eth_price": 1,
+        "usd_price": 1048.4
+      },
+      {
+        "id": 4645681,
+        "symbol": "WETH",
+        "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "image_url": "https://openseauserdata.com/files/accae6b6fb3888cbff27a013729c22dc.svg",
+        "name": "Wrapped Ether",
+        "decimals": 18,
+        "eth_price": 1,
+        "usd_price": 1048.4
+      }
+    ],
+    "primary_asset_contracts": [],
+    "traits": {},
+    "stats": {
+      "one_day_volume": 54.4,
+      "one_day_change": 0,
+      "one_day_sales": 1,
+      "one_day_average_price": 54.4,
+      "seven_day_volume": 54.4,
+      "seven_day_change": -0.047285464098073604,
+      "seven_day_sales": 1,
+      "seven_day_average_price": 54.4,
+      "thirty_day_volume": 197.20000000000002,
+      "thirty_day_change": 0.136599423631124,
+      "thirty_day_sales": 4,
+      "thirty_day_average_price": 49.300000000000004,
+      "total_volume": 762.25,
+      "total_sales": 8,
+      "total_supply": 11,
+      "count": 11,
+      "num_owners": 9,
+      "average_price": 95.28125,
+      "num_reports": 1,
+      "market_cap": 598.4,
+      "floor_price": 0
+    },
+    "banner_image_url": "https://lh3.googleusercontent.com/SZehvejJ6RRJJz7NaWleSZYcumVew7bI_suSDcAxojCJgjvSR-Ak80x53VEVut-94c5Xi-49OPUyuwFN_BaqBfTzEtEfLj9yTC6v=s2500",
+    "chat_url": null,
+    "created_date": "2022-03-22T12:13:36.626964",
+    "default_to_fiat": false,
+    "description": "Time is fair to everyone. However, the value of time is not fair. Go hard",
+    "dev_buyer_fee_basis_points": "0",
+    "dev_seller_fee_basis_points": "0",
+    "discord_url": null,
+    "display_data": {
+      "card_display_style": "contain"
+    },
+    "external_url": null,
+    "featured": false,
+    "featured_image_url": "https://lh3.googleusercontent.com/dufDf6VcvVjXMfDYHE8I40dhesEoQXBfgFMQh7UQz1-EBb8tz29W1tedltakiONk3mx0JqQzGFYivB2nmCqOtLgiDOQhvhlzpDKUYw=s300",
+    "hidden": false,
+    "safelist_request_status": "approved",
+    "image_url": "https://lh3.googleusercontent.com/NWHDff249tlZ4SedWYxfpS2DNpZ_pNXN-iFCiu_dLGUI11U0WczV0FWeZ9GnA8nBGkECzPYf2Na9yjht3vk3WP0MnJ1dCrWJvPJVnGQ=s120",
+    "is_subject_to_whitelist": false,
+    "large_image_url": "https://lh3.googleusercontent.com/dufDf6VcvVjXMfDYHE8I40dhesEoQXBfgFMQh7UQz1-EBb8tz29W1tedltakiONk3mx0JqQzGFYivB2nmCqOtLgiDOQhvhlzpDKUYw=s300",
+    "medium_username": null,
+    "name": "Time of Roger",
+    "only_proxied_transfers": false,
+    "opensea_buyer_fee_basis_points": "0",
+    "opensea_seller_fee_basis_points": "250",
+    "payout_address": null,
+    "require_email": false,
+    "short_description": null,
+    "slug": "timeofroger",
+    "telegram_url": null,
+    "twitter_username": null,
+    "instagram_username": null,
+    "wiki_url": null,
+    "is_nsfw": false
+  },
+  "decimals": null,
+  "token_metadata": null,
+  "is_nsfw": false,
+  "owner": {
+    "user": {
+      "username": "NullAddress"
+    },
+    "profile_img_url": "https://storage.googleapis.com/opensea-static/opensea-profile/1.png",
+    "address": "0x0000000000000000000000000000000000000000",
+    "config": ""
+  },
+  "sell_orders": null,
+  "seaport_sell_orders": null,
+  "creator": {
+    "user": {
+      "username": "_Roger"
+    },
+    "profile_img_url": "https://storage.googleapis.com/opensea-static/opensea-profile/33.png",
+    "address": "0xe1b997841dac61e2a71a63b9fdbaa1ee05b6d7f8",
+    "config": ""
+  },
+  "traits": [],
+  "last_sale": {
+    "asset": {
+      "decimals": null,
+      "token_id": "102098303363755234374052812920681006658660627712009815367537353723421929766913"
+    },
+    "asset_bundle": null,
+    "event_type": "successful",
+    "event_timestamp": "2022-06-12T12:13:45",
+    "auction_type": null,
+    "total_price": "39100000000000000000",
+    "payment_token": {
+      "symbol": "WETH",
+      "address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "image_url": "https://openseauserdata.com/files/accae6b6fb3888cbff27a013729c22dc.svg",
+      "name": "Wrapped Ether",
+      "decimals": 18,
+      "eth_price": "1.000000000000000",
+      "usd_price": "1123.480000000000018000"
+    },
+    "transaction": {
+      "block_hash": "0x421cb44c8195a6dde55a8869b7b15de235fca8f76226265b5709b1f949321ecf",
+      "block_number": "14950055",
+      "from_account": {
+        "user": {
+          "username": "_Roger"
+        },
+        "profile_img_url": "https://storage.googleapis.com/opensea-static/opensea-profile/33.png",
+        "address": "0xe1b997841dac61e2a71a63b9fdbaa1ee05b6d7f8",
+        "config": ""
+      },
+      "id": 394853464,
+      "timestamp": "2022-06-12T12:13:45",
+      "to_account": {
+        "user": null,
+        "profile_img_url": "https://storage.googleapis.com/opensea-static/opensea-profile/28.png",
+        "address": "0x7f268357a8c2552623316e2562d90e642bb538e5",
+        "config": ""
+      },
+      "transaction_hash": "0x3b4544f5dadca6aeb8bdf5b0469bd071181fa3be20224496d0782e0fc8f2c964",
+      "transaction_index": "160"
+    },
+    "created_date": "2022-06-12T12:14:07.977651",
+    "quantity": "1"
+  },
+  "top_bid": null,
+  "listing_date": null,
+  "is_presale": true,
+  "transfer_fee_payment_token": null,
+  "transfer_fee": null,
+  "related_assets": [],
+  "orders": null,
+  "auctions": [],
+  "supports_wyvern": true,
+  "top_ownerships": [
+    {
+      "owner": {
+        "user": {
+          "username": null
+        },
+        "profile_img_url": "https://storage.googleapis.com/opensea-static/opensea-profile/6.png",
+        "address": "0xc3f32144540064e9a2f6d069c161125097fcf1d4",
+        "config": ""
+      },
+      "quantity": "1"
+    }
+  ],
+  "ownership": null,
+  "highest_buyer_commitment": null,
+  "token_id": "102098303363755234374052812920681006658660627712009815367537353723421929766913"
+}

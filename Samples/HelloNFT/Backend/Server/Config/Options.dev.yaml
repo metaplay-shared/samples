@@ -1,0 +1,10 @@
+# Options for all development environments.
+
+Web3:
+  S3Region: eu-west-1
+  NftBucketName: metaplay-nft
+  NftBucketUrl: https://meta-dev.metaplay.dev/nft
+  NftBasePath: web3-develop
+
+ClientConnection:
+  CommitIdCheckRule: OnlyIfDefined

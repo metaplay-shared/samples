@@ -1,0 +1,18 @@
+{
+    "name": "TutorialPart1",
+    "rootNamespace": "",
+    "references": [
+        "Metaplay"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "TUTORIAL_PART1"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": true
+}

@@ -1,0 +1,24 @@
+<!-- This file is part of Metaplay SDK which is released under the Metaplay SDK License. -->
+
+<template lang="pug">
+b-card(class="shadow-sm")
+  b-card-title Custom component
+  div(
+    style="font-size: 5em"
+    class="font-weight-bolder m-2 tw-text-center"
+    ) Hello, World!
+  div(class="py-3 tw-text-center") Total number of clicks: {{ playerData.model.numClicks }}
+</template>
+
+<script lang="ts" setup>
+import { getSinglePlayerSubscriptionOptions } from '@metaplay/core'
+import { useSubscription } from '@metaplay/subscriptions'
+
+// This component takes in the player as a property and will automatically react to any updates to this passed data.
+const props = defineProps<{
+  playerId: string
+}>()
+
+// Fetch data from the game server using our subscriptions.
+const { data: playerData } = useSubscription(() => getSinglePlayerSubscriptionOptions(props.playerId))
+</script>

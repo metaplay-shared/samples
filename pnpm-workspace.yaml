@@ -1,3 +1,4 @@
 packages:
   - Samples/Idler/Backend/Dashboard
+  - Samples/HelloNFT/Backend/Dashboard
   - MetaplaySDK/Frontend/*

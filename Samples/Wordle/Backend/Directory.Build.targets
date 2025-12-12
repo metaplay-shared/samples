@@ -1,0 +1,5 @@
+<Project>
+ <PropertyGroup>
+  <DefineConstants>$(DefineConstants);TUTORIAL_PART1</DefineConstants>
+ </PropertyGroup>
+</Project>

@@ -1,0 +1,140 @@
+[
+  {
+    "Version": 1,
+    "Id": "offline",
+    "DisplayName": "",
+    "Description": "",
+    "ConnectionEndpointConfig": {
+      "ServerHost": "",
+      "ServerPort": 0,
+      "ServerPortForWebSocket": 0,
+      "EnableTls": false,
+      "CdnBaseUrl": "",
+      "PublicWebApiUrl": "",
+      "BackupGateways": [],
+      "IsOfflineMode": true
+    },
+    "ClientLoggingConfig": {
+      "LogLevel": "Debug",
+      "LogLevelOverrides": []
+    },
+    "ClientGameConfigBuildApiConfig": {
+      "AdminApiBaseUrl": "",
+      "AdminApiAuthenticationTokenProvider": "None",
+      "AdminApiCredentialsPath": "",
+      "AdminApiOAuth2Settings": {
+        "ClientId": "",
+        "ClientSecret": "",
+        "AuthorizationEndpoint": "",
+        "TokenEndpoint": "",
+        "Audience": "",
+        "LocalCallbackUrls": [],
+        "UseStateParameter": false
+      }
+    }
+  },
+  {
+    "Version": 1,
+    "Id": "localhost",
+    "DisplayName": "",
+    "Description": "",
+    "ConnectionEndpointConfig": {
+      "ServerHost": "localhost",
+      "ServerPort": 9339,
+      "ServerPortForWebSocket": 9380,
+      "EnableTls": false,
+      "CdnBaseUrl": "http://localhost:5552/",
+      "PublicWebApiUrl": "",
+      "BackupGateways": [],
+      "IsOfflineMode": false
+    },
+    "ClientLoggingConfig": {
+      "LogLevel": "Debug",
+      "LogLevelOverrides": []
+    },
+    "ClientGameConfigBuildApiConfig": {
+      "AdminApiBaseUrl": "http://localhost:5550/api/",
+      "AdminApiAuthenticationTokenProvider": "None",
+      "AdminApiCredentialsPath": "",
+      "AdminApiOAuth2Settings": {
+        "ClientId": "",
+        "ClientSecret": "",
+        "AuthorizationEndpoint": "",
+        "TokenEndpoint": "",
+        "Audience": "",
+        "LocalCallbackUrls": [],
+        "UseStateParameter": false
+      }
+    }
+  },
+  {
+    "Version": 1,
+    "Id": "develop",
+    "DisplayName": null,
+    "Description": "",
+    "ConnectionEndpointConfig": {
+      "ServerHost": "green-eagles-cheat-quickly.p2-eu.metaplay.dev",
+      "ServerPort": 9339,
+      "ServerPortForWebSocket": 9380,
+      "EnableTls": true,
+      "CdnBaseUrl": "https://green-eagles-cheat-quickly-assets.p2-eu.metaplay.dev/",
+      "PublicWebApiUrl": null,
+      "BackupGateways": [],
+      "IsOfflineMode": false
+    },
+    "ClientLoggingConfig": {
+      "LogLevel": "Debug",
+      "LogLevelOverrides": []
+    },
+    "ClientGameConfigBuildApiConfig": {
+      "AdminApiBaseUrl": "https://green-eagles-cheat-quickly-admin.p2-eu.metaplay.dev/api/",
+      "AdminApiAuthenticationTokenProvider": "OAuth2",
+      "AdminApiCredentialsPath": "",
+      "AdminApiOAuth2Settings": {
+        "ClientId": "green-eagles-cheat-quickly",
+        "ClientSecret": "7v~hXaXrM63osCMJicFQ4aJHzE",
+        "AuthorizationEndpoint": "https://auth.metaplay.dev/oauth2/auth",
+        "TokenEndpoint": "https://auth.metaplay.dev/oauth2/token",
+        "Audience": "green-eagles-cheat-quickly",
+        "LocalCallbackUrls": [
+          "http://localhost:42543/oauth2/"
+        ],
+        "UseStateParameter": true
+      }
+    }
+  },
+  {
+    "Version": 1,
+    "Id": "stable",
+    "DisplayName": "",
+    "Description": "Example stable environment (not deployed).",
+    "ConnectionEndpointConfig": {
+      "ServerHost": "hellonft-stable.p1.metaplay.io",
+      "ServerPort": 9339,
+      "ServerPortForWebSocket": 9380,
+      "EnableTls": true,
+      "CdnBaseUrl": "https://hellonft-stable-assets.p1.metaplay.io",
+      "PublicWebApiUrl": "",
+      "BackupGateways": [],
+      "IsOfflineMode": false
+    },
+    "ClientLoggingConfig": {
+      "LogLevel": "Debug",
+      "LogLevelOverrides": []
+    },
+    "ClientGameConfigBuildApiConfig": {
+      "AdminApiBaseUrl": "https://hellonft-stable-admin.p1.metaplay.io/api/",
+      "AdminApiAuthenticationTokenProvider": "OAuth2",
+      "AdminApiCredentialsPath": "",
+      "AdminApiOAuth2Settings": {
+        "ClientId": "",
+        "ClientSecret": "",
+        "AuthorizationEndpoint": "",
+        "TokenEndpoint": "",
+        "Audience": "",
+        "LocalCallbackUrls": [],
+        "UseStateParameter": false
+      }
+    }
+  }
+]
