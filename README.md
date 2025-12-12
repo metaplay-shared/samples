@@ -2,14 +2,9 @@
 
 This repository contains some basic sample projects using the Metaplay SDK.
 
-For a full merge-2 game implemented using Metaplay, see the [Project Orca repository](https://github.com/metaplay-shared/orca).
+For a full list of all Metaplay samples, see [Documentation on Sample Projects](https://docs.metaplay.io/introduction/sample-projects-overview.html).
 
 ## List of Samples
-
-<!-- TODO: Fill in proper list -->
-- HelloWorld
-- Idler
-- HelloNFT
 
 <!-- TODO: Link to docs pages for more information about individual samples? -->
 
