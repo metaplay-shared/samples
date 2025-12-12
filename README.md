@@ -2,7 +2,7 @@
 
 This repository contains some basic sample projects using the Metaplay SDK.
 
-For a full list of all Metaplay samples, see [Sample Projects](https://docs.metaplay.io/introduction/sample-projects-overview.html) page in the Metaplay documentation.
+For a full list of all Metaplay samples and their descriptions, see [Sample Projects](https://docs.metaplay.io/introduction/sample-projects-overview.html).
 
 ## Running the Samples
 
@@ -16,19 +16,27 @@ To run the samples, you'll need to get the Metaplay SDK first:
 
 3. Download the Metaplay SDK using the CLI:
 
-    <!-- \todo Fill in SDK version from script -->
+   <!-- \todo Fill in SDK version from script -->
+   ```shell
+   samples$ metaplay init sdk --sdk-version=35
+   ```
+
+### Running a Sample
+
+Follow the steps below to try out a sample project.
+
+1. Start the sample project server:
+
     ```shell
-    samples$ metaplay init sdk --sdk-version=35
+    Samples/<Sample>$ metaplay dev server
     ```
 
-### Sample: Idler
+2. Check out the the sample project's LiveOps Dashboard:
 
-First, start the Idler server with:
+    * The Dashboard is available at [http://localhost:5550](http://localhost:5550).
 
-```shell
-samples/Samples/Idler$ metaplay dev server
-```
+3. Run the project in Unity:
 
-The LiveOps Dashboard for the sample is now available at http://localhost:5550.
-
-Now, open the project (`Samples/Idler`) in Unity. To connect to the locally running server, open Unity menu **Metaplay** → **Environment Configs**, and set **Active Environment** to **Localhost**.
+    * Open the sample project (`Samples/<Sample>`) in Unity.
+    * Open Unity menu **Metaplay** → **Environment Configs**, and set **Active Environment** to **Localhost**. This will connect to the locally running server.
+    * Press **Play** in Unity to run the client within the Unity Editor.
