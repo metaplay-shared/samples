@@ -38,5 +38,5 @@ Follow these steps to run any of the samples in this repository.
 3. Run the project in Unity:
 
     * Open the sample project (`Samples/<Sample>`) in Unity.
-    * Open Unity menu **Metaplay** → **Environment Configs**, and set **Active Environment** to **Localhost**. This will connect to the locally running server.
+    * Open Unity menu **Metaplay** → **Environment Configs**, and set **Active Environment** to **Localhost** to ensure the client connects to the locally running server.
     * Press **Play** in Unity to run the client within the Unity Editor.
