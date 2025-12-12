@@ -2,11 +2,7 @@
 
 This repository contains some basic sample projects using the Metaplay SDK.
 
-For a full list of all Metaplay samples, see [Documentation on Sample Projects](https://docs.metaplay.io/introduction/sample-projects-overview.html).
-
-## List of Samples
-
-<!-- TODO: Link to docs pages for more information about individual samples? -->
+For a full list of all Metaplay samples, see [Sample Projects](https://docs.metaplay.io/introduction/sample-projects-overview.html) page in the Metaplay documentation.
 
 ## Running the Samples
 
