@@ -2,13 +2,14 @@
 RouterLink(
   v-if="to"
   :to="to"
-  :class="['rounded-lg hover:bg-gray-200 active:bg-gray-300 py-2 px-3 font-semibold', { 'bg-gray-100': active }]"
+  class="rounded-lg px-3 py-2 font-semibold hover:bg-gray-200 active:bg-gray-300"
+  :class="[{ 'bg-gray-100': active }]"
   :active="active"
   )
   slot
 button(
   v-else
-  :class="['rounded-lg hover:bg-gray-200 active:bg-gray-300 py-2 px-3 font-semibold']"
+  class="rounded-lg px-3 py-2 font-semibold hover:bg-gray-200 active:bg-gray-300"
   )
   slot
 </template>

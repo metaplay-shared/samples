@@ -2,8 +2,8 @@
 
 using Metaplay.Core;
 using Metaplay.Core.InGameMail;
+using Metaplay.Core.Session;
 using Metaplay.Unity;
-using Metaplay.Unity.DefaultIntegration;
 using System.Linq;
 using TMPro;
 using UnityEngine;

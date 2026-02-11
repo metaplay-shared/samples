@@ -11,7 +11,7 @@ sharedCodeDir: Assets/SharedCode
 unityProjectDir: .
 
 # Specify .NET runtime version to build project for, only '<major>.<minor>'.
-dotnetRuntimeVersion: "9.0"
+dotnetRuntimeVersion: "10.0"
 
 # Specify Helm chart versions to use for server and bot deployments.
 serverChartVersion: latest-prerelease

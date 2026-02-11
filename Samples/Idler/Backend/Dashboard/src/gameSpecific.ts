@@ -12,8 +12,7 @@ import './styles/game-specific-styles.css'
  * Use this function to register any Vue components or plugins that you want to use to customize the dashboard.
  * @param app The Vue app instance.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function GameSpecificPlugin(app: App): void {
+export function GameSpecificPlugin(_app: App): void {
   // Feel free to add any customization logic here for your game!
   setGameSpecificInitialization(async (initializationApi) => {
     // Custom resources(shown in the player overview card).
@@ -81,17 +80,17 @@ export function GameSpecificPlugin(app: App): void {
       OverviewListItem.asNumber(
         'Highest Producer Level',
         (player) => {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- Typing is not known.
           const producers = Object.entries(player.model.producers)
           const maxProducerLevel = producers.reduce(
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- Typing is not known.
             (p, c: any) => Math.max(c[1].level, p),
             0
           )
           return maxProducerLevel
         }
         // Set the 'displayPermission' property to require permission to view this list-item.
-        // The item will be hidden from users who do not have the reqiured permission.
+        // The item will be hidden from users who do not have the required permission.
         // 'api.players.set_wallet'
       ),
       { position: 'after', targetId: 'Joined' }
@@ -100,10 +99,10 @@ export function GameSpecificPlugin(app: App): void {
     // Custom label in the player account reconnect pop-over.
     initializationApi.addPlayerReconnectAccountPreviewListItem(
       OverviewListItem.asNumber('Highest Producer Level', (player) => {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- Typing is not known.
         const producers = Object.entries(player.model.producers)
         const maxProducerLevel = producers.reduce(
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- Typing is not known.
           (p, c: any) => Math.max(c[1].level, p),
           0
         )

@@ -29,6 +29,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using System.Threading.Tasks;
 using EntityId = Metaplay.Core.EntityId;
+using Metaplay.Core.Session;
 
 public class MetaplayClient : MetaplayClientBase<PlayerModel>
 {
@@ -42,13 +43,9 @@ public class MetaplayClient : MetaplayClientBase<PlayerModel>
 /// Manages the application's lifecycle, including mock loading state, Metaplay server connectivity, and failure states.
 /// This class is a simplified version of a state manager that a real game would have, but in such a manner that the
 /// integration of Metaplay into such a state manager is exemplified.
-///
-/// Also implements <see cref="IMetaplayLifecycleDelegate"/> to get callbacks from Metaplay on connectivity events and
-/// error states.
 /// </summary>
 public class ApplicationStateManager :
     MonoBehaviour,
-    IMetaplayLifecycleDelegate,
     IMetaplayClientAnalyticsDelegate,
     IPlayerModelClientListenerCore,
     IPlayerModelClientListener,
@@ -80,9 +77,7 @@ public class ApplicationStateManager :
     public static ApplicationStateManager Instance { get; private set; }
 
     public ApplicationState CurrentState { get; private set; } = ApplicationState.AppStart;  // Begin in the AppStart state.
-    // For managing async state transitions (due to async scene loads)
-    public ApplicationState? TransitioningToState { get; private set; } = null;
-    Action _onStateTransitionDone = null;
+
 
     void Awake()
     {
@@ -99,12 +94,6 @@ public class ApplicationStateManager :
         // Initialize Metaplay SDK.
         MetaplayClient.Initialize(new MetaplayClientOptions
         {
-            // MetaplaySDKBehavior has been added to the scene already, so no need to auto-create it
-            AutoCreateMetaplaySDKBehavior = false,
-
-            // Hook all the lifecycle and connectivity callbacks back to this class.
-            LifecycleDelegate = this,
-
             // Custom connection delegate
             ConnectionDelegate = new GameConnectionDelegate(),
 
@@ -113,8 +102,7 @@ public class ApplicationStateManager :
             {
                 // Configure initial connection attempts.
                 // These are here as an example - could also use the default values.
-                ConnectAttemptsMaxCount   = 5,
-                ConnectAttemptInterval    = TimeSpan.FromSeconds(1),
+                SessionConnectTimeout = TimeSpan.FromSeconds(5),
             },
 
             //OfflineOptions = new MetaplayOfflineOptions
@@ -145,8 +133,123 @@ public class ApplicationStateManager :
             },
         });
 
-        // Switch to initializing state, to start connecting to the server.
-        _ = SwitchToStateAsync(ApplicationState.Initializing);
+        _ = SessionLoop();
+    }
+
+    async Task SessionLoop()
+    {
+        for (;;)
+        {
+            CurrentState = ApplicationState.Initializing;
+
+            // Switch to loading scene.
+            await SceneManager.LoadSceneAsync("Loading Scene");
+
+            // Make sure connection error info is hidden.
+            ConnectionErrorPopoverScript.Clear();
+
+            // Connect to the server
+            MetaplaySession session;
+            try
+            {
+                session = await MetaplayClient.ConnectAsync();
+            }
+            catch (FailedToStartSessionException ex)
+            {
+                // Metaplay failed to establish a session with the server. Show the connection error and 'Reconnect'
+                // button so the player can try again.
+                // Note that we're not in the game scene since the error occurred before
+                // the session was started. Furthermore, MetaplayClient.PlayerModel is
+                // unavailable.
+                await ShowConnectionErrorPopup(ex.Failure);
+                continue;
+            }
+
+            // A session has been successfully negotiated with the server. At this point, we also have the
+            // relevant state initialized on the client, so we can move on to the game state.
+
+            try
+            {
+                // Set up listeners etc. initial session stuff
+
+                PlayerModel player = (PlayerModel)session.PlayerContext.Model;
+                player.ClientListenerCore = this;
+                player.ClientListener = this;
+
+                GuildClient guildClient = session.ClientStore.TryGetClient<GuildClient>(ClientSlotCore.Guild);
+                guildClient.SetClientListeners((IGuildModelBase model) =>
+                {
+                    model.ClientListenerCore = EmptyGuildModelClientListenerCore.Instance;
+                    ((GuildModel)model).ClientListener = EmptyGuildModelClientListener.Instance;
+                });
+
+                IdlerLeagueClient idlerLeagueClient = session.ClientStore.TryGetClient<IdlerLeagueClient>(ClientSlotGame.IdlerLeague);
+                idlerLeagueClient.SetClientListeners((IdlerPlayerDivisionModel model) =>
+                {
+                    model.SetClientListenerCore(EmptyPlayerDivisionModelClientListenerCore.Instance);
+                    // Client listener if any
+                    // model.ClientListener = EmptyPlayerDivisionModelClientListener.Instance;
+                });
+
+                PartyClient partyClient = session.ClientStore.TryGetClient<PartyClient>(ClientSlotGame.Party);
+                partyClient.SetClientListeners(model =>
+                {
+                    ((PartyModel)model).ClientListener = this;
+                });
+
+                // Trigger party creation if one didn't already exist (this could be an interactive operation)
+                if (partyClient.Model == null)
+                    session.PlayerContext.ExecuteAction(new PlayerCreateParty());
+
+                // Session is now available, so go to game scene.
+                await SceneManager.LoadSceneAsync("Game Scene");
+
+                // At this point, the player state is available. For example, the following are now valid:
+                // Access player state members: MetaplayClient.PlayerModel.CurrentTime
+                // Execute player actions: MetaplayClient.PlayerContext.ExecuteAction(..);
+
+                // Start has been completed. Game must call SessionStartComplete()
+                session.SessionStartComplete();
+            }
+            catch (Exception ex)
+            {
+                // Start has failed. Game must call SessionStartFailed()
+                ConnectionLostEvent sessionStartFailed = session.SessionStartFailed(ex);
+                await ShowConnectionErrorPopup(sessionStartFailed);
+                continue;
+            }
+
+            CurrentState = ApplicationState.Game;
+
+            // Do nothing until connection is lost
+            //
+            // The current logical session has been lost and can no longer be resumed. This can happen for multiple
+            // reasons, for example, if the network connection is dropped for a sufficient long time, or if the
+            // application has been in the background for a long time, or if the server is in a maintenance mode.
+            //
+            // The application should react to this by showing a 'Connection Lost' dialog and present the player
+            // with a 'Reconnect' button.
+            // For some types of errors, it may be appropriate to omit the error popup, and auto-reconnect instead.
+            ConnectionLostEvent connectionLost = await session.WaitForSessionEndAsync();
+
+            if (connectionLost.AutoReconnectRecommended)
+            {
+                // For certain errors, we auto-reconnect straight away without
+                // prompting the player. Note that AutoReconnectRecommended is
+                // just a suggestion by the SDK and is based on the type of the
+                // error. The game does not have to obey the suggestion.
+            }
+            else
+            {
+                // Otherwise, show the connection error popup, with info text
+                // and a reconnect button. Despite losing the session, the game
+                // scene will linger until the player clicks on the reconnect
+                // button. PlayerModel is still available so that the game scene
+                // can continue to access it. It will remain available until
+                // the reconnection starts.
+                await ShowConnectionErrorPopup(connectionLost);
+            }
+        }
     }
 
     void OnDestroy()
@@ -192,9 +295,6 @@ public class ApplicationStateManager :
             SteamAPI.RunCallbacks();
         }
         #endif
-        
-        // Update Metaplay connections and game logic
-        MetaplayClient.Update();
 
         // Flush listeners that were delayed (so that they don't run during action execution,
         // in case the listeners themselves might execute new actions).
@@ -225,190 +325,31 @@ public class ApplicationStateManager :
         _delayedListenerFuncs.Clear();
     }
 
-    /// <summary>
-    /// Switch the application's state and perform actions relevant to the state transition.
-    /// </summary>
-    async Task SwitchToStateAsync(ApplicationState newState)
-    {
-        if (TransitioningToState.HasValue)
-        {
-            Debug.LogWarning($"Cannot transition to state {newState}, when already async-transitioning from {CurrentState} to {TransitioningToState.Value}");
-            return;
-        }
+    #region Reconnect dialog
 
-        Debug.Log($"Starting state transition from {CurrentState} to {newState}");
-
-        TransitioningToState = newState;
-
-        switch (newState)
-        {
-            case ApplicationState.AppStart:
-                // Cannot enter, app starts in this state.
-                break;
-
-            case ApplicationState.Initializing:
-            {
-                // Switch to loading scene.
-                await SceneManager.LoadSceneAsync("Loading Scene");
-
-                // Make sure connection error info is hidden.
-                ConnectionErrorPopoverScript.Clear();
-                // Start connecting to the server.
-                MetaplayClient.Connect();
-                break;
-            }
-
-            case ApplicationState.Game:
-            {
-                // Start the game by loading the scene.
-                await SceneManager.LoadSceneAsync("Game Scene");
-
-                // Make sure connection error info is hidden.
-                ConnectionErrorPopoverScript.Clear();
-                break;
-            }
-        }
-
-        Debug.Log($"Finished state transition from {CurrentState} to {newState}");
-        CurrentState = newState;
-        TransitioningToState = null;
-        _onStateTransitionDone?.Invoke();
-        _onStateTransitionDone = null;
-    }
-
-    /// <summary>
-    /// Execute <paramref name="action"/> either immediately, or if a state transition
-    /// is going on then postpone the action until after the transition.
-    /// </summary>
-    void ExecuteOrEnqueueAfterStateTransition(Action action)
-    {
-        if (TransitioningToState.HasValue)
-            _onStateTransitionDone += action;
-        else
-            action?.Invoke();
-    }
+    TaskCompletionSource<int> _reconnectButtonCompleteCts;
 
     /// <summary>
     /// Handler for Reconnect button (shown after a connection attempt has failed).
     /// </summary>
-    public void ReconnectToServer()
+    public void OnErrorReconnectPopupComplete()
     {
-        // Switch back to initializing state, to start reconnecting.
-        _ = SwitchToStateAsync(ApplicationState.Initializing);
-    }
-
-    #region IMetaplayLifecycleDelegate
-
-    /// <summary>
-    /// A session has been successfully negotiated with the server. At this point, we also have the
-    /// relevant state initialized on the client, so we can move on to the game state.
-    /// </summary>
-    async Task IMetaplayLifecycleDelegate.OnSessionStartedAsync()
-    {
-        // Hook up to updates in PlayerModel.
-        MetaplayClient.PlayerModel.ClientListenerCore = this;
-        MetaplayClient.PlayerModel.ClientListener = this;
-
-        MetaplayClient.GuildClient.SetClientListeners((IGuildModelBase model) =>
-        {
-            model.ClientListenerCore = EmptyGuildModelClientListenerCore.Instance;
-            ((GuildModel)model).ClientListener = EmptyGuildModelClientListener.Instance;
-        });
-
-        MetaplayClient.IdlerLeagueClient.SetClientListeners((IdlerPlayerDivisionModel model) =>
-        {
-            model.SetClientListenerCore(EmptyPlayerDivisionModelClientListenerCore.Instance);
-            // Client listener if any
-            // model.ClientListener = EmptyPlayerDivisionModelClientListener.Instance;
-        });
-
-        MetaplayClient.PartyClient.SetClientListeners(model =>
-        {
-            ((PartyModel)model).ClientListener = this;
-        });
-
-        // Trigger party creation if one didn't already exist (this could be an interactive operation)
-        if (MetaplayClient.PartyClient.Model == null)
-            MetaplayClient.PlayerContext.ExecuteAction(new PlayerCreateParty());
-
-        // Switch to the in-game state.
-        await SwitchToStateAsync(ApplicationState.Game);
-
-        // At this point, the player state is available. For example, the following are now valid:
-        // Access player state members: MetaplayClient.PlayerModel.CurrentTime
-        // Execute player actions: MetaplayClient.PlayerContext.ExecuteAction(..);
-    }
-
-    /// <summary>
-    /// The current logical session has been lost and can no longer be resumed. This can happen for multiple
-    /// reasons, for example, if the network connection is dropped for a sufficient long time, or if the
-    /// application has been in the background for a long time, or if the server is in a maintenance mode.
-    ///
-    /// The application should react to this by showing a 'Connection Lost' dialog and present the player
-    /// with a 'Reconnect' button.
-    /// For some types of errors, it may be appropriate to omit the error popup, and auto-reconnect instead.
-    /// </summary>
-    /// <param name="connectionLost">Information about why the session loss happened.</param>
-    void IMetaplayLifecycleDelegate.OnSessionLost(ConnectionLostEvent connectionLost)
-    {
-        // If no state transition is ongoing, handle the connection error immediately.
-        // If state transition is ongoing, handle the connection error when the transition is done,
-        // because handling the error might involve a new state transition, and we don't
-        // want to deal with overlapping state transitions.
-        ExecuteOrEnqueueAfterStateTransition(() =>
-        {
-            if (connectionLost.AutoReconnectRecommended)
-            {
-                // For certain errors, we auto-reconnect straight away without
-                // prompting the player. Note that AutoReconnectRecommended is
-                // just a suggestion by the SDK and is based on the type of the
-                // error. The game does not have to obey the suggestion.
-                ReconnectToServer();
-            }
-            else
-            {
-                // Otherwise, show the connection error popup, with info text
-                // and a reconnect button.
-                // Despite losing the session, the game scene will linger until
-                // the player clicks on the reconnect button.
-                // MetaplayClient.PlayerModel is still available so that the
-                // game scene can continue to access it. It will remain available
-                // until the reconnection starts.
-                ShowConnectionErrorPopup(connectionLost);
-            }
-        });
-    }
-
-    /// <summary>
-    /// Metaplay failed to establish a session with the server. Show the connection error and 'Reconnect'
-    /// button so the player can try again.
-    /// </summary>
-    /// <param name="connectionLost">Information about why the failure happened.</param>
-    void IMetaplayLifecycleDelegate.OnFailedToStartSession(ConnectionLostEvent connectionLost)
-    {
-        // Show the connection error popup, with info text and a reconnect button.
-        // Note that we're not in the game scene since the error occurred before
-        // the session was started. Furthermore, MetaplayClient.PlayerModel is
-        // unavailable.
-        ShowConnectionErrorPopup(connectionLost);
+        _reconnectButtonCompleteCts?.TrySetResult(0);
     }
 
     /// <summary>
     /// Show a popup with the details of a connection/session error,
     /// and a reconnect button.
     /// </summary>
-    /// <param name="connectionLost"></param>
-    void ShowConnectionErrorPopup(ConnectionLostEvent connectionLost)
+    Task ShowConnectionErrorPopup(ConnectionLostEvent connectionLost)
     {
         Debug.LogWarning($"Terminal connection error: {PrettyPrint.Verbose(connectionLost)}");
-
-        ConnectionErrorPopoverScript.ShowTerminalError(
-            message: connectionLost.EnglishLocalizedReason,
-            technicalCode: connectionLost.TechnicalErrorCode,
-            technicalError: connectionLost.TechnicalError);
+        _reconnectButtonCompleteCts = new TaskCompletionSource<int>();
+        ConnectionErrorPopoverScript.ShowTerminalError(connectionLost);
+        return _reconnectButtonCompleteCts.Task;
     }
 
-    #endregion // IMetaplayLifecycleDelegate
+    #endregion
 
     #region IMetaplayClientAnalyticsDelegate
 

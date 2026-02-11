@@ -33,6 +33,6 @@ public class ExampleTests : MetaPageTest
     public async Task TestPlayerPageTitle()
     {
         await Page.GotoAsync($"{TestUtil.DashboardBaseUrl}/players");
-        await Expect(Page).ToHaveTitleAsync("LiveOps Dashboard - Manage Players");
+        await Expect(Page).ToHaveTitleAsync("Manage Players - LiveOps Dashboard");
     }
 }

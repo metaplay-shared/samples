@@ -4,14 +4,14 @@
 div
   //- meta-list-card is our own kitchen-sink UI component for displaying lists with all kinds of convenient utilities like filtering and sorting.
   //- Tip: you can look inside the component properties to see all the available options as we add them over time!
-  meta-list-card(
+  MetaListCard(
     title="Producers"
-    :itemList="allProducers"
-    :searchFields="searchFields"
-    :filterSets="filterSets"
-    :sortOptions="sortOptions"
-    :pageSize="20"
-    listLayout="flex"
+    :item-list="allProducers"
+    :search-fields="searchFields"
+    :filter-sets="filterSets"
+    :sort-options="sortOptions"
+    :page-size="20"
+    list-layout="flex"
     data-testid="player-producers-card"
     )
     //- meta-list-card doesn't know how to neatly display producers, so here we make a small box with the relevant text fields.
@@ -19,7 +19,8 @@ div
     template(#item-card="slotProps")
       //- Chaining a lot of CSS classes to make a box with some nice default visuals and a conditional style.
       div(
-        :class="['tw-h-full tw-py-3 tw-mr-2 tw-rounded tw-border tw-border-neutral-300 tw-text-center', slotProps.item.level > 0 ? 'tw-bg-neutral-100' : 'tw-bg-neutral-600 tw-text-neutral-100']"
+        class="tw-mr-2 tw-h-full tw-rounded tw-border tw-border-neutral-300 tw-py-3 tw-text-center"
+        :class="[slotProps.item.level > 0 ? 'tw-bg-neutral-100' : 'tw-bg-neutral-600 tw-text-neutral-100']"
         style="min-width: 7rem"
         )
         //- Simple header
@@ -31,7 +32,7 @@ div
           class="tw-text-sm"
           ) Level {{ slotProps.item.level }}
         div(
-          v-else-if="gameData?.gameConfig.Producers[slotProps.item.info].category == 'Normal'"
+          v-else-if="gameData?.gameConfig.Producers?.[slotProps.item.info].category === 'Normal'"
           class="tw-mt-2 tw-px-2"
           )
           MButton(
@@ -40,11 +41,19 @@ div
             @click="onProducerUnlockClick(slotProps.item)"
             :data-testid="`unlock-button-${sentenceCaseToKebabCase(slotProps.item.info)}`"
             ) Unlock
-        div(v-else)
-          fa-icon(
-            icon="lock"
-            class="tw-mt-1.5"
+        div(
+          v-else
+          class="tw-flex tw-items-center tw-justify-center"
+          )
+          svg(
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 640 640"
+            class="tw-mt-1.5 tw-size-6"
             )
+            // Font Awesome Free v7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free Copyright 2026 Fonticons, Inc.
+            path(
+              d="M256 160L256 224L384 224L384 160C384 124.7 355.3 96 320 96C284.7 96 256 124.7 256 160zM192 224L192 160C192 89.3 249.3 32 320 32C390.7 32 448 89.3 448 160L448 224C483.3 224 512 252.7 512 288L512 512C512 547.3 483.3 576 448 576L192 576C156.7 576 128 547.3 128 512L128 288C128 252.7 156.7 224 192 224z"
+              )
 
   MActionModal(
     ref="unlockProducerModal"
@@ -57,7 +66,7 @@ div
 </template>
 
 <script lang="ts" setup>
-import { computed, ref } from 'vue'
+import { computed, ref, useTemplateRef } from 'vue'
 
 import { getGameDataByLibrarySubscriptionOptions, getSinglePlayerSubscriptionOptions } from '@metaplay/core'
 import { useGameServerApi } from '@metaplay/game-server-api'
@@ -86,7 +95,7 @@ const { data: playerData, refresh: playerRefresh } = useSubscription(() =>
   getSinglePlayerSubscriptionOptions(props.playerId)
 )
 
-const unlockProducerModal = ref<typeof MActionModal>()
+const unlockProducerModal = useTemplateRef('unlockProducerModal')
 
 /**
  * Search fields array to be passed to the meta-list-card component.
@@ -120,8 +129,9 @@ const sortOptions = [
  */
 const allProducers = computed(() => {
   if (gameData.value && playerData.value) {
-    const availableProducers = gameData.value.gameConfig.Producers
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- We know this is an object.
+    const availableProducers = gameData.value.gameConfig.Producers as object
+
     return Object.keys(availableProducers).map((id) => {
       if (id in playerData.value.model.producers) {
         return playerData.value.model.producers[id]
@@ -143,7 +153,7 @@ const gameServerApi = useGameServerApi()
 const { showSuccessNotification } = useNotifications()
 
 function onProducerUnlockClick(item: any): void {
-  unlockProducerModal.value?.open(item)
+  unlockProducerModal.value?.open()
   selectedProducer.value = item.info
 }
 

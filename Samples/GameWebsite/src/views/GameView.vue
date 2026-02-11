@@ -39,12 +39,12 @@ div(class="container mx-auto flex h-full items-center justify-around space-x-20 
         class="text-sm text-red-500"
         ) {{ unityLoadingErrorMessage }}
 
-      ui-button(
+      UiButton(
         v-if="!unityRuntime"
         @click="loadUnityRuntime"
         data-testid="start-unity"
         ) {{ unityLoadingErrorMessage ? 'Retry' : 'Start Unity' }}
-      ui-button(
+      UiButton(
         v-else
         @click="unloadUnityRuntime"
         data-testid="stop-unity"
@@ -52,7 +52,7 @@ div(class="container mx-auto flex h-full items-center justify-around space-x-20 
 
       //- Auth
       h2(class="font-semibold") Player
-      ui-button(
+      UiButton(
         v-if="!isLoggedIn"
         @click="loginWithRedirect('google')"
         ) Login
@@ -60,11 +60,11 @@ div(class="container mx-auto flex h-full items-center justify-around space-x-20 
         p Logged in with #[span(class="text-sm") {{ currentTokens?.authPlatform }}]
         p(v-if="tokenExpiresIn") Token expires in {{ tokenExpiresIn }}s
         p(v-else) Token expired!
-        ui-button(@click="refreshTokens()") Refresh token
+        UiButton(@click="refreshTokens()") Refresh token
 </template>
 
 <script lang="ts" setup>
-import { onUnmounted, ref, computed, onMounted, watch, shallowRef } from 'vue'
+import { onUnmounted, ref, computed, onMounted, watch, useTemplateRef } from 'vue'
 
 import type { UnityRuntime } from '@metaplay/browser-sdk'
 
@@ -88,7 +88,7 @@ const {
 /**
  * This is the container for the canvas element that the game wil be rendered to.
  */
-const unityContainer = ref<HTMLElement>()
+const unityContainer = useTemplateRef('unityContainer')
 let unityCanvas: HTMLCanvasElement | null = null
 
 /**
@@ -210,6 +210,7 @@ async function loadUnityRuntime(): Promise<void> {
       throw new Error('Unity loader script injection failed. `createUnityInstance` not found on window.')
 
     // @ts-expect-error -- Unity loader magic. Do not question it.
+    // eslint-disable-next-line require-atomic-updates -- TODO: Check this is safe.
     unityRuntime.value = await window.createUnityInstance(unityCanvas, unityLoaderOptions, onUnityLoadingProgress)
     if (!unityRuntime.value) throw Error('Unity instance creation failed')
 
@@ -226,8 +227,10 @@ async function loadUnityRuntime(): Promise<void> {
 async function unloadUnityRuntime(): Promise<void> {
   if (unityRuntime.value && unityCanvas) {
     await unityRuntime.value.Quit()
+    // eslint-disable-next-line require-atomic-updates -- TODO: Check this is safe.
     unityRuntime.value = undefined
     unityContainer.value?.removeChild(unityCanvas)
+    // eslint-disable-next-line require-atomic-updates -- TODO: Check this is safe.
     unityCanvas = null
   }
 }

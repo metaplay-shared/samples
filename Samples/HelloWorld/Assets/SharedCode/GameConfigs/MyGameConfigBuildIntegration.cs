@@ -14,7 +14,7 @@ namespace Game.Logic.GameConfigs
         {
             // Return the predefined build sources here, for example:
             // return new GameConfigBuildSource[] { new GoogleSheetBuildSource("Development", "SPREADSHEET_ID") };
-            // Note that Google Sheets require going through the setup https://docs.metaplay.io/feature-cookbooks/game-configs/implementing-google-sheets-integration.html
+            // Note that Google Sheets require going through the setup https://docs.metaplay.io/feature-cookbooks/game-configs/managing-game-configs-from-the-dashboard.html#configure-dashboard-game-config-builds
             return base.GetAvailableLocalizationsBuildSources(sourcePropertyInBuildParams);
         }
 
@@ -22,7 +22,7 @@ namespace Game.Logic.GameConfigs
         {
             // Return the predefined build sources here, for example:
             // return new GameConfigBuildSource[] { new GoogleSheetBuildSource("Development", "SPREADSHEET_ID") };
-            // Note that Google Sheets require going through the setup https://docs.metaplay.io/feature-cookbooks/game-configs/implementing-google-sheets-integration.html
+            // Note that Google Sheets require going through the setup https://docs.metaplay.io/feature-cookbooks/game-configs/managing-game-configs-from-the-dashboard.html#configure-dashboard-game-config-builds
             return base.GetAvailableGameConfigBuildSources(sourcePropertyInBuildParams);
         }
     }

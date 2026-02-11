@@ -140,16 +140,7 @@ public class GlobalErrorPopoverScript : MonoBehaviour
     {
         Hide();
 
-        // Delay reconnecting to end-of-frame to avoid issues with scripts still running.
-        StartCoroutine(DelayedReconnect());
-    }
-
-    IEnumerator DelayedReconnect()
-    {
-        yield return new WaitForEndOfFrame();
-
-        MetaplayClient.Connection.CloseWithError(flushEnqueuedMessages: true, new Metaplay.Unity.ConnectionStates.TransientError.Closed());
-        ApplicationStateManager.Instance.ReconnectToServer();
+        MetaplayClient.Connection.CloseWithError(flushEnqueuedMessages: true, new Metaplay.Core.Session.ConnectionStates.TransientError.Closed());
     }
 
     /// <summary>

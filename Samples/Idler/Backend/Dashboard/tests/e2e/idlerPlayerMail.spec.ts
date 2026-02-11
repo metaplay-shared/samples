@@ -81,7 +81,7 @@ test.describe('Idler Specific Player Mail', () => {
       expect(rewardBadgeText).toContain(attachmentData.type.replace('Reward', ''))
 
       // Get the reward amount by parsing the reward badge text and check it is equal to the default amount saved in the filling form step.
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- We are confident that rewardBadgeText is a string with an 'x' in it.
       const rewardBadgeAmount = parseInt(rewardBadgeText.split('x')[1]!, 10)
       expect(rewardBadgeAmount).toEqual(attachmentData.amount)
     })

@@ -8,6 +8,7 @@ using Metaplay.Core.Localization;
 using Metaplay.Core.Model;
 using Metaplay.Core.Offers;
 using Metaplay.Core.Player;
+using System.Collections.Generic;
 
 namespace Game.Logic
 {
@@ -25,25 +26,21 @@ namespace Game.Logic
         // \todo: move to specific Guild config
         [MetaMember(3)] public int                      GuildsNumGoldPerSoldPoke    = 50;
         [MetaMember(4)] public int                      GuildsVanityCostNumGold     = 100;
-        [MetaMember(5)] public int[]                    GuildsVanityRankThresholds  = { 5, 10, 15 };
-        [MetaMember(6)] public int[]                    GuildsVanityRankRewardGold  = { 50, 50, 50 };
-        [MetaMember(7)] public int[]                    GuildsVanityRankRewardGems  = { 0, 100, 100 };
+        [MetaMember(5)] public IReadOnlyList<int>       GuildsVanityRankThresholds  = new[] { 5, 10, 15 };
+        [MetaMember(6)] public IReadOnlyList<int>       GuildsVanityRankRewardGold  = new[] { 50, 50, 50 };
+        [MetaMember(7)] public IReadOnlyList<int>       GuildsVanityRankRewardGems  = new[] { 0, 100, 100 };
 
         [MetaDeserializationConstructor]
-        public GlobalConfig(MetaRef<ProducerInfo> initialProducer, int initialGold, int initialGems, int guildsNumGoldPerSoldPoke, int guildsVanityCostNumGold, int[] guildsVanityRankThresholds = null,  int[] guildsVanityRankRewardGold = null, int[] guildsVanityRankRewardGems = null)
+        public GlobalConfig(MetaRef<ProducerInfo> initialProducer, int initialGold, int initialGems, int guildsNumGoldPerSoldPoke, int guildsVanityCostNumGold, IReadOnlyList<int> guildsVanityRankThresholds = null, IReadOnlyList<int> guildsVanityRankRewardGold = null, IReadOnlyList<int> guildsVanityRankRewardGems = null)
         {
             InitialProducer = initialProducer;
             InitialGold = initialGold;
             InitialGems = initialGems;
             GuildsNumGoldPerSoldPoke = guildsNumGoldPerSoldPoke;
             GuildsVanityCostNumGold = guildsVanityCostNumGold;
-            GuildsVanityRankThresholds = guildsVanityRankThresholds;
-            GuildsVanityRankRewardGold = guildsVanityRankRewardGold;
-            GuildsVanityRankRewardGems = guildsVanityRankRewardGems;
-
-            if (GuildsVanityRankThresholds == null) GuildsVanityRankThresholds = new[] { 5, 10, 15 };
-            if (GuildsVanityRankRewardGold == null) GuildsVanityRankRewardGold = new[] { 50, 50, 50 };
-            if (GuildsVanityRankRewardGems == null) GuildsVanityRankRewardGems = new[] { 0, 100, 100 };
+            GuildsVanityRankThresholds = guildsVanityRankThresholds ?? new[] { 5, 10, 15 };
+            GuildsVanityRankRewardGold = guildsVanityRankRewardGold ?? new[] { 50, 50, 50 };
+            GuildsVanityRankRewardGems = guildsVanityRankRewardGems ?? new[] { 0, 100, 100 };
         }
 
         public GlobalConfig()

@@ -484,7 +484,7 @@ namespace Game.Logic
             {
                 // Find how many ranks have been unlocked with the vanity count we have
                 int numRanksUnlocked;
-                for (numRanksUnlocked = 0; numRanksUnlocked < guild.GameConfig.GlobalConfig.GuildsVanityRankThresholds.Length; ++numRanksUnlocked)
+                for (numRanksUnlocked = 0; numRanksUnlocked < guild.GameConfig.GlobalConfig.GuildsVanityRankThresholds.Count; ++numRanksUnlocked)
                 {
                     if (member.NumVanityPoints < guild.GameConfig.GlobalConfig.GuildsVanityRankThresholds[numRanksUnlocked])
                         break;

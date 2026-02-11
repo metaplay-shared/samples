@@ -49,13 +49,13 @@ namespace Game.Logic
     [MetaActivableConfigData("SpecialProducerEvent")]
     public class SpecialProducerEventInfo : IMetaActivableConfigData<SpecialProducerEventId>, ILiveOpsEventTemplate<SpecialProducerEvent>, IGameConfigPostLoad
     {
-        [MetaMember(1)]                        public SpecialProducerEventId EventId             { get; private set; }
-        [MetaMember(2)]                        public string                 DisplayName         { get; private set; }
-        [MetaMember(3), ServerOnly]            public string                 Description         { get; private set; }
-        [MetaMember(4)]                        public MetaRef<ProducerInfo>  Producer            { get; private set; }
-        [MetaMember(5)]                        public int                    ProducerTargetLevel { get; private set; }
-        [MetaMember(6), MaxCollectionSize(10)] public List<PlayerReward>     Rewards             { get; private set; }
-        [MetaMember(7)]                        public MetaActivableParams    ActivableParams     { get; private set; }
+        [MetaMember(1)]                        public SpecialProducerEventId      EventId             { get; private set; }
+        [MetaMember(2)]                        public string                      DisplayName         { get; private set; }
+        [MetaMember(3), ServerOnly]            public string                      Description         { get; private set; }
+        [MetaMember(4)]                        public MetaRef<ProducerInfo>       Producer            { get; private set; }
+        [MetaMember(5)]                        public int                         ProducerTargetLevel { get; private set; }
+        [MetaMember(6), MaxCollectionSize(10)] public IReadOnlyList<PlayerReward> Rewards             { get; private set; }
+        [MetaMember(7)]                        public MetaActivableParams         ActivableParams     { get; private set; }
 
         public SpecialProducerEventId ActivableId   => EventId;
         public SpecialProducerEventId ConfigKey     => EventId;
@@ -69,9 +69,9 @@ namespace Game.Logic
         string ILiveOpsEventTemplate.DefaultDescription => Description;
 
         public SpecialProducerEventInfo(){}
-        
+
         [MetaGameConfigBuildConstructor]
-        public SpecialProducerEventInfo(SpecialProducerEventId eventId, string displayName, string description, MetaRef<ProducerInfo> producer, int producerTargetLevel, List<PlayerReward> rewards, MetaActivableParams activableParams)
+        public SpecialProducerEventInfo(SpecialProducerEventId eventId, string displayName, string description, MetaRef<ProducerInfo> producer, int producerTargetLevel, IReadOnlyList<PlayerReward> rewards, MetaActivableParams activableParams)
         {
             if (producerTargetLevel <= 0)
                 throw new ArgumentException($"Producer target level in event {eventId} is {producerTargetLevel}, but it should be positive", nameof(producerTargetLevel));

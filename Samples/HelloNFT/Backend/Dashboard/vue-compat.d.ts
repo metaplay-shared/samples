@@ -1,4 +1,5 @@
-/* eslint-disable */
+/* eslint-disable @eslint-community/eslint-comments/no-unlimited-disable -- Just wholesale disabling linting here. */
+/* eslint-disable -- Just wholesale disabling linting here. */
 
 declare module 'vue' {
   import { CompatVue } from '@vue/runtime-dom'

@@ -14,10 +14,10 @@ namespace Game.Logic
     [MetaSerializableDerived(3)]
     public class SpecialProducerEvent : LiveOpsEventContent
     {
-        [MetaMember(1)]             public string                 DisplayName         { get; private set; }
-        [MetaMember(2)]             public ProducerTypeId         ProducerId          { get; private set; }
-        [MetaMember(3)]             public int                    ProducerTargetLevel { get; private set; }
-        [MetaMember(4)]             public List<PlayerReward>     Rewards             { get; private set; }
+        [MetaMember(1)] public string                       DisplayName         { get; private set; }
+        [MetaMember(2)] public ProducerTypeId               ProducerId          { get; private set; }
+        [MetaMember(3)] public int                          ProducerTargetLevel { get; private set; }
+        [MetaMember(4)] public IReadOnlyList<PlayerReward>  Rewards             { get; private set; }
 
         public static SpecialProducerEvent FromTemplate(SpecialProducerEventInfo template)
         {

@@ -4,7 +4,7 @@ div(class="container mx-auto flex h-full items-center justify-around space-x-20 
   p(v-if="!isInitialized") Initializing...
 
   //- Not logged in state.
-  ui-button(
+  UiButton(
     v-else-if="!isLoggedIn"
     @click="loginWithRedirect('google')"
     ) Login

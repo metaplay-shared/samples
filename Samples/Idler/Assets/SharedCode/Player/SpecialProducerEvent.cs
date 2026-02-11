@@ -1,6 +1,7 @@
 // This file is part of Metaplay SDK which is released under the Metaplay SDK License.
 
 using Game.Logic.TypeCodes;
+using System;
 using Metaplay.Core;
 using Metaplay.Core.Activables;
 using Metaplay.Core.Model;
@@ -41,12 +42,12 @@ namespace Game.Logic
         [MetaSerializable]
         public class EventResult
         {
-            [MetaMember(1)] public int                  LevelReached    { get; private set; } = 0;
-            [MetaMember(2)] public List<PlayerReward>   Rewards         { get; private set; }
-            [MetaMember(3)] public bool                 ClaimPending    { get; set; }
+            [MetaMember(1)] public int                          LevelReached    { get; private set; } = 0;
+            [MetaMember(2)] public IReadOnlyList<PlayerReward>  Rewards         { get; private set; }
+            [MetaMember(3)] public bool                         ClaimPending    { get; set; }
 
             EventResult(){ }
-            public EventResult(int levelReached, List<PlayerReward> rewards, bool claimPending)
+            public EventResult(int levelReached, IReadOnlyList<PlayerReward> rewards, bool claimPending)
             {
                 LevelReached = levelReached;
                 Rewards = new List<PlayerReward>(rewards); // copy the list for safety
@@ -94,9 +95,8 @@ namespace Game.Logic
             }
 
             // Store the result, and remove the producer.
-
-            bool                reachedTarget   = producer.Level >= Info.ProducerTargetLevel;
-            List<PlayerReward>  rewards         = reachedTarget ? Info.Rewards : new List<PlayerReward>();
+            bool                        reachedTarget   = producer.Level >= Info.ProducerTargetLevel;
+            IReadOnlyList<PlayerReward> rewards         = reachedTarget ? Info.Rewards : Array.Empty<PlayerReward>();
             LastResult = new EventResult(producer.Level, rewards, claimPending: reachedTarget);
 
             player.Producers.Remove(Info.Producer.Ref.Id);

@@ -89,7 +89,9 @@ export function useMetaplayBrowserSdk() {
 
         // Remove query params from location bar
         const newQuery: Record<string, string> = {}
-        result.newQuery.forEach((val, key) => (newQuery[key] = val))
+        result.newQuery.forEach((val, key) => {
+          newQuery[key] = val
+        })
         await router.replace({
           query: newQuery,
         })

@@ -124,7 +124,7 @@ public class DebugMenuScript : MonoBehaviour
 
     public void TriggerNetworkError()
     {
-        MetaplayClient.Connection.CloseWithError(flushEnqueuedMessages: true, new Metaplay.Unity.ConnectionStates.TransientError.Closed());
+        MetaplayClient.Connection.CloseWithError(flushEnqueuedMessages: true, new Metaplay.Core.Session.ConnectionStates.TransientError.Closed());
     }
 
     public void TriggerException()
@@ -139,7 +139,7 @@ public class DebugMenuScript : MonoBehaviour
     public void TriggerSessionStartFailure()
     {
         ((GameConnectionDelegate)MetaplayClient.Connection.Delegate).FailNextSessionStart = true;
-        MetaplayClient.Connection.CloseWithError(flushEnqueuedMessages: true, new Metaplay.Unity.ConnectionStates.TransientError.Closed());
+        MetaplayClient.Connection.CloseWithError(flushEnqueuedMessages: true, new Metaplay.Core.Session.ConnectionStates.TransientError.Closed());
     }
 
 
@@ -168,13 +168,13 @@ public class DebugMenuScript : MonoBehaviour
         PlayerNameLabel.text = newName;
     }
 
-    private static string ConnectionInfoToString(Metaplay.Unity.ConnectionState state, ServerConnection.DebugInfo debugInfo)
+    private static string ConnectionInfoToString(Metaplay.Core.Session.ConnectionState state, ServerConnection.DebugInfo debugInfo)
     {
         DateTime currentTime = DateTime.UtcNow;
 
         string str = "";
 
-        if (state is Metaplay.Unity.ConnectionStates.Connected connectedState)
+        if (state is Metaplay.Core.Session.ConnectionStates.Connected connectedState)
         {
             if (str != "")
                 str += "; ";

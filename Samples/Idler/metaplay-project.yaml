@@ -11,7 +11,7 @@ sharedCodeDir: Assets/SharedCode
 unityProjectDir: .
 
 # Specify .NET runtime version to build project for, only '<major>.<minor>'.
-dotnetRuntimeVersion: "9.0"
+dotnetRuntimeVersion: "10.0"
 
 # Specify Helm chart versions to use for server and bot deployments.
 serverChartVersion: latest-prerelease
@@ -24,6 +24,7 @@ authProviders:
     clientId: ktWZITsg0huCvRt3JMFXyR6x4uAWszAK
     authEndpoint: https://metaplay.auth0.com/authorize
     tokenEndpoint: https://metaplay.auth0.com/oauth/token
+    revokeEndpoint: https://metaplay.auth0.com/oauth/revoke # used by CLI v1.7.0+
     userInfoEndpoint: https://metaplay.auth0.com/userinfo
     scopes: openid profile email offline_access
     audience: managed-gameservers
@@ -62,6 +63,7 @@ environments:
     type: development
     stackDomain: p1.metaplay.io
     serverValuesFile: Backend/Deployments/quickly-server.yaml
+    aliases: [ ad-hoc ]
   - name: Auto-deploy from develop {p2-eu}
     hostingType: metaplay-hosted
     humanId: lovely-wombats-build-nimbly

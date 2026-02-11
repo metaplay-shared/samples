@@ -595,13 +595,13 @@ namespace Game.Server.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("varchar(64)");
 
-                    b.Property<int?>("DeletionSource")
+                    b.Property<sbyte?>("DeletionSource")
                         .HasColumnType("tinyint");
 
                     b.Property<bool>("IsFinal")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int?>("LifecycleStatus")
+                    b.Property<sbyte?>("LifecycleStatus")
                         .HasColumnType("tinyint");
 
                     b.Property<int>("LogicVersion")

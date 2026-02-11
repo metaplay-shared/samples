@@ -285,7 +285,6 @@ GameObject:
   m_Component:
   - component: {fileID: 267486410}
   - component: {fileID: 267486409}
-  - component: {fileID: 267486411}
   - component: {fileID: 267486412}
   m_Layer: 0
   m_Name: ApplicationManager
@@ -329,23 +328,6 @@ Transform:
   - {fileID: 1635946925}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &267486411
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 267486408}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: df91b0554d0606947bd1eed145e68aa8, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  EnableLatencySimulation: 0
-  ArtificialAddedLatency: 0
-  _simulatedLinkQuality: 0
-  AppearAsPlatformString: 
-  _overrideLocationString: 
 --- !u!114 &267486412
 MonoBehaviour:
   m_ObjectHideFlags: 0

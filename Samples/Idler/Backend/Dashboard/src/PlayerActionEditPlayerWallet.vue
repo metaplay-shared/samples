@@ -1,40 +1,46 @@
 <!-- This file is part of Metaplay SDK which is released under the Metaplay SDK License. -->
 
 <template lang="pug">
-div(v-if="playerData")
-  MActionModalButton(
-    modal-title="Set Player's Wallet Contents"
-    :action="setPlayerWallet"
-    trigger-button-label="Edit Player Wallet"
-    variant="warning"
-    ok-button-label="Set Wallet"
-    permission="api.players.set_wallet"
-    :ok-button-disabled-tooltip="!newGold && !newGems ? 'Change at least one value.' : undefined"
-    @show="resetModal"
-    data-testid="action-set-player-wallet"
+MActionModalButton(
+  modal-title="Set Player's Wallet Contents"
+  :action="setPlayerWallet"
+  trigger-button-label="Edit Player Wallet"
+  variant="warning"
+  ok-button-label="Set Wallet"
+  permission="api.players.set_wallet"
+  :trigger-button-disabled-tooltip="!playerData ? 'Loading...' : undefined"
+  :ok-button-disabled-tooltip="!newGold && !newGems ? 'Change at least one value.' : undefined"
+  @show="resetModal"
+  data-testid="action-set-player-wallet"
+  )
+  template(
+    v-if="playerData"
+    #default
     )
-    template(#default)
-      p(class="tw-mb-1") You can manually change the amount of gold and gems that #[MBadge {{ playerData.model.playerName }}] has in their wallet.
-      MInputNumber(
-        label="Gold"
-        :model-value="newGold"
-        :min="0"
-        :hint-message="`Player currently has ${playerData.model.wallet.numGold} gold.`"
-        allow-undefined
-        placeholder="Leave blank to keep the original value"
-        @update:model-value="newGold = $event"
-        )
-      MInputNumber(
-        label="Gems"
-        :model-value="newGems"
-        :min="0"
-        :hint-message="`Player currently has ${playerData.model.wallet.numGems} gems.`"
-        allow-undefined
-        placeholder="Leave blank to keep the original value"
-        @update:model-value="newGems = $event"
-        )
-    template(#bottom-panel)
-      meta-no-seatbelts(:name="playerData.model.playerName")
+    p(class="tw-mb-1") You can manually change the amount of gold and gems that #[MBadge {{ playerData.model.playerName }}] has in their wallet.
+    MInputNumber(
+      label="Gold"
+      :model-value="newGold"
+      :min="0"
+      :hint-message="`Player currently has ${playerData.model.wallet.numGold} gold.`"
+      allow-undefined
+      placeholder="Leave blank to keep the original value"
+      @update:model-value="newGold = $event"
+      )
+    MInputNumber(
+      label="Gems"
+      :model-value="newGems"
+      :min="0"
+      :hint-message="`Player currently has ${playerData.model.wallet.numGems} gems.`"
+      allow-undefined
+      placeholder="Leave blank to keep the original value"
+      @update:model-value="newGems = $event"
+      )
+  template(
+    v-if="playerData"
+    #bottom-panel
+    )
+    MNoSeatbelts(:target-name="playerData.model.playerName || 'the player'")
 </template>
 
 <script lang="ts" setup>
@@ -42,8 +48,7 @@ import { ref } from 'vue'
 
 import { getSinglePlayerSubscriptionOptions } from '@metaplay/core'
 import { useGameServerApi } from '@metaplay/game-server-api'
-import { MetaNoSeatbelts } from '@metaplay/meta-ui'
-import { MBadge, MInputNumber, MActionModalButton, useNotifications } from '@metaplay/meta-ui-next'
+import { MBadge, MInputNumber, MActionModalButton, MNoSeatbelts, useNotifications } from '@metaplay/meta-ui-next'
 import { useSubscription } from '@metaplay/subscriptions'
 
 const props = defineProps<{

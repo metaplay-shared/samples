@@ -12,6 +12,7 @@ function serveStaticFiles(path: string, srcDir: string): Plugin<Api> {
     configureServer(server): void {
       server.middlewares.use(
         path,
+        // eslint-disable-next-line @typescript-eslint/strict-void-return -- looks like a type mismatch
         serveStatic(srcDir, {
           index: false,
           fallthrough: false,
@@ -39,8 +40,8 @@ function serveStaticFiles(path: string, srcDir: string): Plugin<Api> {
 function tryGetUnityBuildOutputFile(buildRootPath: string, basePath: string): string {
   const candidate = join(buildRootPath, basePath)
   if (existsSync(candidate)) return basePath
-  if (existsSync(candidate + '.br')) return basePath + '.br'
-  throw Error('File not found in Unity build: ' + basePath)
+  if (existsSync(`${candidate}.br`)) return `${basePath}.br`
+  throw Error(`File not found in Unity build: ${basePath}`)
 }
 
 function getUnityBuildProps(unityBuildPath: string): {
@@ -89,7 +90,7 @@ export default defineConfig(({ mode }) => {
   }
 
   if (env.VITE_UNITY_BUILD_PATH?.length) {
-    baseConfig.plugins.push(serveStaticFiles('/' + env.VITE_WEBGL_BUILD_BASE_URL, env.VITE_UNITY_BUILD_PATH))
+    baseConfig.plugins.push(serveStaticFiles(`/${env.VITE_WEBGL_BUILD_BASE_URL}`, env.VITE_UNITY_BUILD_PATH))
     const buildProps = getUnityBuildProps(env.VITE_UNITY_BUILD_PATH)
     if (buildProps) {
       baseConfig.define = Object.assign(baseConfig.define, {

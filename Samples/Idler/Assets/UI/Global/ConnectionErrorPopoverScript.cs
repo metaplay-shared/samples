@@ -1,13 +1,12 @@
 // This file is part of Metaplay SDK which is released under the Metaplay SDK License.
 
 using Metaplay.Core;
+using Metaplay.Core.Client;
 using Metaplay.Core.Network;
+using Metaplay.Core.Session;
 using Metaplay.Unity;
-using Metaplay.Unity.ConnectionStates;
-using Metaplay.Unity.DefaultIntegration;
 using System.Collections;
 using System.Collections.Generic;
-using Metaplay.Core.Client;
 using TMPro;
 using UnityEngine;
 
@@ -43,16 +42,14 @@ public class ConnectionErrorPopoverScript : MonoBehaviour
         if (Container.activeInHierarchy)
         {
             string verboseDetails;
-            if (Error.ShowNetworkDiagnostics)
+            if (Error.NetworkDiagnostics != null)
             {
-                NetworkDiagnosticReport diagnosticsReportMaybe = TryGetNetworkDiagnosticsReport(Error);
-
-                EncodedDetailsLabel.text = diagnosticsReportMaybe?.ToEncodedString() ?? "";
+                EncodedDetailsLabel.text = Error.NetworkDiagnostics.ToEncodedString();
 
                 verboseDetails = string.Join("\n", new string[] {
                     Error.ToPlayerFacingString(),
                     "",
-                    diagnosticsReportMaybe?.ToPlayerFacingString(richText: true) ?? ""
+                    Error.NetworkDiagnostics.ToPlayerFacingString(richText: true) ?? ""
                 });
             }
             else
@@ -60,17 +57,6 @@ public class ConnectionErrorPopoverScript : MonoBehaviour
 
             VerboseDetailsLabel.text = verboseDetails;
         }
-    }
-
-    static NetworkDiagnosticReport TryGetNetworkDiagnosticsReport(ErrorInfo error)
-    {
-        // Get either the latest network diagnostic report, or the report contained in the connection error state.
-        // Either or both can be null!
-        // \todo Fix so that we only need to get LastNetworkDiagnosticReport?
-        //       I.e. make sure that if the error has the report available,
-        //       then LastNetworkDiagnosticReport is also assigned.
-        return MetaplayClient.NetworkDiagnosticsManager.LastNetworkDiagnosticReport
-               ?? (error.TechnicalError as IHasNetworkDiagnosticReport)?.NetworkDiagnosticReport;
     }
 
     /// <summary>
@@ -91,7 +77,7 @@ public class ConnectionErrorPopoverScript : MonoBehaviour
         public string OperatingSystem; // "iPhone OS 8.4"
         public ConnectionState TechnicalError;
         public string TechnicalDetails; // Verbose dump of TechnicalError.
-        public bool ShowNetworkDiagnostics;
+        public NetworkDiagnosticReport NetworkDiagnostics;
 
         public string ToPlayerFacingString()
         {
@@ -118,11 +104,11 @@ public class ConnectionErrorPopoverScript : MonoBehaviour
     /// <summary>
     /// Adds an error message to the popover que.
     /// <param name="summary">Short error description</param>
-    public static void ShowTerminalError(string message, int technicalCode, ConnectionState technicalError)
+    public static void ShowTerminalError(ConnectionLostEvent connectionLost)
     {
         ErrorInfo error = new ErrorInfo();
-        error.Message = message;
-        error.TechnicalCode = technicalCode.ToString();
+        error.Message = connectionLost.EnglishLocalizedReason;
+        error.TechnicalCode = connectionLost.TechnicalErrorCode.ToString();
         error.GameState = ApplicationStateManager.Instance.CurrentState.ToString();
         error.DeviceTimestamp = System.DateTime.Now.ToString();
         error.PlayerId = MetaplaySDK.PlayerId.IsValid ? MetaplaySDK.PlayerId.ToString() : "No player id";
@@ -132,21 +118,21 @@ public class ConnectionErrorPopoverScript : MonoBehaviour
         error.EnvironmentName = IEnvironmentConfigProvider.Get().GetDisplayNameOrId();
         error.Device = SystemInfo.deviceModel;
         error.OperatingSystem = SystemInfo.operatingSystem;
-        error.TechnicalError = technicalError;
-        error.TechnicalDetails = PrettyPrint.Verbose(technicalError).ToString();
-        error.ShowNetworkDiagnostics = technicalError is IHasNetworkDiagnosticReport;
+        error.TechnicalError = connectionLost.TechnicalError;
+        error.TechnicalDetails = PrettyPrint.Verbose(connectionLost.TechnicalError).ToString();
+        error.NetworkDiagnostics = connectionLost.NetworkDiagnosticReport;
 
         // Cache
         Instance.Error = error;
 
         // Show the latest network report if needed
-        if (error.ShowNetworkDiagnostics)
+        if (error.NetworkDiagnostics != null)
             Instance.EncodedDetailsContainer.SetActive(true);
         else
             Instance.EncodedDetailsContainer.SetActive(false);
 
         // Fill labels
-        Instance.SummaryLabel.text = $"{error.Message} (#{technicalCode})";
+        Instance.SummaryLabel.text = $"{error.Message} (#{connectionLost.TechnicalErrorCode})";
         Instance.PlayerIdLabel.text = error.PlayerId;
 
         // Display
@@ -169,15 +155,7 @@ public class ConnectionErrorPopoverScript : MonoBehaviour
     /// </summary>
     public void OnReconnectClicked()
     {
-        // Delay reconnecting to end-of-frame to avoid issues with scripts still running.
-        StartCoroutine(DelayedReconnect());
-    }
-
-    IEnumerator DelayedReconnect()
-    {
-        yield return new WaitForEndOfFrame();
-
-        ApplicationStateManager.Instance.ReconnectToServer();
+        ApplicationStateManager.Instance.OnErrorReconnectPopupComplete();
     }
 
     /// <summary>
