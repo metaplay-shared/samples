@@ -2,3 +2,8 @@ packages:
   - Samples/Idler/Backend/Dashboard
   - Samples/HelloNFT/Backend/Dashboard
   - MetaplaySDK/Frontend/*
+
+allowBuilds:
+  '@parcel/watcher': true
+  bootstrap-vue: true
+  esbuild: true

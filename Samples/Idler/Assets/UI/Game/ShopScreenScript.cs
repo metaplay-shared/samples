@@ -76,7 +76,9 @@ public class ShopScreenScript : MonoBehaviour
 
     void OnStoreInitializationFailed(IAPManager.StoreInitializationFailure failure)
     {
-        string statusText = $"Store initialization failed: {failure.Reason}.";
+        string statusText = $"Store initialization failed: ";
+        if (failure.IsUnityStore)
+            statusText += $"{failure.Reason}.";
         if (failure.Message != null)
             statusText += $" {failure.Message}";
 

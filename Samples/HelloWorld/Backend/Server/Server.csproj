@@ -14,14 +14,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="$(MetaplayServerPath)\CodeAnalyzers\Metaplay.CodeAnalyzers.csproj">
-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-      <OutputItemType>Analyzer</OutputItemType>
-    </ProjectReference>
-    <ProjectReference Include="$(MetaplayServerPath)\CodeAnalyzers.Shared\Metaplay.CodeAnalyzers.Shared.csproj">
-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-      <OutputItemType>Analyzer</OutputItemType>
-    </ProjectReference>
     <ProjectReference Include="..\SharedCode\SharedCode.csproj" />
     <ProjectReference Include="$(MetaplayServerPath)\Server\Metaplay.Server.csproj" />
   </ItemGroup>

@@ -13,7 +13,7 @@ namespace GameConfigTool
 {
     class GameConfigTool : GameConfigToolBase
     {
-        const string GoogleSheetsCredentials = "Backend/Server/Secrets/idler-sa-identity.json"; // Path to Google service account credentials .json
+        const string GoogleSheetsCredentials = "Backend/Server/Secrets/example-idler-google-sheet-credentials.json"; // Path to Google service account credentials .json
 
         protected override IGameConfigSourceFetcherConfig FetcherConfig => GameConfigSourceFetcherConfigCore.Create()
             .WithGoogleCredentialsFilePath(GoogleSheetsCredentials)

@@ -5,6 +5,12 @@ Geolocation:
   Enabled: true
   MaxMindLicenseKeyPath: "kube-secret://user-maxmind-license-key#license-key"
 
+AppleStore:
+  # io.metaplay.idler-demo is the bundle ID of our internal "Metaplay Idler" in Testflight, which connects to the 'nimbly' environment.
+  IosBundleId: io.metaplay.idler-demo
+  AppleSharedSecretPath: "kube-secret://user-apple-shared-secret#secret"
+  AppStoreConnectApiCredentialsPath: "kube-secret://user-appstoreconnect-creds#credentials"
+
 GooglePlayStore:
   EnableGoogleAuthentication: true
   GooglePlayApplicationId: example-project-idler

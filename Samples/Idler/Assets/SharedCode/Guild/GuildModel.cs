@@ -109,6 +109,8 @@ namespace Game.Logic
         [IgnoreDataMember] public IGuildModelServerListener ServerListener  { get; set; } = EmptyGuildModelServerListener.Instance;
         [IgnoreDataMember] public IGuildModelClientListener ClientListener  { get; set; } = EmptyGuildModelClientListener.Instance;
 
+        [MetaMember(101)] public int RequiredPlayerLevel { get; set; }
+
         #region GuildModelBase implementation
 
         public override IModelRuntimeData<IGuildModelBase> GetRuntimeData() => new GuildModelRuntimeData(this);
@@ -330,10 +332,12 @@ namespace Game.Logic
     {
         // Example: Player has Coolness index and that is copied to guild for others to see
         //  [MetaMember(101)] public int CoolnessIndex { get; private set; }
+        [MetaMember(102)] public int PlayerLevel { get; private set; }
 
         public GuildMemberPlayerData() { }
-        public GuildMemberPlayerData(string displayName) : base(displayName)
+        public GuildMemberPlayerData(string displayName, int playerLevel) : base(displayName)
         {
+            PlayerLevel = playerLevel;
         }
 
         public override bool IsUpToDate(GuildMemberBase memberBase)

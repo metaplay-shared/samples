@@ -10,10 +10,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SharedCode\SharedCode.csproj" />
-    <ProjectReference Include="$(MetaplayServerPath)\CodeAnalyzers.Shared\Metaplay.CodeAnalyzers.Shared.csproj">
-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-      <OutputItemType>Analyzer</OutputItemType>
-    </ProjectReference>
   </ItemGroup>
 
 </Project>

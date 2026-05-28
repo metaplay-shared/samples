@@ -10,7 +10,7 @@ namespace Game.Server.GuildDiscovery
     /// for example contain the level of the player allow it to be taken into the
     /// account when recommending guilds.
     /// <para>
-    /// Created by <see cref="Metaplay.Server.PlayerActorBase.CreateGuildDiscoveryContext"/>.
+    /// Created by <see cref="Metaplay.Server.PlayerActorBase{TModel, TPersisted}.GuildComponentBase.CreateGuildDiscoveryContext"/>.
     /// Consumed by <see cref="GuildSearchActor"/> and <see cref="GuildRecommenderActor"/>.
     /// </para>
     /// </summary>
@@ -18,5 +18,8 @@ namespace Game.Server.GuildDiscovery
     public class GuildDiscoveryPlayerContext : GuildDiscoveryPlayerContextBase
     {
         // For example, current player level, last known geo-location, and/or language
+        // Idler-sample only uses the Level
+
+        public int PlayerLevel;
     }
 }

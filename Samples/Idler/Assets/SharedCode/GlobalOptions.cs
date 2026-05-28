@@ -16,7 +16,6 @@ namespace Game.Logic
             gameMagic:              "IDLR",
             supportedLogicVersions: new MetaVersionRange(4, 5),
             clientLogicVersion:     5,
-            guildInviteCodeSalt:    0x17,
             sharedNamespaces:       new string[] { "Game.Logic" },
             defaultLanguage:        LanguageId.FromString("en"),
             featureFlags: new MetaplayFeatureFlags

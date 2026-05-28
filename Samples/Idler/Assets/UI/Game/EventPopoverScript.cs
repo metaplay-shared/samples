@@ -1,5 +1,4 @@
 using Game.Logic;
-using System.Collections.Generic;
 using Metaplay.Core;
 using Metaplay.Core.LiveOpsEvent;
 using TMPro;
@@ -100,7 +99,7 @@ public class EventPopoverScript : MonoBehaviour
     /// </summary>
     void ClearEventUpdate(MetaGuid eventId)
     {
-        MetaplayClient.PlayerContext.ExecuteAction(new PlayerClearLiveOpsEventUpdates(new List<MetaGuid> { eventId }));
+        MetaplayClient.PlayerContext.ExecuteAction(new PlayerClearLiveOpsEventUpdates(new[] { eventId }));
     }
 
     /// <summary>

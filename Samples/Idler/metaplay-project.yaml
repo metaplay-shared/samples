@@ -57,12 +57,12 @@ environments:
     stackDomain: p1.metaplay.io
     serverValuesFile: Backend/Deployments/demo-server.yaml
     botclientValuesFile: Backend/Deployments/demo-botclients.yaml
-  - name: Ad hoc tests (quickly) {◉_◉} <p1>
+  - name: Ad-hoc test environment (p2-eu)
     hostingType: metaplay-hosted
-    humanId: lovely-wombats-build-quickly
+    humanId: lovely-wombats-build-presently
     type: development
-    stackDomain: p1.metaplay.io
-    serverValuesFile: Backend/Deployments/quickly-server.yaml
+    stackDomain: p2-eu.metaplay.dev
+    serverValuesFile: Backend/Deployments/presently-server.yaml
     aliases: [ ad-hoc ]
   - name: Auto-deploy from develop {p2-eu}
     hostingType: metaplay-hosted

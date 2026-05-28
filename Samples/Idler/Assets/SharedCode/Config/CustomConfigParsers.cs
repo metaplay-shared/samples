@@ -3,6 +3,7 @@
 using Metaplay.Core;
 using Metaplay.Core.Config;
 using Metaplay.Core.Player;
+using System;
 
 namespace Game.Logic
 {
@@ -12,6 +13,10 @@ namespace Game.Logic
         {
             parser.RegisterCustomParseFunc<PlayerReward>(ParsePlayerReward);
             parser.RegisterCustomParseFunc<PlayerPropertyId>(ParsePlayerPropertyId);
+            // Example custom ICustomComparable parser. The function is invoked by
+            // PlayerPropertyConstant.Parse against the concrete property type when a segment
+            // row references a PlayerPropertyIdVipTier.
+            parser.RegisterCustomParseFunc<PlayerVipTier>(ParsePlayerVipTier);
         }
 
         static PlayerReward ParsePlayerReward(ConfigParser parser, ConfigLexer lexer)
@@ -75,9 +80,23 @@ namespace Game.Logic
 
                 case "TimeSinceLastLogin":
                     return new PlayerPropertyTimeSinceLastLogin();
+
+                case "VipTier":
+                    return new PlayerPropertyIdVipTier();
             }
 
             throw new ParseError($"Invalid PlayerPropertyId in config: {type}");
+        }
+
+        static PlayerVipTier ParsePlayerVipTier(ConfigLexer lexer)
+        {
+            // Parse the tier as an identifier (e.g. "Silver") and look it up in the enum. The
+            // string form must match PlayerVipTier.ToString() so segment authors can write the
+            // value back unchanged when they edit conditions.
+            string name = lexer.ParseIdentifier();
+            if (!Enum.TryParse(name, ignoreCase: false, out PlayerVipTier.Tier tier))
+                throw new ParseError($"Unknown {nameof(PlayerVipTier)} '{name}'");
+            return new PlayerVipTier(tier);
         }
     }
 }

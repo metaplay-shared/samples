@@ -1,8 +1,10 @@
 // This file is part of Metaplay SDK which is released under the Metaplay SDK License.
 
 using Game.Logic;
+using Game.Logic.Matchmaking;
 using Metaplay.Core;
 using Metaplay.Core.Client;
+using Metaplay.Core.Message;
 using Metaplay.Core.Guild;
 using Metaplay.Core.Guild.Actions;
 using Metaplay.Core.Guild.Messages.Core;
@@ -56,6 +58,19 @@ public class OfflineServer : DefaultOfflineServer, IPlayerModelServerListener, I
     {
         switch (msg)
         {
+            case SessionMetaRequestMessage request
+                when request.Payload is IdleMatchingRequest:
+            {
+                // Return a dummy matchmaking success for offline testing
+                SendToClient(new SessionMetaResponseMessage()
+                {
+                    RequestId = request.Id,
+                    Payload = new IdleMatchingResponse(
+                        isSuccess: true, didWinBattle: true)
+                });
+                break;
+            }
+
             case GuildCreateRequest request:
             {
                 EntitySerializedState guildSerializedState = SetupFakeGuild(request.CreationParams);
@@ -333,7 +348,8 @@ public class OfflineServer : DefaultOfflineServer, IPlayerModelServerListener, I
 
         // \todo: should this be part of PlayerModel? Or can this contain data that is not part of player? Maybe a hybrid?
         GuildMemberPlayerData playerData = new GuildMemberPlayerData(
-            displayName: PlayerModel.PlayerName
+            displayName: PlayerModel.PlayerName,
+            playerLevel: PlayerModel.PlayerLevel
             );
         ModelUtil.RunAction(model, new GuildMemberAdd(playerId, 1, playerData));
         ModelUtil.RunAction(model, new GuildMemberIsOnlineUpdate(playerId, isOnline: true, lastUpdateAt: MetaTime.Now));
@@ -360,13 +376,12 @@ public class OfflineServer : DefaultOfflineServer, IPlayerModelServerListener, I
 
     GuildDiscoveryInfoBase GetDiscoveryFakeGuildInfo(int key)
     {
-        return new GuildDiscoveryInfo()
-        {
-            GuildId         = EntityId.ParseFromString("Guild:Fake00000A"),
-            DisplayName     = "Fake guild",
-            NumMembers      = 1,
-            MaxNumMembers   = 12,
-        };
+        return new GuildDiscoveryInfo(
+            guildId:                EntityId.ParseFromString("Guild:Fake00000A"),
+            displayName:            "Fake guild",
+            numMembers:             1,
+            maxNumMembers:          12,
+            requiredPlayerLevel:    2);
     }
 
     List<GuildDiscoveryInfoBase> GetDiscoveryFakeGuildInfos()

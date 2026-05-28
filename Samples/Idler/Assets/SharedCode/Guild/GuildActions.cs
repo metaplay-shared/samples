@@ -576,4 +576,36 @@ namespace Game.Logic
             public override GuildActionBase CreateFinalizingGuildAction(FinalizingPlan finalizingPlan) => new FinalizingGuildAction(this, finalizingPlan);
         }
     }
+
+    /// <summary>
+    /// Sets the minimum player level required to join the guild.
+    /// </summary>
+    [ModelAction(ActionCodes.GuildSetRequiredPlayerLevel)]
+    public class GuildSetRequiredPlayerLevel : GuildClientAction
+    {
+        public int RequiredPlayerLevel { get; private set; }
+
+        GuildSetRequiredPlayerLevel() { }
+        public GuildSetRequiredPlayerLevel(int requiredPlayerLevel)
+        {
+            RequiredPlayerLevel = requiredPlayerLevel;
+        }
+
+        public override MetaActionResult Execute(GuildModel guild, bool commit)
+        {
+            // Allow only leader or admin to set this
+            if (InvokingPlayerId != EntityId.None && guild.Members[InvokingPlayerId].Role != GuildMemberRole.Leader)
+                return MetaActionResult.GuildOperationNotPermitted;
+            if (RequiredPlayerLevel < 0)
+                return MetaActionResult.GuildOperationNotPermitted;
+
+            if (commit)
+            {
+                guild.RequiredPlayerLevel = RequiredPlayerLevel;
+                guild.ServerListenerCore.GuildDiscoveryInfoChanged();
+            }
+
+            return MetaActionResult.Success;
+        }
+    }
 }

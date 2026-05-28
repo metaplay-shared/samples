@@ -1,1 +1,0 @@
-import{o as t,c as o,Z as s,i as a,L as n}from"./index-BsSy0BrP.js";const r={key:0,class:"tw-mx-auto tw-w-full tw-max-w-3xl"};function l(e,m){return e.$slots.default?(t(),o("div",r,[s(e.$slots,"default")])):a("",!0)}const c={},d=n(c,[["render",l]]);export{d as M};

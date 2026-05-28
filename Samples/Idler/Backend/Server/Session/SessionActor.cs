@@ -5,6 +5,7 @@ using Game.Server.Matchmaking;
 using Game.Server.Player;
 using Metaplay.Cloud.Entity;
 using Metaplay.Core;
+using Metaplay.Core.Message;
 using Metaplay.Server;
 using Metaplay.Server.Matchmaking;
 using System;
@@ -28,15 +29,15 @@ namespace Game.Server
             {
                 switch (message)
                 {
-                    case IdleMatchingRequest matchingRequest:
-                        await HandleMatchingRequest(matchingRequest);
+                    case SessionMetaRequestMessage request when request.Payload is IdleMatchingRequest:
+                        await HandleMatchingRequest(request.Id);
                         return true;
                 }
             }
             return false;
         }
 
-        async Task HandleMatchingRequest(IdleMatchingRequest _)
+        async Task HandleMatchingRequest(int requestId)
         {
             InternalPlayerGetBattleAttackParamsResponse attackParams =
                 await EntityAskAsync(
@@ -60,19 +61,19 @@ namespace Game.Server
                 if (attackMmr > defenseMmr)
                 {
                     CastMessage(PlayerId, InternalWinIdlerPvPBattleMessage.Instance);
-                    
-                    SendOutgoingPayloadMessage(
+
+                    SendResponse(requestId,
                         new IdleMatchingResponse(isSuccess: true, didWinBattle: true));
                 }
                 else
                 {
-                    SendOutgoingPayloadMessage(
+                    SendResponse(requestId,
                         new IdleMatchingResponse(isSuccess: true, didWinBattle: false));
                 }
             }
             else
             {
-                SendOutgoingPayloadMessage(
+                SendResponse(requestId,
                     new IdleMatchingResponse(isSuccess: false, didWinBattle: false));
             }
         }

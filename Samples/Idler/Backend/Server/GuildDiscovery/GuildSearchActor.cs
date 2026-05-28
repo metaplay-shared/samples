@@ -1,7 +1,6 @@
 // This file is part of Metaplay SDK which is released under the Metaplay SDK License.
 
 using Metaplay.Cloud.Entity;
-using Metaplay.Core;
 using Metaplay.Core.Guild;
 using Metaplay.Core.GuildDiscovery;
 using Metaplay.Server.GuildDiscovery;
@@ -20,10 +19,19 @@ namespace Game.Server.GuildDiscovery
     /// </summary>
     public class GuildSearchActor : GuildSearchActorBase
     {
-        protected override bool FilterSearchResult(GuildDiscoveryInfoBase publicDiscoveryInfoBase, GuildDiscoveryServerOnlyInfoBase serverOnlyDiscoveryInfoBase, GuildSearchParamsBase searchParams, GuildDiscoveryPlayerContextBase searchContext)
+        protected override GuildSearchFilterBuilder GetSearchFilter(GuildSearchParamsBase searchParamsBase, GuildDiscoveryPlayerContextBase searchContextBase)
+        {
+            // Add SQL level filtering. Filter with level.
+            GuildDiscoveryPlayerContext ctx = (GuildDiscoveryPlayerContext)searchContextBase;
+            GuildSearchFilterBuilder filter = new GuildSearchFilterBuilder();
+            filter.AddInterpolated($"RequiredPlayerLevel <= {ctx.PlayerLevel}");
+            return filter;
+        }
+
+        protected override bool FilterSearchResult(GuildDiscoveryInfoBase publicDiscoveryInfoBase, GuildDiscoveryServerOnlyInfoBase serverOnlyDiscoveryInfoBase, GuildSearchParamsBase searchParamsBase, GuildDiscoveryPlayerContextBase searchContextBase)
         {
             // Check the name.
-            if (!publicDiscoveryInfoBase.DisplayName.Contains(searchParams.SearchString, StringComparison.OrdinalIgnoreCase))
+            if (!publicDiscoveryInfoBase.DisplayName.Contains(searchParamsBase.SearchString, StringComparison.OrdinalIgnoreCase))
                 return false;
 
             // \todo: add custom filters here

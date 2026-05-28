@@ -1,1 +1,0 @@
-import{d as t,o,c as p,t as n,b as a}from"./index-BsjVKwqJ.js";const l=t({__name:"MIpAddress",props:{ipAddress:{}},setup(e){const s=e,r=a(()=>s.ipAddress==="::1"?"Localhost":s.ipAddress);return(d,c)=>(o(),p("span",null,n(r.value),1))}});export{l as _};

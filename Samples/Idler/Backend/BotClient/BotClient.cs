@@ -3,6 +3,7 @@
 using Game.Logic;
 using Game.Logic.League;
 using Game.Logic.Matchmaking;
+using Game.Logic.TypeCodes;
 using Metaplay.BotClient;
 using Metaplay.Cloud.Entity;
 using Metaplay.Core;
@@ -13,6 +14,7 @@ using Metaplay.Core.Guild.Actions;
 using Metaplay.Core.Guild.Messages.Core;
 using Metaplay.Core.GuildDiscovery;
 using Metaplay.Core.InAppPurchase;
+using Metaplay.Core.League;
 using Metaplay.Core.Message;
 using Metaplay.Core.Model;
 using Metaplay.Core.Offers;
@@ -21,8 +23,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using Game.Logic.TypeCodes;
-using Metaplay.Core.League;
 
 namespace Game.BotClient
 {
@@ -72,20 +72,18 @@ namespace Game.BotClient
 
         protected override string GetCurrentStateLabel() => State.ToString();
 
-        protected override Task OnUpdate()
+        protected override async Task OnUpdate()
         {
             // Tick current state (when connected)
             switch (State)
             {
                 case BotClientState.Main:
-                    TickMainState();
+                    await TickMainState();
                     break;
             }
 
             // Random guild ops
             TickGuildLogic();
-
-            return Task.CompletedTask;
         }
 
         protected override Task OnNetworkMessage(MetaMessage message)
@@ -111,9 +109,6 @@ namespace Game.BotClient
                     _log.Warning("PlayerChecksumMismatch: tick={Tick}, actionIndex={ActionIndex}", checksumMismatch.Tick, checksumMismatch.ActionIndex);
                     _playerContext.ResolveChecksumMismatch(checksumMismatch);
                     RequestShutdown();
-                    break;
-                case IdleMatchingResponse matchingResponse:
-                    HandleIdleMatchingResponse(matchingResponse);
                     break;
                 case PlayerJoinIdleLeagueResponse _:
                     // Handled by IdlerLeagueClient
@@ -142,7 +137,7 @@ namespace Game.BotClient
                 MetaTime.Now);
         }
 
-        void TickMainState()
+        async Task TickMainState()
         {
             RandomPCG rnd = RandomPCG.CreateNew();
 
@@ -179,9 +174,13 @@ namespace Game.BotClient
             if (rnd.NextInt(100) < 5)
                 TryStartInAppPurchase(rnd);
 
-            // Send a matchmaking request
+            // Send a matchmaking request and wait for the response
             if (rnd.NextInt(100) < 1)
-                SendToServer(new IdleMatchingRequest());
+            {
+                IdleMatchingResponse matchingResponse = await MessageDispatcher.SendRequestAsync<IdleMatchingResponse>(
+                    new IdleMatchingRequest());
+                _log.Debug("Received matching response: success={IsSuccess}, won={DidWinBattle}.", matchingResponse.IsSuccess, matchingResponse.DidWinBattle);
+            }
 
             TickLeaguesLogic();
         }
@@ -248,7 +247,7 @@ namespace Game.BotClient
 
         void TickGuildLogic()
         {
-            Random random = new Random();
+            Random random = Random.Shared;
 
             // discovery every now and then
             if (!GuildClient.HasOngoingGuildDiscovery && random.NextDouble() < 0.005)
@@ -397,10 +396,12 @@ namespace Game.BotClient
             // open random views
             if (discovered.Count == 0)
                 return;
-            if ((new Random()).NextDouble() > 0.10)
+
+            Random random = Random.Shared;
+            if (random.NextDouble() > 0.10)
                 return;
 
-            int ndx = (new Random()).Next(discovered.Count);
+            int ndx = random.Next(discovered.Count);
             EntityId guildId = discovered[ndx].GuildId;
 
             if (guildId == GuildContext?.CommittedModel?.GuildId)
@@ -413,11 +414,6 @@ namespace Game.BotClient
             if (GuildClient.HasPendingGuildView(guildId))
                 return;
             GuildClient.BeginViewGuild(guildId, onResponse: null);
-        }
-
-        void HandleIdleMatchingResponse(IdleMatchingResponse response)
-        {
-            _log.Debug("Received matching response with success {Status}.", response.IsSuccess);
         }
 
         [MessageHandler]

@@ -66,7 +66,7 @@ namespace Game.Server.Player
 
         protected override string RandomNewPlayerName()
         {
-            return Invariant($"Guest {new Random().Next(100_000)}");
+            return Invariant($"Guest {Random.Shared.Next(100_000)}");
         }
 
         protected override void OnSwitchedToModel(PlayerModel model)
@@ -278,7 +278,8 @@ namespace Game.Server.Player
             protected override GuildMemberPlayerData CreateGuildMemberPlayerData()
             {
                 return new GuildMemberPlayerData(
-                    displayName: Player.Model.PlayerName
+                    displayName: Player.Model.PlayerName,
+                    playerLevel: Player.Model.PlayerLevel
                     );
             }
 
@@ -286,6 +287,7 @@ namespace Game.Server.Player
             {
                 return new GuildDiscoveryPlayerContext()
                 {
+                    PlayerLevel = Player.Model.PlayerLevel,
                 };
             }
 
@@ -297,7 +299,7 @@ namespace Game.Server.Player
                 // be validated again in GuildRequirementsValidator
                 return new GuildCreationParams()
                 {
-                    DisplayName = requestParams?.DisplayName ?? "Cool Guild #" + Util.ObjectToStringInvariant(new Random().Next(100, 999)),
+                    DisplayName = requestParams?.DisplayName ?? "Cool Guild #" + Util.ObjectToStringInvariant(Random.Shared.Next(100, 999)),
                     Description = requestParams?.Description ?? "",
                 };
             }

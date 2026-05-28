@@ -22,7 +22,7 @@ namespace Game.Server.Guild
     /// <summary>
     /// Entity actor class representing a guild.
     /// </summary>
-    public sealed class GuildActor : GuildActorBase<GuildModel>, IGuildModelServerListener
+    public sealed class GuildActor : GuildActorBase<GuildModel, PersistedGuild>, IGuildModelServerListener
     {
         protected override sealed TimeSpan TickUpdateInterval => TimeSpan.FromSeconds(10);
 
@@ -31,14 +31,38 @@ namespace Game.Server.Guild
             model.ServerListener = this;
         }
 
-        protected override bool ShouldAcceptPlayerJoin(EntityId playerId, GuildMemberPlayerDataBase playerData, bool isInvited)
+        protected override bool ShouldAcceptPlayerJoin(ShouldAcceptPlayerJoinArgs args)
         {
             // If we are too full, don't allow new players
             if (Model.Members.Count >= Model.MaxNumMembers)
                 return false;
 
-            // \todo: check custom level requirements etc.
+            // Enforce join requirement. In Idler, we only have the level requirement (bypass for invited players).
+            if (args is ShouldAcceptPlayerJoinArgs.InvitationCodeJoinArgs)
+            {
+                // invited player, accept
+                return true;
+            }
+
+            // Non-invite path: Check the requirements.
+            GuildMemberPlayerData data = (GuildMemberPlayerData)args.PlayerData;
+            if (data.PlayerLevel < Model.RequiredPlayerLevel)
+                return false;
+
             return true;
+        }
+
+        protected override PersistedGuild CreatePersisted(EntityId entityId, DateTime persistedAt, byte[] payload, int schemaVersion, bool isFinal)
+        {
+            return new PersistedGuild()
+            {
+                EntityId            = entityId.ToString(),
+                PersistedAt         = persistedAt,
+                Payload             = payload,
+                SchemaVersion       = schemaVersion,
+                IsFinal             = isFinal,
+                RequiredPlayerLevel = Model.RequiredPlayerLevel,
+            };
         }
 
         protected override (GuildDiscoveryInfoBase, GuildDiscoveryServerOnlyInfoBase) CreateGuildDiscoveryInfo()
@@ -49,7 +73,8 @@ namespace Game.Server.Guild
                     guildId:                _entityId,
                     displayName:            Model.DisplayName,
                     numMembers:             Model.Members.Count,
-                    maxNumMembers:          Model.MaxNumMembers
+                    maxNumMembers:          Model.MaxNumMembers,
+                    requiredPlayerLevel:    Model.RequiredPlayerLevel
                     ),
                 new GuildDiscoveryServerOnlyInfo(
                     guildCreatedAt:         Model.CreatedAt,

@@ -1,25 +1,25 @@
 // This file is part of Metaplay SDK which is released under the Metaplay SDK License.
 
 using Game.Logic.TypeCodes;
-using Metaplay.Core;
-using System.Runtime.Serialization;
+using Metaplay.Core.Message;
+using Metaplay.Core.Model;
 
 namespace Game.Logic.Matchmaking
 {
-    [MetaMessage(MessageCodes.IdleMatchingRequest, MessageDirection.ClientToServer), MessageRoutingRuleSession]
-    public class IdleMatchingRequest : MetaMessage
+    [MetaSerializableDerived(MessageCodes.IdleMatchingRequest)]
+    public class IdleMatchingRequest : MetaRequest
     {
         public IdleMatchingRequest() { }
     }
 
-    [MetaMessage(MessageCodes.IdleMatchingResponse, MessageDirection.ServerToClient)]
-    public class IdleMatchingResponse : MetaMessage
+    [MetaSerializableDerived(MessageCodes.IdleMatchingResponse)]
+    public class IdleMatchingResponse : MetaResponse
     {
         public bool IsSuccess { get; set; }
         public bool DidWinBattle { get; set; }
 
         IdleMatchingResponse() { }
-        
+
         public IdleMatchingResponse(bool isSuccess, bool didWinBattle)
         {
             IsSuccess = isSuccess;

@@ -7,6 +7,6 @@ Bot:
   DummyIncidentReportProbabilityPerTick: 0.001
 
   # Server overrides (uncomment to use)
-  #ServerHost: lovely-wombats-build-quickly.p1.metaplay.io, EnableTls: true
+  #ServerHost: lovely-wombats-build-presently.p2-eu.metaplay.dev, EnableTls: true
   # Or:
-  # dotnet run --Bot:ServerHost=lovely-wombats-build-quickly.p1.metaplay.io --Bot:EnableTls=true
+  # dotnet run --Bot:ServerHost=lovely-wombats-build-presently.p2-eu.metaplay.dev --Bot:EnableTls=true

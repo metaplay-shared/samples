@@ -22,7 +22,7 @@ namespace Game.Server.Player
     {
         protected override string RandomNewPlayerName()
         {
-            return Invariant($"Guest {new Random().Next(100_000)}");
+            return Invariant($"Guest {Random.Shared.Next(100_000)}");
         }
 
         protected override void OnSwitchedToModel(PlayerModel model)

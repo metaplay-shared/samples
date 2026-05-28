@@ -5,6 +5,8 @@ using Game.Logic;
 using Metaplay.Core;
 using Metaplay.Core.Client;
 using Metaplay.Core.Player;
+using Metaplay.Core.Session;
+using Metaplay.Core.Session.ConnectionStates;
 using Metaplay.Unity;
 using TMPro;
 using UnityEngine;
@@ -74,7 +76,7 @@ public class AccountScreenScript : MonoBehaviour
         #if UNITY_WEBGL
         LoginApiBridge.Logout(MetaplaySDK.Connection.Endpoint.PublicWebApiUrl);
         if (MetaplayClient.Connection.State.Status == ConnectionStatus.Connected || MetaplayClient.Connection.State.Status == ConnectionStatus.Connecting)
-            MetaplayClient.Connection.CloseWithError(false, new ClientTerminatedConnectionConnectionError());
+            MetaplayClient.Connection.CloseWithError(false, new TransientError.ClientTerminatedConnectionConnectionError());
         #endif
     }
 

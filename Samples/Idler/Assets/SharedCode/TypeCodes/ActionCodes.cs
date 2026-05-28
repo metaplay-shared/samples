@@ -32,6 +32,8 @@ namespace Game.Logic.TypeCodes
         public const int GuildClaimVanityRankRewardFinalizingPlayerAction       = 2208;
         public const int GuildClaimVanityRankRewardFinalizingGuildAction        = 2209;
 
+        public const int GuildSetRequiredPlayerLevel                            = 2210;
+
         public const int PlayerCreateParty                                      = 2300;
         public const int PlayerJoinParty                                        = 2301;
     }

@@ -14,11 +14,12 @@ namespace Game.Logic
     {
         // Add game-specific fields here
 
-        //[MetaMember(101)] public int    CoolnessIndex;
+        [MetaMember(101)] public int RequiredPlayerLevel;
 
-        public GuildDiscoveryInfo() { }
-        public GuildDiscoveryInfo(EntityId guildId, string displayName, int numMembers, int maxNumMembers) : base(guildId, displayName, numMembers, maxNumMembers)
+        GuildDiscoveryInfo() { }
+        public GuildDiscoveryInfo(EntityId guildId, string displayName, int numMembers, int maxNumMembers, int requiredPlayerLevel) : base(guildId, displayName, numMembers, maxNumMembers)
         {
+            RequiredPlayerLevel = requiredPlayerLevel;
         }
     }
 }

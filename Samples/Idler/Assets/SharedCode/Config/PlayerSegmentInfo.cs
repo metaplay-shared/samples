@@ -92,4 +92,14 @@ namespace Game.Logic
         public override MetaDuration GetTypedValueForPlayer(IPlayerModelBase player) => player.CurrentTime - player.Stats.LastLoginAt;
         public override string DisplayName => $"Time since last login";
     }
+
+    // Example of a game-defined ICustomComparable PlayerPropertyId. Segment authors can
+    // reference VIP tiers by name (e.g. PropMin=Silver, PropMax=Platinum) instead of memorising
+    // the underlying integer values. See PlayerVipTier and CustomConfigParsers for the wiring.
+    [MetaSerializableDerived(8)]
+    public class PlayerPropertyIdVipTier : TypedPlayerPropertyId<PlayerVipTier>
+    {
+        public override PlayerVipTier GetTypedValueForPlayer(IPlayerModelBase player) => PlayerVipTier.FromPlayerLevel(player.PlayerLevel);
+        public override string DisplayName => "VIP tier";
+    }
 }

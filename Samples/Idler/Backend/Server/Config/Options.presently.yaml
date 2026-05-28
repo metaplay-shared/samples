@@ -1,0 +1,25 @@
+# Options specifically for Idler's 'presently' environment.
+
+GooglePlayStore:
+  EnableGoogleAuthentication: true
+  GooglePlayApplicationId: example-project-idler
+  GooglePlayOAuth2ClientCredentialsPath: kube-secret://user-google-oauth#json
+  AndroidPublisherApiServiceAccountPath: kube-secret://user-idler-sa#credentials
+  EnableAndroidPublisherApi: true
+  GooglePlayPublicKey: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsFUIqCqO/pshWaSYYPhyMdgO3BBPmnu76MyUjqexT+IUr22li7z/2YUJKO7o0YWDhubbDxv932x94O0jjoKgJ9q9Cv3rj8IEWeGuqkJNMh1rYfkDfA8qv4g4Alb5oYEU3ASGjjlXTFuvZ9HcctGA5ylYkSSktDYgywbsx7RZyK/ruMII3e1PoA2sdz4nnsopUykl6DHBuk6l/aBZcpARbmPcoDTE1kxlwbJlhpasCiwHm8BYFNrdu9elgPD/ro2QqcWvp+elbyEMUCs37L/xBns37NbPL447TItR4UQe3oVH8afQ4n4VN3GsnT94uandRoV618LD3CQiZoYmZ3vWGwIDAQAB"
+
+
+WebLogin:
+  Clients:
+    "UnityWebGL":
+      Scopes: "game.session"
+      AllowedRedirectUrls: "https://lovely-wombats-build-presently-assets.p2-eu.metaplay.dev/"
+
+ClientConnection:
+  CommitIdCheckRule: OnlyIfDefined
+
+AppleStore:
+  # io.metaplay.idler-demo is the bundle ID of our internal "Metaplay Idler" in Testflight, which connects to the 'nimbly' environment.
+  IosBundleId: io.metaplay.idler-demo
+  AppleSharedSecretPath: "kube-secret://user-apple-shared-secret#secret"
+  AppStoreConnectApiCredentialsPath: "kube-secret://user-appstoreconnect-creds#credentials"

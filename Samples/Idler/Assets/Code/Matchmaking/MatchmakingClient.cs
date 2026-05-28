@@ -1,10 +1,11 @@
 // This file is part of Metaplay SDK which is released under the Metaplay SDK License.
 
-using Game.Logic.TypeCodes;
 using Game.Logic.Matchmaking;
+using Game.Logic.TypeCodes;
 using Metaplay.Core;
 using Metaplay.Core.Client;
 using Metaplay.Core.Message;
+using System.Threading.Tasks;
 
 namespace Game.Logic
 {
@@ -14,8 +15,6 @@ namespace Game.Logic
         public ClientSlot ClientSlot => ClientSlotGame.Matchmaker;
 
         IMessageDispatcher _messageDispatcher;
-
-        public IdleMatchingResponse LatestResponse { get; private set; }
 
         #if UNITY_EDITOR
         public static MatchmakingClient EditorHookCurrent;
@@ -31,22 +30,14 @@ namespace Game.Logic
         public void Initialize(IMetaplaySubClientServices clientServices)
         {
             _messageDispatcher = clientServices.MessageDispatcher;
-            _messageDispatcher.AddListener<IdleMatchingResponse>(HandleMatchingResponse);
         }
 
-        public void Dispose()
-        {
-            _messageDispatcher.RemoveListener<IdleMatchingResponse>(HandleMatchingResponse);
-        }
+        public void Dispose() { }
 
-        public void HandleMatchingResponse(IdleMatchingResponse response)
+        public async Task<IdleMatchingResponse> RequestMatchmakingAsync()
         {
-            LatestResponse = response;
-        }
-
-        public void SendMatchmakingRequest()
-        {
-            _messageDispatcher.SendMessage(new IdleMatchingRequest());
+            return await _messageDispatcher.SendRequestAsync<IdleMatchingResponse>(
+                new IdleMatchingRequest());
         }
 
         public void OnSessionStart(SessionProtocol.SessionStartSuccess successMessage, ClientSessionStartResources sessionStartResources) { }

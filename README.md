@@ -18,7 +18,7 @@ To run the samples, you'll need to get the Metaplay SDK first:
 
    <!-- \todo Fill in SDK version from script -->
    ```shell
-   samples$ metaplay init sdk --sdk-version=35
+   samples$ metaplay init sdk --sdk-version=37
    ```
 
 ### Running a Sample

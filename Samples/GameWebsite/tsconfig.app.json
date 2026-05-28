@@ -6,7 +6,6 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "composite": true,
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
-    "baseUrl": ".",
     "outDir": "./dist",
     "isolatedModules": true,
     "skipLibCheck": true,

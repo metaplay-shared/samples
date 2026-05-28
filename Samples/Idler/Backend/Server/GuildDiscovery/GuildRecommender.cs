@@ -5,25 +5,12 @@ using Metaplay.Cloud.Entity;
 using Metaplay.Core;
 using Metaplay.Core.GuildDiscovery;
 using Metaplay.Core.Model;
-using Metaplay.Core.Serialization;
 using Metaplay.Server.GuildDiscovery;
 using System;
 using System.Collections.Generic;
 
 namespace Game.Server.GuildDiscovery
 {
-    /// <summary>
-    /// Helper for the common, shared filtering operations.
-    /// </summary>
-    public static class CommonDiscoveryPoolContextFilters
-    {
-        public static bool Test(GuildDiscoveryPlayerContext playerContext, GuildDiscoveryInfo publicDiscoveryInfo, GuildDiscoveryServerOnlyInfo serverOnlyDiscoveryInfo)
-        {
-            // Add custom filters here.
-            return true;
-        }
-    }
-
     /// <summary>
     /// Helper for common operations and mapping between generic and game-specific types.
     /// </summary>
@@ -39,11 +26,14 @@ namespace Game.Server.GuildDiscovery
             GuildDiscoveryInfo discoveryInfo = (GuildDiscoveryInfo)info.PublicDiscoveryInfo;
             GuildDiscoveryServerOnlyInfo discoveryServerOnlyInfo = (GuildDiscoveryServerOnlyInfo)info.ServerOnlyDiscoveryInfo;
 
-            // common first
-            if (!CommonDiscoveryPoolContextFilters.Test(playerContext, discoveryInfo, discoveryServerOnlyInfo))
+            // Filtering the guilds. First filter with common rules. In Idler, we only have
+            // PlayerLevel filter.
+            //
+            // Add custom filters here.
+            if (discoveryInfo.RequiredPlayerLevel > playerContext.PlayerLevel)
                 return false;
 
-            // then pool-specific
+            // After common rules, filter with per-pool rules
             return ContextFilter(playerContext, discoveryInfo, discoveryServerOnlyInfo);
         }
 
@@ -71,47 +61,6 @@ namespace Game.Server.GuildDiscovery
 
         protected virtual bool TryMakeSpaceFor(GuildDiscoveryInfo publicDiscoveryInfo, GuildDiscoveryServerOnlyInfo serverOnlyDiscoveryInfo) => base.TryMakeSpaceFor(new IGuildDiscoveryPool.GuildInfo(publicDiscoveryInfo, serverOnlyDiscoveryInfo));
 
-        #region Migration
-
-        [MetaSerializable]
-        public struct Version1GuildDiscoveryGuildData
-        {
-            [MetaMember(1)] public GuildDiscoveryInfo           PublicDiscoveryInfo;
-            [MetaMember(2)] public GuildDiscoveryServerOnlyInfo ServerOnlyDiscoveryInfo;
-        };
-        [MetaSerializable]
-        public struct Version1GuildDiscoveryPoolEntry
-        {
-            [MetaMember(1)] public Version1GuildDiscoveryGuildData  Info;
-            [MetaMember(2)] public MetaTime                         LastRefreshedAt;
-        }
-        [MetaSerializable]
-        public class Version1GuildDiscoveryPoolPage
-        {
-            [MetaMember(1)] public Version1GuildDiscoveryPoolEntry[] Entries;
-        }
-
-        protected override GuildDiscoveryPoolPage ParseLegacyVersion1PoolPage(byte[] payload)
-        {
-            Version1GuildDiscoveryPoolPage legacyPage = MetaSerialization.DeserializeTagged<Version1GuildDiscoveryPoolPage>(payload, MetaSerializationFlags.Persisted, resolver: null, logicVersion: null);
-
-            GuildDiscoveryPoolPage page = new GuildDiscoveryPoolPage();
-            page.Entries = new GuildDiscoveryPoolEntry[legacyPage.Entries.Length];
-            for (int ndx = 0; ndx < legacyPage.Entries.Length; ++ndx)
-            {
-                Version1GuildDiscoveryPoolEntry legacyEntry = legacyPage.Entries[ndx];
-                page.Entries[ndx] = new GuildDiscoveryPoolEntry()
-                {
-                    PublicDiscoveryInfo = legacyEntry.Info.PublicDiscoveryInfo,
-                    ServerOnlyDiscoveryInfo = legacyEntry.Info.ServerOnlyDiscoveryInfo,
-                    LastRefreshedAt = legacyEntry.LastRefreshedAt,
-                };
-            }
-
-            return page;
-        }
-
-        #endregion
     }
 
     public class MemberCountGuildPool : GameGuildDiscoveryPool

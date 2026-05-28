@@ -1,1 +1,0 @@
-import{bs as e,bq as i,br as o}from"./index-BsSy0BrP.js";function s(){return{permission:"api.broadcasts.view",pollingPolicy:o(5e3),fetcherPolicy:i("/broadcasts"),cacheRetentionPolicy:e(6e4)}}function a(t){return{permission:"api.broadcasts.view",pollingPolicy:o(5e3),fetcherPolicy:i(`/broadcasts/${t}`),cacheRetentionPolicy:e(1e4)}}export{a,s as g};

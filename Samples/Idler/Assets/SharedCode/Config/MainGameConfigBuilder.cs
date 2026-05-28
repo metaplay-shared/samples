@@ -22,7 +22,7 @@ namespace Game.Logic
             DuplicateData = 1,
         }
 
-        [MetaMember(2), MetaFormNotEditable , MetaFormLayoutOrderHint(2)]
+        [MetaMember(2), MetaFormNotEditable, MetaFormLayoutOrderHint(2)]
         public SynthesizeDataMode SynthesizeData { get; set; }
         [MetaMember(3), MetaFormNotEditable, JsonIgnore]
         public List<string> LibrariesToDuplicate { get; set; } = new List<string>()

@@ -15,7 +15,40 @@ namespace Game.Server.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "9.0.9");
+            modelBuilder.HasAnnotation("ProductVersion", "9.0.12");
+
+            modelBuilder.Entity("Game.Server.Guild.PersistedGuild", b =>
+                {
+                    b.Property<string>("EntityId")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("CachedDisplayName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<bool>("IsFinal")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<byte[]>("Payload")
+                        .HasColumnType("longblob");
+
+                    b.Property<DateTime>("PersistedAt")
+                        .HasColumnType("DateTime");
+
+                    b.Property<int>("RequiredPlayerLevel")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SchemaVersion")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("EntityId");
+
+                    b.HasIndex("EntityId", "RequiredPlayerLevel");
+
+                    b.ToTable("Guilds", (string)null);
+                });
 
             modelBuilder.Entity("Game.Server.League.PersistedDivision", b =>
                 {
@@ -43,7 +76,6 @@ namespace Game.Server.Migrations
             modelBuilder.Entity("Metaplay.Cloud.Persistence.DatabaseMetaInfo", b =>
                 {
                     b.Property<int>("Version")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("MasterVersion")
@@ -164,34 +196,6 @@ namespace Game.Server.Migrations
                     b.HasKey("EntityId");
 
                     b.ToTable("DatabaseScanWorkers", (string)null);
-                });
-
-            modelBuilder.Entity("Metaplay.Server.Guild.PersistedGuildBase", b =>
-                {
-                    b.Property<string>("EntityId")
-                        .HasMaxLength(64)
-                        .HasColumnType("varchar(64)");
-
-                    b.Property<string>("CachedDisplayName")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("varchar(64)");
-
-                    b.Property<bool>("IsFinal")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<byte[]>("Payload")
-                        .HasColumnType("longblob");
-
-                    b.Property<DateTime>("PersistedAt")
-                        .HasColumnType("DateTime");
-
-                    b.Property<int>("SchemaVersion")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("EntityId");
-
-                    b.ToTable("Guilds", (string)null);
                 });
 
             modelBuilder.Entity("Metaplay.Server.Guild.PersistedGuildEventLogSegment", b =>
@@ -553,7 +557,7 @@ namespace Game.Server.Migrations
                         .HasColumnType("varchar(512)");
 
                     b.Property<string>("FailureInfo")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("LONGTEXT");
 
                     b.Property<bool>("IsArchived")
                         .HasColumnType("tinyint");
@@ -776,7 +780,7 @@ namespace Game.Server.Migrations
                         .HasColumnType("varchar(512)");
 
                     b.Property<string>("FailureInfo")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("LONGTEXT");
 
                     b.Property<bool>("IsArchived")
                         .HasColumnType("tinyint");
@@ -873,7 +877,8 @@ namespace Game.Server.Migrations
                         .HasColumnType("DateTime");
 
                     b.Property<string>("LoginMethod")
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
 
                     b.Property<int>("Phase")
                         .HasColumnType("int");

@@ -142,6 +142,11 @@ public class DebugMenuScript : MonoBehaviour
         MetaplayClient.Connection.CloseWithError(flushEnqueuedMessages: true, new Metaplay.Core.Session.ConnectionStates.TransientError.Closed());
     }
 
+    public void PauseAndSuspend()
+    {
+        MetaplaySDK.OnApplicationAboutToBePaused("PauseAndSuspend", TimeSpan.FromSeconds(2 * 60));
+        Application.OpenURL("https://www.metaplay.io/"); // steal focus
+    }
 
     public void DuplicateEventLogEvents()
     {

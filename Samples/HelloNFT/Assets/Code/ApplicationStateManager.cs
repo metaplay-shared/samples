@@ -53,8 +53,9 @@ public class ApplicationStateManager : MonoBehaviour, IPlayerModelClientListener
     public GameManager      GameManagerPrefab;          // Prefab for the in-game state, spawned when a session with the server is established.
 
     // Runtime state
-    ApplicationState        _applicationState = ApplicationState.AppStart;  // Begin in the AppStart state.
-    GameManager             _gameManager;                                   // Instance of the GameManager, spawned when the player state is received from the server.
+    GameManager             _gameManager;               // Instance of the GameManager, spawned when the player state is received from the server.
+
+    public ApplicationState CurrentState { get; private set; } = ApplicationState.AppStart;  // Begin in the AppStart state.
 
     void Awake()
     {
@@ -83,7 +84,7 @@ public class ApplicationStateManager : MonoBehaviour, IPlayerModelClientListener
     {
         for (;;)
         {
-            _applicationState = ApplicationState.Initializing;
+            CurrentState = ApplicationState.Initializing;
 
             // Simulate the transition away from the Game scene by destroying the GameManager instance.
             // In addition to the Game scene, it's possible to arrive here from Initializing state itself,
@@ -139,7 +140,7 @@ public class ApplicationStateManager : MonoBehaviour, IPlayerModelClientListener
                 continue;
             }
 
-            _applicationState = ApplicationState.Game;
+            CurrentState = ApplicationState.Game;
 
             // Do nothing until connection is lost
             //

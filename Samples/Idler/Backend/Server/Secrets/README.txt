@@ -22,11 +22,11 @@ of the local filesystem:
   kube-secret://<secret-name>#<key>
 For example:
   PushNotification:
-    FirebaseCredentialsPath: "kube-secret://firebase#credentials"
+    FirebaseCredentialsPath: "kube-secret://user-firebase#credentials"
 
 Especially production-environment secrets should never be stored in the
 repository. You should make sure that production and development environments
 do not use the same secrets.
 
 For more information about secret management, check out
-https://docs.metaplay.io/cloud-deployments/how-to-guides/kubernetes-secrets.html.
+https://docs.metaplay.io/cloud-deployments/how-to-guides/persisting-secrets .

@@ -3,7 +3,7 @@
     "MyExtendedInt": 0,
     "Version": 1,
     "Id": "offline",
-    "DisplayName": "",
+    "DisplayName": "Offline Mode",
     "Description": "",
     "ConnectionEndpointConfig": {
       "ServerHost": "",
@@ -72,16 +72,16 @@
   {
     "MyExtendedInt": 0,
     "Version": 1,
-    "Id": "quickly",
-    "DisplayName": "test1 [p1] (quickly)",
+    "Id": "presently",
+    "DisplayName": "Ad hoc tests [p2] (presently)",
     "Description": "",
     "ConnectionEndpointConfig": {
-      "ServerHost": "lovely-wombats-build-quickly.p1.metaplay.io",
+      "ServerHost": "lovely-wombats-build-presently.p2-eu.metaplay.dev",
       "ServerPort": 9339,
       "ServerPortForWebSocket": 9380,
       "EnableTls": true,
-      "CdnBaseUrl": "https://lovely-wombats-build-quickly-assets.p1.metaplay.io/",
-      "PublicWebApiUrl": "https://lovely-wombats-build-quickly-public.p1.metaplay.io/",
+      "CdnBaseUrl": "https://lovely-wombats-build-presently-assets.p2-eu.metaplay.dev/",
+      "PublicWebApiUrl": "https://lovely-wombats-build-presently-public.p2-eu.metaplay.dev/",
       "BackupGateways": [],
       "IsOfflineMode": false
     },
@@ -90,15 +90,15 @@
       "LogLevelOverrides": []
     },
     "ClientGameConfigBuildApiConfig": {
-      "AdminApiBaseUrl": "https://lovely-wombats-build-quickly-admin.p1.metaplay.io/api/",
+      "AdminApiBaseUrl": "https://lovely-wombats-build-presently-admin.p2-eu.metaplay.dev/api/",
       "AdminApiAuthenticationTokenProvider": "OAuth2",
       "AdminApiCredentialsPath": "",
       "AdminApiOAuth2Settings": {
-        "ClientId": "metaplay.idler.testenvironment",
-        "ClientSecret": "QvOAJmvQR4I9H0tIv45Rj9QrL6",
+        "ClientId": "lovely-wombats-build-presently",
+        "ClientSecret": "JPYtZZGEk2Lo8jBLML3pjQ0-JF",
         "AuthorizationEndpoint": "https://auth.metaplay.dev/oauth2/auth",
         "TokenEndpoint": "https://auth.metaplay.dev/oauth2/token",
-        "Audience": "metaplay.idler.testenvironment",
+        "Audience": "lovely-wombats-build-presently",
         "LocalCallbackUrls": [
           "http://localhost:42543/oauth2/"
         ],
@@ -119,13 +119,7 @@
       "EnableTls": true,
       "CdnBaseUrl": "https://lovely-wombats-build-nimbly-assets.p2-eu.metaplay.dev/",
       "PublicWebApiUrl": "https://lovely-wombats-build-nimbly-public.p2-eu.metaplay.dev/",
-      "BackupGateways": [
-        {
-          "Id": "",
-          "ServerHost": "lovely-wombats-build-nimbly.p2-eu.metaplay.dev",
-          "ServerPort": 443
-        }
-      ],
+      "BackupGateways": [],
       "IsOfflineMode": false
     },
     "ClientLoggingConfig": {

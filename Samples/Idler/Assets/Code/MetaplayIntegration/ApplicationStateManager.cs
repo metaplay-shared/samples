@@ -30,6 +30,7 @@ using UnityEngine.SceneManagement;
 using System.Threading.Tasks;
 using EntityId = Metaplay.Core.EntityId;
 using Metaplay.Core.Session;
+using Metaplay.Core.MultiplayerEntity;
 
 public class MetaplayClient : MetaplayClientBase<PlayerModel>
 {
@@ -102,7 +103,7 @@ public class ApplicationStateManager :
             {
                 // Configure initial connection attempts.
                 // These are here as an example - could also use the default values.
-                SessionConnectTimeout = TimeSpan.FromSeconds(5),
+                SessionConnectTimeout = TimeSpan.FromSeconds(12),
             },
 
             //OfflineOptions = new MetaplayOfflineOptions
@@ -134,6 +135,11 @@ public class ApplicationStateManager :
         });
 
         _ = SessionLoop();
+
+        #if UNITY_ANDROID || UNITY_IOS
+        // By default Android and iOS render 30FPS which feels sluggish. Target the native refresh rate for better experience.
+        Application.targetFrameRate = (int)Screen.currentResolution.refreshRateRatio.value;
+        #endif
     }
 
     async Task SessionLoop()
@@ -198,7 +204,7 @@ public class ApplicationStateManager :
                 });
 
                 // Trigger party creation if one didn't already exist (this could be an interactive operation)
-                if (partyClient.Model == null)
+                if (partyClient.Phase == MultiplayerEntityClientPhase.NoEntity)
                     session.PlayerContext.ExecuteAction(new PlayerCreateParty());
 
                 // Session is now available, so go to game scene.

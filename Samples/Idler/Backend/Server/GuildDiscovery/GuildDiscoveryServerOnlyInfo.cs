@@ -13,7 +13,7 @@ namespace Game.Server.GuildDiscovery
 
         //[MetaMember(101)] public int  SecretCoolnessIndex;
 
-        public GuildDiscoveryServerOnlyInfo() { }
+        GuildDiscoveryServerOnlyInfo() { }
         public GuildDiscoveryServerOnlyInfo(MetaTime guildCreatedAt, MetaTime memberOnlineLatestAt) : base(guildCreatedAt, memberOnlineLatestAt)
         {
         }

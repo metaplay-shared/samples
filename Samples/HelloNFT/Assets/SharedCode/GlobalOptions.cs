@@ -16,7 +16,6 @@ namespace Game.Logic
             gameMagic:              "HNFT",
             supportedLogicVersions: new MetaVersionRange(1, 1),
             clientLogicVersion:     1,
-            guildInviteCodeSalt:    0x17,
             sharedNamespaces:       new string[] { "Game.Logic" },
             defaultLanguage:        LanguageId.FromString("en"),
             featureFlags: new MetaplayFeatureFlags

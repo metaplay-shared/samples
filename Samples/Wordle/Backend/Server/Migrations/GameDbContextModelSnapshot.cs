@@ -15,12 +15,11 @@ namespace Server.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "9.0.9");
+            modelBuilder.HasAnnotation("ProductVersion", "9.0.12");
 
             modelBuilder.Entity("Metaplay.Cloud.Persistence.DatabaseMetaInfo", b =>
                 {
                     b.Property<int>("Version")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("MasterVersion")
@@ -494,7 +493,7 @@ namespace Server.Migrations
                         .HasColumnType("varchar(512)");
 
                     b.Property<string>("FailureInfo")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("LONGTEXT");
 
                     b.Property<bool>("IsArchived")
                         .HasColumnType("tinyint");
@@ -591,7 +590,8 @@ namespace Server.Migrations
                         .HasColumnType("DateTime");
 
                     b.Property<string>("LoginMethod")
-                        .HasColumnType("TEXT");
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
 
                     b.Property<int>("Phase")
                         .HasColumnType("int");

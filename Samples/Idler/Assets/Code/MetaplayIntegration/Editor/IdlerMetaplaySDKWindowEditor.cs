@@ -6,6 +6,7 @@ using Game.Logic.Matchmaking;
 using Metaplay.Core;
 using Metaplay.Core.Guild;
 using Metaplay.Core.League;
+using Metaplay.Core.Tasks;
 using Metaplay.Unity;
 using Metaplay.Unity.DefaultIntegration;
 using System;
@@ -18,6 +19,8 @@ using UnityEngine;
 
 class IdlerMetaplaySDKWindowEditor : MetaplaySDKEditorWindow
 {
+    IdleMatchingResponse _latestMatchmakingResponse;
+
     protected override void GuildUIActions(GuildClient guildClient, IGuildModelBase model)
     {
         GuildModel guild = (GuildModel)model;
@@ -30,6 +33,8 @@ class IdlerMetaplaySDKWindowEditor : MetaplaySDKEditorWindow
             guildClient.ExecuteGuildTransaction(new GuildBuyVanity.Transaction(numVanityAttemptingToBuy: 1));
         if (GUILayout.Button("Claim vanity reward: "))
             guildClient.ExecuteGuildTransaction(new GuildClaimVanityRankReward.Transaction());
+        if (GUILayout.Button($"Set random required player level (current: {guild.RequiredPlayerLevel})"))
+            guildClient.GuildContext.EnqueueAction(new GuildSetRequiredPlayerLevel(requiredPlayerLevel: UnityEngine.Random.Range(1, 11)));
     }
 
     protected override void DrawGUI()
@@ -56,13 +61,14 @@ class IdlerMetaplaySDKWindowEditor : MetaplaySDKEditorWindow
         EditorGUILayout.LabelField("Async Matchmaker", EditorStyles.boldLabel);
 
         if (GUILayout.Button("Matchmake now!"))
-            matchmakingClient.SendMatchmakingRequest();
+            matchmakingClient.RequestMatchmakingAsync().ContinueWithCtx(
+                task => _latestMatchmakingResponse = task.Result);
 
         EditorGUILayout.EndHorizontal();
 
         EditorGUILayout.LabelField("Latest response", EditorStyles.boldLabel);
 
-        string  text      = PrettyPrint.Verbose(matchmakingClient.LatestResponse).ToString();
+        string  text      = PrettyPrint.Verbose(_latestMatchmakingResponse).ToString();
         Vector2 labelSize = GUI.skin.label.CalcSize(new GUIContent(text));
         EditorGUILayout.SelectableLabel(text, GUILayout.ExpandHeight(true), GUILayout.MinHeight(labelSize.y));
     }

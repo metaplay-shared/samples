@@ -1,0 +1,15 @@
+# Configuration files to use
+config:
+  files:
+    - "./Config/Options.base.yaml"
+    - "./Config/Options.dev.yaml"
+    - "./Config/Options.presently.yaml"
+
+publicWebApi:
+  enabled: true
+
+experimental:
+  websockets:
+    enabled: true
+  gameserversV0Api:
+    enabled: true

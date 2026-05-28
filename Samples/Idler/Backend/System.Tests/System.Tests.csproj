@@ -19,10 +19,6 @@
     <ProjectReference Include="..\SharedCode\SharedCode.csproj" />
     <ProjectReference Include="..\BotClient\BotClient.csproj" />
     <ProjectReference Include="$(MetaplayServerPath)\System.Tests\Metaplay.System.Tests.csproj" />
-    <ProjectReference Include="$(MetaplayServerPath)\CodeAnalyzers.Shared\Metaplay.CodeAnalyzers.Shared.csproj">
-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-      <OutputItemType>Analyzer</OutputItemType>
-    </ProjectReference>
   </ItemGroup>
 
 </Project>

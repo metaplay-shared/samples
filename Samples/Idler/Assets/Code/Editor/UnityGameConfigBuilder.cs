@@ -134,9 +134,9 @@ namespace Metaplay.Sample
                 () => BuildLocalizationsArchiveAsync(MetaTime.Now),
                 onSuccessHandler: fullArchive =>
                 {
-                    // Export Localizations into StreamingAssets/ in FolderEncoding format
+                    // Export Localizations into StreamingAssets/ in FolderEncoding format.
                     Debug.Log($"Writing Localizations archive as multiple files into {ClientLocalizationsPath}");
-                    ConfigArchiveBuildUtility.FolderEncoding.WriteToDirectory(fullArchive, ClientLocalizationsPath);
+                    ConfigArchiveBuildUtility.FolderEncoding.WriteToDirectory(fullArchive, ClientLocalizationsPath, ConfigArchiveBuildUtility.FolderEncoding.DirectoryWriteMode.DeleteExistingFilesKeepMetaFiles);
                 });
         }
 

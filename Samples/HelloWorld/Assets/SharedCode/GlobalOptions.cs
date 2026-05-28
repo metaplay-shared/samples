@@ -19,8 +19,6 @@ namespace Game.Logic
             supportedLogicVersions: new MetaVersionRange(1, 1),
             // The logic version of the current client.
             clientLogicVersion:     1,
-            // Salt for generating guild invite codes.
-            guildInviteCodeSalt:    0x17,
             // List of namespaces that contain shared game code logic.
             sharedNamespaces:       new string[] { "Game.Logic" },
             // Default language used by the game.

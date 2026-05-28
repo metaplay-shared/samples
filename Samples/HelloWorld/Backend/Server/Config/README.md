@@ -16,6 +16,26 @@ The following runtime options files are generated for new projects by default:
 * `Options.staging.yaml` contains options overrides for the `staging` environment.
 * `Options.production.yaml` contains options overrides for the `production` environment.
 
-The per-environment Helm values files in your project's `Backend/Deployments/*-server.yaml` specify which runtime options are in use for each environment. You can also modify the Helm values files to configure which environment uses which runtime options files.
-
 You can use these options files to configure your game server differently in the various environments.
+
+## Custom Environment Options
+
+Each environment can have a Helm values file (e.g. `Backend/Deployments/*-server.yaml`) that specifies which runtime options files to load, along with other deployment configuration. To register a deployment file for an environment, add a `serverValuesFile` entry to `metaplay-project.yaml`. Assuming we have `mycustomenv` which requires a custom Options file:
+
+```yaml
+environments:
+  - name: MyCustomEnv
+    humanId: my-custom-env
+    type: development
+    stackDomain: p1.metaplay.io
+    serverValuesFile: Backend/Deployments/mycustomenv-server.yaml
+```
+
+Then in the deployment file, we can configure which options to use:
+
+```yaml
+config:
+  files:
+    - "./Config/Options.base.yaml"
+    - "./Config/Options.mycustomenv.yaml"
+```

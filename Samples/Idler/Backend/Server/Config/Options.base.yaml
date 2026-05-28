@@ -146,7 +146,7 @@ AdminApi:
     api.players.update_logic_version:    [ game-admin, game-viewer                                                                  ]
 
 GoogleSheets:
-  CredentialsPath:   ./Secrets/idler-sa-identity.json
+  CredentialsPath:   ./Secrets/example-idler-google-sheet-credentials.json
 
 Session:
   MaximumSessionLength: null

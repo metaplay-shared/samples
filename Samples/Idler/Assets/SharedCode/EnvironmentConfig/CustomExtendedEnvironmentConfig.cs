@@ -1,8 +1,10 @@
 // This file is part of Metaplay SDK which is released under the Metaplay SDK License.
 
 using Metaplay.Core.Client;
+using System;
 
 // Example custom environment config class
+[Serializable]
 public class CustomExtendedEnvironmentConfig : EnvironmentConfig
 {
     // Custom environment specific variable

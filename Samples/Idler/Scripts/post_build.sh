@@ -17,7 +17,8 @@ REPO_NAME="sdk"
 WORKFLOW_ID="unity-cloud-build-processing.yaml"
 
 # Prepare payload with workflow_dispatch inputs
-PAYLOAD=$(cat <<EOF
+PAYLOAD=$(
+  cat <<EOF
 {
   "ref": "$SCM_BRANCH",
   "inputs": {
@@ -36,13 +37,14 @@ EOF
 
 # Trigger workflow_dispatch event on GitHub
 RESPONSE=$(curl -X POST \
-     -H "Accept: application/vnd.github+json" \
-     -H "Authorization: Bearer $GITHUB_TOKEN" \
-     -H "X-GitHub-Api-Version: 2022-11-28" \
-     "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/actions/workflows/$WORKFLOW_ID/dispatches" \
-     -d "$PAYLOAD")
+  -H "Accept: application/vnd.github+json" \
+  -H "Authorization: Bearer $GITHUB_TOKEN" \
+  -H "X-GitHub-Api-Version: 2026-03-10" \
+  "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/actions/workflows/$WORKFLOW_ID/dispatches" \
+  -d "$PAYLOAD")
 
 # Print response
 echo "Response: $RESPONSE"
 
 exit 0
+
