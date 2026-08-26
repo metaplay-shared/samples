@@ -1,0 +1,240 @@
+/* HelloBlazorWasm sample styling.
+   Hand-written, dependency-free CSS aligned with the Metaplay LiveOps Dashboard
+   design system: system fonts, a neutral-gray base, the Bootstrap blue as the
+   single "actionable" accent, and semantic green/red. It is intentionally NOT a
+   dashboard, though — a single centered hero card with a branded header strip,
+   so it reads as a friendly sample rather than a data console. */
+
+:root {
+    /* Primary blue — the Bootstrap shade the dashboard uses for actionable elements. */
+    --brand:        #0d6efd;
+    --brand-hover:  #0b5ed7;
+    --brand-active: #0a58ca;
+
+    /* Neutral grays (Tailwind neutral scale) — the dashboard's default, color-free base. */
+    --neutral-50:  #fafafa;
+    --neutral-100: #f5f5f5;
+    --neutral-200: #e5e5e5;
+    --neutral-300: #d4d4d4;
+    --neutral-500: #737373;
+    --neutral-600: #525252;
+    --neutral-700: #404040;
+    --neutral-900: #171717;
+
+    /* Semantic accents, used sparingly to communicate state. */
+    --success: #16a34a;
+    --danger:  #dc2626;
+    --warning: #ea580c;
+
+    --radius: 0.75rem;
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+    margin: 0;
+    padding: 1.5rem;
+    display: grid;
+    place-items: center;
+    background: var(--neutral-100);
+    color: var(--neutral-900);
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+#app { width: 100%; max-width: 25rem; }
+
+.loading { padding: 2rem; text-align: center; color: var(--neutral-500); }
+
+/* --- Card -------------------------------------------------------------- */
+.app-card {
+    background: #fff;
+    border: 1px solid var(--neutral-200);
+    border-radius: var(--radius);
+    overflow: hidden; /* clip the header strip to the rounded corners */
+    box-shadow: 0 10px 30px -12px rgba(23, 23, 23, 0.18);
+    animation: fade-in 0.2s ease both;
+}
+
+/* Branded header strip — the main thing that sets the sample apart from a
+   white dashboard panel. */
+.app-header {
+    padding: 1.25rem 1.5rem;
+    background: linear-gradient(135deg, var(--brand) 0%, #5b9bff 100%);
+    color: #fff;
+}
+.app-title {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+.app-subtitle {
+    margin: 0.2rem 0 0;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.82);
+}
+
+.app-body { padding: 1.5rem; }
+
+/* --- Status badge ------------------------------------------------------ */
+.status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    background: var(--neutral-100);
+    border: 1px solid var(--neutral-200);
+    color: var(--neutral-600);
+}
+.status-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: currentColor;
+}
+/* The dot pulses only while a state is in flux or active, where the motion
+   actually communicates something (the dashboard's animation philosophy). */
+.status--connecting { color: var(--warning); }
+.status--connecting .status-dot { animation: ping 1.6s ease-out infinite; }
+.status--live { color: var(--success); }
+.status--live .status-dot { animation: ping 2s ease-out infinite; }
+.status--error { color: var(--danger); }
+
+/* --- Player + stats ---------------------------------------------------- */
+.player {
+    margin: 1.25rem 0 1rem;
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+}
+.player-label { font-size: 0.8rem; color: var(--neutral-500); }
+.player-id {
+    font-family: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+    color: var(--neutral-700);
+}
+
+.stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+.stat {
+    background: var(--neutral-50);
+    border: 1px solid var(--neutral-200);
+    border-radius: var(--radius);
+    padding: 0.9rem 1rem;
+    text-align: center;
+}
+.stat-value {
+    font-size: 1.9rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--brand);
+    font-variant-numeric: tabular-nums;
+}
+.stat-value.is-on  { color: var(--success); }
+.stat-value.is-off { color: var(--neutral-300); }
+.stat-label {
+    margin-top: 0.25rem;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--neutral-500);
+}
+
+/* --- Buttons ----------------------------------------------------------- */
+.actions { display: flex; gap: 0.75rem; }
+
+.btn {
+    flex: 1;
+    padding: 0.6rem 1rem;
+    border-radius: 0.6rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    /* Discreet hover/press feedback only — aligned with the dashboard. */
+    transition: background 0.12s ease, border-color 0.12s ease, transform 0.06s ease;
+}
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { cursor: not-allowed; opacity: 0.5; }
+
+/* Primary: the single blue actionable accent. */
+.btn--primary {
+    border: 1px solid var(--brand);
+    background: var(--brand);
+    color: #fff;
+}
+.btn--primary:hover:not(:disabled)  { background: var(--brand-hover); border-color: var(--brand-hover); }
+.btn--primary:active:not(:disabled) { background: var(--brand-active); border-color: var(--brand-active); }
+
+/* Secondary: neutral, so blue stays the one accent that draws the eye. */
+.btn--secondary {
+    border: 1px solid var(--neutral-300);
+    background: #fff;
+    color: var(--neutral-700);
+}
+.btn--secondary:hover:not(:disabled) { background: var(--neutral-100); }
+
+/* Auto-clicker progress bar — takes the buy button's slot once purchased. The fill grows behind a
+   centered label and resets each interval, so it reads as a live "working" indicator. */
+.autoclicker {
+    position: relative;
+    flex: 1;
+    overflow: hidden;
+    border: 1px solid var(--neutral-300);
+    border-radius: 0.6rem;
+    background: var(--neutral-100);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.autoclicker-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    /* width is set inline (0–100%); light blue keeps the label readable as it passes underneath. */
+    background: #cfe2ff;
+}
+.autoclicker-text {
+    position: relative; /* above the fill */
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--neutral-700);
+}
+
+/* --- Blazor's built-in error banner ------------------------------------ */
+#blazor-error-ui {
+    position: fixed;
+    inset: auto 0 0 0;
+    padding: 0.75rem 1.25rem;
+    background: var(--danger);
+    color: #fff;
+    font-size: 0.875rem;
+    box-shadow: 0 -4px 16px -6px rgba(0, 0, 0, 0.35);
+}
+#blazor-error-ui .reload { color: #fff; text-decoration: underline; margin-left: 0.5rem; }
+
+/* --- Animations -------------------------------------------------------- */
+@keyframes fade-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes ping {
+    0%   { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+    70%  { box-shadow: 0 0 0 0.45rem transparent; opacity: 0.8; }
+    100% { box-shadow: 0 0 0 0 transparent; opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .app-card, .status-dot { animation: none; }
+    .btn { transition: none; }
+}

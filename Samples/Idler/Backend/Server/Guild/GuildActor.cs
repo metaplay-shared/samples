@@ -87,7 +87,7 @@ namespace Game.Server.Guild
         {
             GuildCreationParams args = (GuildCreationParams)baseArgs;
 
-            base.SetupGuildWithCreationParams(args);
+            // Custom data here.
         }
 
         protected override object GetMemberGdprExportExtraData(EntityId memberPlayerId)

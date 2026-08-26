@@ -2,6 +2,7 @@
 
 using Game.Logic;
 using Game.Logic.League;
+using Metaplay.Client;
 using Metaplay.Core;
 using Metaplay.Core.Analytics;
 using Metaplay.Core.Client;

@@ -140,7 +140,7 @@ public class GlobalErrorPopoverScript : MonoBehaviour
     {
         Hide();
 
-        MetaplayClient.Connection.CloseWithError(flushEnqueuedMessages: true, new Metaplay.Core.Session.ConnectionStates.TransientError.Closed());
+        MetaplayClient.Connection.CloseWithError(new Metaplay.Core.Session.ConnectionStates.TransientError.Closed());
     }
 
     /// <summary>

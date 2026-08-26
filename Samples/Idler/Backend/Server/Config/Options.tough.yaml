@@ -1,5 +1,10 @@
 # Options for all development environments.
 
+# Create secret with: metaplay secrets create tough-falcons user-maxmind-license-key --from-literal=license-key=<key>
+Geolocation:
+  Enabled: true
+  MaxMindLicenseKeyPath: "kube-secret://user-maxmind-license-key#license-key"
+
 BlobStorage:
   ExposedPrivatePathPrefix: shared
   

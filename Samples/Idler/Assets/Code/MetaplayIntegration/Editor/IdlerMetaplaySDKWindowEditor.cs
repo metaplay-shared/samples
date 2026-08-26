@@ -3,7 +3,9 @@
 using Game.Logic;
 using Game.Logic.League;
 using Game.Logic.Matchmaking;
+using Game.Logic.TypeCodes;
 using Metaplay.Core;
+using Metaplay.Core.Client;
 using Metaplay.Core.Guild;
 using Metaplay.Core.League;
 using Metaplay.Core.Tasks;
@@ -12,10 +14,9 @@ using Metaplay.Unity.DefaultIntegration;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Game.Logic.TypeCodes;
-using Metaplay.Core.Client;
 using UnityEditor;
 using UnityEngine;
+using static System.FormattableString;
 
 class IdlerMetaplaySDKWindowEditor : MetaplaySDKEditorWindow
 {
@@ -35,6 +36,18 @@ class IdlerMetaplaySDKWindowEditor : MetaplaySDKEditorWindow
             guildClient.ExecuteGuildTransaction(new GuildClaimVanityRankReward.Transaction());
         if (GUILayout.Button($"Set random required player level (current: {guild.RequiredPlayerLevel})"))
             guildClient.GuildContext.EnqueueAction(new GuildSetRequiredPlayerLevel(requiredPlayerLevel: UnityEngine.Random.Range(1, 11)));
+    }
+    protected override void GuildCreateNewUI(GuildClient guildClient)
+    {
+        int gemCost = MetaplayClient.PlayerModel?.GameConfig.GlobalConfig.GuildCreationGemCost ?? 0;
+        if (GUILayout.Button(Invariant($"Create Guild ({gemCost} gems)")))
+        {
+            MetaTask.Run(async () =>
+            {
+                var result = await guildClient.CreateGuildWithActionAsync((queryId) => new PlayerCreateGuildWithCost(null, queryId));
+                Debug.Log($"[Metaplay] Create Guild result: {result}");
+            }, scheduler: MetaTask.UnityMainScheduler);
+        }
     }
 
     protected override void DrawGUI()

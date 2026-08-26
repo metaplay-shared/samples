@@ -99,14 +99,8 @@ namespace Metaplay.Sample
                     // Export SharedGameConfig.mpa into StreamingAssets/
                     (ContentHash sharedVersion, byte[] sharedBytes) = GameConfigUtil.GetSharedArchiveFromFullArchiveForClient(fullArchive);
                     FileUtil.WriteAllBytes(SharedGameConfigPath, sharedBytes);
-                    if (MetaplayClient.State != null)
-                    {
-                        // Inform Metaplay that GameConfigs have been built, so it can hot-load the GameConfigs in offline mode
-                        // \todo [petri] Move into core?
-                        Debug.Log("invoke MetaplayClient.OnSharedGameConfigUpdated()");
-                        ConfigArchive sharedGameConfig = ConfigArchive.FromBytes(sharedBytes);
-                        MetaplayClient.State.OnSharedGameConfigUpdated(sharedGameConfig);
-                    }
+                    // Inform Metaplay that GameConfigs have been built, so it can hot-load the GameConfigs in offline mode
+                    MetaplaySDK.NotifySharedGameConfigUpdated(ConfigArchive.FromBytes(sharedBytes));
                 });
         }
         

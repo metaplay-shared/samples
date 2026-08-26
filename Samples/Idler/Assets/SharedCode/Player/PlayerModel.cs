@@ -71,8 +71,7 @@ namespace Game.Logic
         PlayerModelBase<
             PlayerModel,
             PlayerStatisticsCore,
-            PlayerIdlerOfferGroupsModel,
-            PlayerGuildStateCore
+            PlayerIdlerOfferGroupsModel
             >
     {
         public const int TicksPerSecond = 10;

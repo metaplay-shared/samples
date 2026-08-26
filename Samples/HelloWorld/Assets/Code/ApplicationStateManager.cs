@@ -5,6 +5,7 @@
 #endif
 
 using Game.Logic;
+using Metaplay.Client;
 using Metaplay.Core;
 using Metaplay.Core.Session;
 using Metaplay.Unity.DefaultIntegration;

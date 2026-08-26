@@ -36,6 +36,9 @@ namespace Game.Logic.TypeCodes
 
         public const int PlayerCreateParty                                      = 2300;
         public const int PlayerJoinParty                                        = 2301;
+
+        public const int PlayerCreateGuildWithCost                              = 2400;
+        public const int PlayerRefundGuildCreationGems                          = 2401;
     }
     public static class TransactionPlanCodes
     {

@@ -38,13 +38,7 @@ features:
 
 # Project environments.
 environments:
-  - name: Legacy platform tests 🐙🐙 <p1>
-    hostingType: metaplay-hosted
-    humanId: tiny-squids
-    type: development
-    stackDomain: p1.metaplay.io
-    serverValuesFile: Backend/Deployments/test-singleton-server.yaml
-  - name: New platform tests 🦅🦅 <{[p2-eu]}>
+  - name: Platform tests 🦅🦅 <{[p2-eu]}>
     hostingType: metaplay-hosted
     humanId: tough-falcons
     type: development

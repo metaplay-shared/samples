@@ -1,4 +1,0 @@
-# Enable websockets
-experimental:
-  websockets:
-    enabled: true

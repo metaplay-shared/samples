@@ -32,12 +32,9 @@ namespace Game.BotClient
 
     public class BotClient : BotClientBase
     {
-        BotClientState              State { get; set; } = BotClientState.Connecting;
+        BotClientState State { get; set; } = BotClientState.Connecting;
 
-        PlayerModel                _playerModel => (PlayerModel)_playerContext.Journal.StagedModel;
-        DefaultPlayerClientContext _playerContext;
-
-        protected override IPlayerClientContext PlayerContext => _playerContext;
+        PlayerModel _playerModel => (PlayerModel)PlayerContext.Model;
 
         protected override void PreStart()
         {
@@ -69,26 +66,6 @@ namespace Game.BotClient
             //_log.Debug("OnNetworkMessage: {Message}", PrettyPrint.Compact(message));
             switch (message)
             {
-                case SessionProtocol.SessionStartSuccess success:
-                    // HandleStartSession handles the player model setup
-                    State = BotClientState.Main;
-                    break;
-
-                case PlayerAckActions ackActions:
-                    _playerContext.PurgeSnapshotsUntil(JournalPosition.FromTickOperationStep(ackActions.UntilPositionTick, ackActions.UntilPositionOperation, ackActions.UntilPositionStep));
-                    break;
-
-                case PlayerExecuteUnsynchronizedServerAction executeUnsynchronizedServerAction:
-                    _playerContext.ExecuteServerAction(executeUnsynchronizedServerAction);
-                    break;
-
-                case PlayerChecksumMismatch checksumMismatch:
-                    // On mismatch, report it and terminate bot (to avoid spamming)
-                    _log.Warning("PlayerChecksumMismatch: tick={Tick}, actionIndex={ActionIndex}", checksumMismatch.Tick, checksumMismatch.ActionIndex);
-                    _playerContext.ResolveChecksumMismatch(checksumMismatch);
-                    RequestShutdown();
-                    break;
-
                 default:
                     _log.Warning("Unknown message received: {Message}", PrettyPrint.Compact(message));
                     break;
@@ -97,20 +74,13 @@ namespace Game.BotClient
             return Task.CompletedTask;
         }
 
-        protected override void HandleStartSession(SessionProtocol.SessionStartSuccess success, IPlayerModelBase playerModelBase, ISharedGameConfig gameConfig)
+        protected override Task OnSessionStartedAsync(BotSessionStartedArgs args)
         {
-            PlayerModel playerModel = (PlayerModel)playerModelBase;
-            //playerModel.ClientListener = this;
-
-            _playerContext = new DefaultPlayerClientContext(
-                _logChannel,
-                playerModel,
-                success.PlayerState,
-                _actualPlayerId,
-                _logicVersion,
-                timelineHistory: null,
-                SendToServer,
-                MetaTime.Now);
+            State = BotClientState.Main;
+            // Add custom listener
+            // PlayerModel playerModel = (PlayerModel)args.PlayerModel;
+            // playerModel.ClientListener = this;
+            return Task.CompletedTask;
         }
 
         void TickMainState()

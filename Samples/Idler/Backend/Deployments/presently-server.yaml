@@ -9,7 +9,5 @@ publicWebApi:
   enabled: true
 
 experimental:
-  websockets:
-    enabled: true
   gameserversV0Api:
     enabled: true

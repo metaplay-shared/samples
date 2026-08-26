@@ -1,0 +1,211 @@
+@using System
+@using System.Linq
+@using System.Threading.Tasks
+@using Metaplay.Client
+@using Metaplay.Core
+@using Metaplay.Core.Client
+@using Metaplay.Core.Session
+@using Game.Logic
+@implements IDisposable
+
+<div class="app-card">
+    <header class="app-header">
+        <h1 class="app-title">Hello Blazor WASM</h1>
+        <p class="app-subtitle">A Metaplay game client running in the browser</p>
+    </header>
+
+    <div class="app-body">
+        <div class="status status--@_statusKind">
+            <span class="status-dot"></span>
+            @_status
+        </div>
+
+        @if (_playerId != null)
+        {
+            <div class="player">
+                <span class="player-label">Logged in as</span>
+                <span class="player-id">@_playerId</span>
+            </div>
+
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-value">@_numClicks</div>
+                    <div class="stat-label">Clicks</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value @(_autoClicker ? "is-on" : "is-off")">@(_autoClicker ? "ON" : "OFF")</div>
+                    <div class="stat-label">Auto-clicker</div>
+                </div>
+            </div>
+
+            <div class="actions">
+                <button class="btn btn--primary" @onclick="OnClick" disabled="@(_session == null)">Click</button>
+                @if (!_autoClicker)
+                {
+                    <button class="btn btn--secondary" @onclick="OnBuyAutoClicker" disabled="@(_session == null)">Buy auto-clicker (@PlayerModel.AutoClickerCost)</button>
+                }
+                else
+                {
+                    @* Once purchased the buy button is useless, so replace it with a progress bar that fills
+                       over each auto-click interval — a live indicator that the auto-clicker is ticking. *@
+                    <div class="autoclicker" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@_autoClickPct" title="Auto-clicker running">
+                        <div class="autoclicker-fill" style="width: @_autoClickPct%"></div>
+                        <span class="autoclicker-text">Auto-clicker</span>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    IMetaplayClient _client;
+    MetaplaySession _session;
+    string _status = "Initializing…";
+    string _statusKind = "connecting"; // "connecting" | "live" | "error" — drives the status badge colour
+    string _playerId;
+    int _numClicks;
+    bool _autoClicker;
+    int _autoClickPct; // 0–100, progress through the current auto-click interval
+
+    protected override void OnInitialized()
+    {
+        // Select the local dev environment (ws://localhost:9380/ws, TLS off; see StaticEnvironmentConfigProvider).
+        StaticEnvironmentConfigProvider.ActiveEnvironmentId = "localhost";
+
+        // Pre-initialize MetaplayCore for the WebAssembly platform so the pre-built
+        // Metaplay.Generated.Browser.dll is loaded by name (mono-wasm cannot generate a serializer
+        // at runtime). MetaplayClient.Create() -> MetaplaySDK.Start() then sees an already-initialized
+        // core (MetaplayCore.Initialize short-circuits on IsInitialized) and skips its own init.
+        MetaplayCore.ClientIntegrationAssemblies = IntegrationAssembly.FindRoots().ToList();
+        MetaplayCore.InitializeForClient();
+
+        // Create the client, exactly as RawClient does (engine-agnostic MetaplayClient.Create() ->
+        // IMetaplayClient). This starts the SDK.
+        _client = MetaplayClient.Create(buildVersion: new BuildVersion(version: "1.0.0", buildNumber: "1", commitId: ""));
+
+        // Browser WASM is single-threaded, so we cannot use the thread-based FrameLoop.RunAsync that
+        // RawClient uses. Instead drive the SDK frame pump and the async session loop cooperatively on
+        // the single browser thread: the frame pump yields with await Task.Delay between frames, so the
+        // session loop's await continuations interleave on the same thread.
+        _ = RunFramePumpAsync();
+        _ = RunSessionLoopAsync();
+    }
+
+    /// <summary>
+    /// Pump one SDK frame per iteration, yielding to the browser between frames. The frame is what
+    /// drives the connection and session logic forward, so the session loop below makes progress.
+    /// </summary>
+    async Task RunFramePumpAsync()
+    {
+        try
+        {
+            for (;;)
+            {
+                FrameLoop.RunFrame();
+
+                // Refresh the UI when the displayed player state changes (e.g. the auto-clicker ticking)
+                // or the auto-click progress bar advances.
+                if (_session != null)
+                {
+                    PlayerModel player = (PlayerModel)_session.PlayerContext.Model;
+                    int autoClickPct = player.AutoClickerPurchased ? ComputeAutoClickPct(player) : 0;
+                    if (player.NumClicks != _numClicks || player.AutoClickerPurchased != _autoClicker || autoClickPct != _autoClickPct)
+                    {
+                        _numClicks = player.NumClicks;
+                        _autoClicker = player.AutoClickerPurchased;
+                        _autoClickPct = autoClickPct;
+                        StateHasChanged();
+                    }
+                }
+
+                await Task.Delay(16);
+            }
+        }
+        catch (Exception ex)
+        {
+            // A fault here would silently stop the pump and freeze the UI; surface it to stay debuggable.
+            _status = $"Frame pump crashed: {ex.Message}";
+            _statusKind = "error";
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// The async connection loop, mirroring <c>RawClient.RunSessionLoopAsync</c>: connect, run the
+    /// session, and reconnect if it ends for a transient reason.
+    /// </summary>
+    async Task RunSessionLoopAsync()
+    {
+        try
+        {
+            for (;;)
+            {
+                _status = "Connecting…";
+                _statusKind = "connecting";
+                StateHasChanged();
+
+                MetaplaySession session;
+                try
+                {
+                    session = await _client.ConnectAsync();
+                }
+                catch (FailedToStartSessionException ex)
+                {
+                    _status = $"Failed to start session: {ex.Failure.EnglishLocalizedReason}";
+                    _statusKind = "error";
+                    StateHasChanged();
+                    return;
+                }
+
+                // A session has been established and the player state is available.
+                session.SessionStartComplete();
+                _session = session;
+                PlayerModel player = (PlayerModel)session.PlayerContext.Model;
+                _playerId    = session.PlayerId.ToString();
+                _numClicks   = player.NumClicks;
+                _autoClicker = player.AutoClickerPurchased;
+                _status      = "Session started";
+                _statusKind  = "live";
+                StateHasChanged();
+
+                // Wait until the session ends, then reconnect if it ended for a transient reason.
+                ConnectionLostEvent connectionLost = await session.WaitForSessionEndAsync();
+                _session = null;
+                _status  = $"Session lost: {connectionLost.EnglishLocalizedReason}";
+                _statusKind = "error";
+                StateHasChanged();
+                if (!connectionLost.AutoReconnectRecommended)
+                    return;
+            }
+        }
+        catch (Exception ex)
+        {
+            // This loop is fire-and-forget; an unhandled fault would otherwise become an unobserved task
+            // exception and leave the UI silently stuck on its last status. Surface it instead.
+            _session = null;
+            _status  = $"Session loop crashed: {ex.Message}";
+            _statusKind = "error";
+            StateHasChanged();
+        }
+    }
+
+    // Progress (0–100) through the current auto-click interval, derived from the model's own timer so it
+    // stays in sync with when the server-validated auto-click actually fires.
+    static int ComputeAutoClickPct(PlayerModel player)
+    {
+        long start = player.AutoClickStartedAt.MillisecondsSinceEpoch;
+        long total = player.AutoClickEndsAt.MillisecondsSinceEpoch - start;
+        if (total <= 0)
+            return 0;
+        long elapsed = player.CurrentTime.MillisecondsSinceEpoch - start;
+        return (int)Math.Clamp(elapsed * 100 / total, 0L, 100L);
+    }
+
+    // Execute a game action on the player: it runs the shared game logic locally and is sent to the
+    // server, which executes the same logic and verifies the resulting state.
+    void OnClick() => _session?.PlayerContext.ExecuteAction(new PlayerClickButton());
+    void OnBuyAutoClicker() => _session?.PlayerContext.ExecuteAction(new PlayerPurchaseAutoClicker());
+
+    public void Dispose() => _client?.Dispose();
+}

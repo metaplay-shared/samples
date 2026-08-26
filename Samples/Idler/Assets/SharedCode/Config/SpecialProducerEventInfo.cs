@@ -131,7 +131,8 @@ namespace Game.Logic
                     maxTotalConsumes:           null,
                     maxConsumesPerActivation:   null,
                     cooldown:                   MetaActivableCooldownSpec.ScheduleBased.Instance,
-                    allowActivationAdjustment:  true));
+                    allowActivationAdjustment:  true,
+                    developerOnly:              false));
         }
     }
 }

@@ -4,6 +4,7 @@ using Metaplay.Core.Activables;
 using Metaplay.Core.Config;
 using Metaplay.Core.Model;
 using Metaplay.Core.Offers;
+using Metaplay.Core.Player;
 
 namespace Game.Logic
 {
@@ -14,6 +15,23 @@ namespace Game.Logic
     {
         [MetaMember(1)] public string BackgroundColor;
         [MetaMember(2)] public string TextColor;
+        [MetaMember(3)] public int GemCost;
+
+        public override bool HasInGameCurrencyCost => GemCost > 0;
+
+        public override bool CanAffordInGameCurrencyCost(IPlayerModelBase playerBase, MetaOfferGroupInfoBase offerGroupInfo)
+        {
+            PlayerModel player = (PlayerModel)playerBase;
+            return player.Wallet.NumGems >= GemCost;
+        }
+
+        public override void PayInGameCurrencyCost(IPlayerModelBase playerBase, MetaOfferGroupInfoBase offerGroupInfo)
+        {
+            PlayerModel player = (PlayerModel)playerBase;
+            player.Wallet.NumGems -= GemCost;
+        }
+
+        public override string GetInGameCurrencyCostForDashboard() => $"{GemCost} gems";
 
         public IdlerOfferInfo(){ }
         public IdlerOfferInfo(IdlerOfferSourceConfigItem source)
@@ -21,6 +39,7 @@ namespace Game.Logic
         {
             BackgroundColor = source.BackgroundColor;
             TextColor = source.TextColor;
+            GemCost = source.GemCost;
         }
     }
 
@@ -28,6 +47,7 @@ namespace Game.Logic
     {
         public string BackgroundColor;
         public string TextColor;
+        public int GemCost;
 
         public override IdlerOfferInfo ToConfigData(GameConfigBuildLog buildLog)
         {

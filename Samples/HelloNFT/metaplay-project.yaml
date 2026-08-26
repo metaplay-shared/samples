@@ -30,4 +30,3 @@ environments:
     humanId: green-eagles-cheat-quickly
     type: development
     stackDomain: p2-eu.metaplay.dev
-    serverValuesFile: Backend/Deployments/develop-server.yaml

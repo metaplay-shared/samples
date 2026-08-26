@@ -12,8 +12,3 @@ config:
 # Enable config discovery from infra
 tenant:
   discoveryEnabled: true
-
-# Enable websockets
-experimental:
-  websockets:
-    enabled: true

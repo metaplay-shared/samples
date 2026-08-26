@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Shared game-logic assembly for the WebAssembly sample.
+
+    The WebAssembly client cannot generate its serializer at runtime (mono-wasm has no Reflection.Emit / Roslyn),
+    so it loads a pre-built Metaplay.Generated.Browser.dll. That generated assembly references the concrete game
+    types (PlayerModel, PlayerActions, ...) *by assembly identity*. To make the identity match between the
+    build-time generator (SerializerGen) and the runtime app (Client), the game types live here in a single
+    shared assembly that both projects reference - rather than being source-included into each (as RawClient does).
+  -->
+  <PropertyGroup>
+    <!-- Multi-targeted so that both consumers get the right build of Metaplay.Client: the browser one for the
+         WebAssembly app, the plain one for SerializerGen, which needs the runtime code generation. -->
+    <TargetFrameworks>net10.0;net10.0-browser</TargetFrameworks>
+    <LangVersion>Latest</LangVersion>
+    <Version>0.1.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\MetaplaySDK\Backend\CodeAnalyzers\Metaplay.CodeAnalyzers.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\MetaplaySDK\Backend\CodeAnalyzers.Shared\Metaplay.CodeAnalyzers.Shared.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\MetaplaySDK\Dotnet\Client\Metaplay.Client.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\SharedCode\**\*.cs" LinkBase="SharedCode" />
+  </ItemGroup>
+
+</Project>

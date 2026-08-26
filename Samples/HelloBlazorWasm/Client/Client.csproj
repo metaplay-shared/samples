@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <!-- The browser target framework, so that the whole reference graph resolves to its browser build. The Blazor
+         WASM SDK does not imply the browser platform on its own. -->
+    <TargetFramework>net10.0-browser</TargetFramework>
+    <LangVersion>Latest</LangVersion>
+    <Version>0.1.0.0</Version>
+    <RootNamespace>Game.Client</RootNamespace>
+    <Nullable>disable</Nullable>
+    <!-- Interpreted WASM only; AOT is out of scope for this sample. -->
+    <RunAOTCompilation>false</RunAOTCompilation>
+    <WasmEnableThreads>false</WasmEnableThreads>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.*" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.*" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The Metaplay source generators. Required so this (the entry) assembly carries the generated integration
+         metadata that IntegrationAssembly.FindRoots() reads at startup; its reference graph then reaches GameLogic. -->
+    <ProjectReference Include="..\..\..\MetaplaySDK\Backend\CodeAnalyzers\Metaplay.CodeAnalyzers.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\MetaplaySDK\Backend\CodeAnalyzers.Shared\Metaplay.CodeAnalyzers.Shared.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <!-- The shared game-logic assembly; Metaplay.Client is consumed transitively via this. Both are multi-targeted
+         and follow this project's target framework, so nothing has to be passed in on the command line. -->
+    <ProjectReference Include="..\GameLogic\GameLogic.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The pre-built serializer assembly. Produce/refresh it with:
+         dotnet run (project ..\SerializerGen) passing this folder's Serializer subdirectory as the output dir. -->
+    <Reference Include="Metaplay.Generated.Browser">
+      <HintPath>Serializer\Metaplay.Generated.Browser.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>Latest</LangVersion>
+    <ImplicitUsings>false</ImplicitUsings>
+    <DefineConstants>METAPLAY_CLIENT;$(DefineConstants)</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\MetaplaySDK\Dotnet\Client\Metaplay.Client.csproj" />
+  </ItemGroup>
+
+  <!-- Compile the shared game logic: the same sources the Unity client uses. -->
+  <ItemGroup>
+    <Compile Include="..\Assets\SharedCode\**\*.cs" LinkBase="SharedCode" />
+  </ItemGroup>
+
+  <!-- The Metaplay analyzers include the source generator used for integration type discovery. -->
+  <Import Project="..\..\..\MetaplaySDK\Backend\Metaplay.Analyzers.targets" />
+</Project>

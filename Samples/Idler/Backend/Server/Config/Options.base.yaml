@@ -1,5 +1,4 @@
 ### Base options file, included for all platforms
-WebSockets:Enabled: true
 
 ## Clustering
 

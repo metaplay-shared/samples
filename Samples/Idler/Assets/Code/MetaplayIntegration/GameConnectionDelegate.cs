@@ -1,3 +1,4 @@
+using Metaplay.Client;
 using Metaplay.Core.Client;
 using Metaplay.Core.Message;
 using Metaplay.Unity;

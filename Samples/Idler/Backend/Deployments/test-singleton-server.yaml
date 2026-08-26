@@ -1,5 +1,3 @@
-# Note: Still need to configure these because we deploy auth AuthCLI at least in
-# portal preview deploy platform tests.
 environment: test-env
 environmentFamily: Development
 

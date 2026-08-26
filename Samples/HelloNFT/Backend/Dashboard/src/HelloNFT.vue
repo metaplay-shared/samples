@@ -4,9 +4,9 @@
 MCard(title="Custom component")
   div(
     style="font-size: 5em"
-    class="font-weight-bolder m-2 tw-text-center"
+    class="tw-m-2 tw-text-center tw-font-bold"
     ) Hello, World!
-  div(class="py-3 tw-text-center") Total number of clicks: {{ playerData.model.numClicks }}
+  div(class="tw-py-3 tw-text-center") Total number of clicks: {{ playerData.model.numClicks }}
 </template>
 
 <script lang="ts" setup>

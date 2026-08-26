@@ -53,12 +53,14 @@ export default defineConfig({
     // TODO: consider if we could optimize some of the generated chuncks
     chunkSizeWarningLimit: 2048,
   },
-  esbuild: {
+  oxc: {
     target: 'es2022',
   },
   optimizeDeps: {
-    esbuildOptions: {
-      target: 'es2022',
+    rolldownOptions: {
+      transform: {
+        target: 'es2022',
+      },
     },
   },
 })

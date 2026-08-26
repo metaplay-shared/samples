@@ -74,7 +74,7 @@ public class OfflineServer : DefaultOfflineServer, IPlayerModelServerListener, I
             case GuildCreateRequest request:
             {
                 EntitySerializedState guildSerializedState = SetupFakeGuild(request.CreationParams);
-                SendToClient(new GuildCreateResponse(guildSerializedState, guildChannelId: 0));
+                SendToClient(new GuildCreateResponse(request.QueryId, guildSerializedState, guildChannelId: 0));
                 break;
             }
 
@@ -371,7 +371,8 @@ public class OfflineServer : DefaultOfflineServer, IPlayerModelServerListener, I
             logicVersion:               _logicVersion,
             sharedGameConfigVersion:    sharedGameConfigVersion,
             sharedConfigPatchesVersion: ContentHash.None,
-            activeExperiments:          Array.Empty<EntityActiveExperiment>());
+            activeExperiments:          Array.Empty<EntityActiveExperiment>(),
+            initialChecksum:            0);
     }
 
     GuildDiscoveryInfoBase GetDiscoveryFakeGuildInfo(int key)

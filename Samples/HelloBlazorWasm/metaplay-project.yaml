@@ -1,0 +1,24 @@
+# Configure schema to use.
+# yaml-language-server: $schema=../../MetaplaySDK/projectConfigSchema.json
+$schema: "../../MetaplaySDK/projectConfigSchema.json"
+
+# Configure project.
+projectID: sample-project-helloblazorwasm
+buildRootDir: ../..
+sdkRootDir: ../../MetaplaySDK
+backendDir: Backend
+sharedCodeDir: SharedCode
+unityProjectDir: . # hack: this project doesn't have a Unity client
+
+# Specify .NET runtime version to build project for, only '<major>.<minor>'.
+dotnetRuntimeVersion: "10.0"
+
+# Specify Helm chart versions to use for server and bot deployments.
+serverChartVersion: latest-prerelease
+botClientChartVersion: latest-prerelease
+
+# Customize Metaplay features used in the game.
+features:
+  # Configure LiveOps Dashboard.
+  dashboard:
+    useCustom: false

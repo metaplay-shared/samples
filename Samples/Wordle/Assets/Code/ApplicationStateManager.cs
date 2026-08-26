@@ -1,6 +1,7 @@
 // This file is part of Metaplay SDK which is released under the Metaplay SDK License.
 
 using Game.Logic;
+using Metaplay.Client;
 using Metaplay.Core;
 using Metaplay.Core.Message;
 using Metaplay.Core.Session;

@@ -3,6 +3,7 @@
 using Game.Logic.TypeCodes;
 using Metaplay.Core;
 using Metaplay.Core.Forms;
+using Metaplay.Core.Guild;
 using Metaplay.Core.Model;
 using Metaplay.Core.Player;
 using System.Linq;
@@ -206,6 +207,74 @@ namespace Game.Logic
                 player.EventStream.Event(newEvent);
                 player.Log.Debug(newEvent.EventDescription);
             }
+
+            return ActionResult.Success;
+        }
+    }
+
+    /// <summary>
+    /// Creates a guild, deducting <c>GlobalConfig.GuildCreationGemCost</c> gems from the player's wallet.
+    /// If guild creation fails (player already in a guild, or creation params are invalid),
+    /// the gems are refunded via <see cref="PlayerRefundGuildCreationGems"/>.
+    /// </summary>
+    [ModelAction(ActionCodes.PlayerCreateGuildWithCost)]
+    public class PlayerCreateGuildWithCost : PlayerAction
+    {
+        public GuildCreationRequestParamsBase CreationParams { get; private set; }
+        public int QueryId { get; private set; }
+
+        PlayerCreateGuildWithCost() { }
+        public PlayerCreateGuildWithCost(GuildCreationRequestParamsBase creationParams, int queryId)
+        {
+            CreationParams = creationParams;
+            QueryId = queryId;
+        }
+
+        public override MetaActionResult Execute(PlayerModel player, bool commit)
+        {
+            // Check if player can afford the creation.
+            int gemCost = player.GameConfig.GlobalConfig.GuildCreationGemCost;
+            if (player.Wallet.NumGems < gemCost)
+                return ActionResult.NotEnoughResources;
+
+            // We could have other checks here too. For example, if we had level limit
+            // for guild creation or a throttling cooldown, we would check them here.
+            // For the hypothetical cooldown, this action would check the timer and then
+            // bump it in the commit-branch. The refund action would restore the cooldown.
+
+            if (commit)
+            {
+                player.Wallet.NumGems -= gemCost;
+                player.ServerListenerCore.TryCreateNewGuild(
+                    this,
+                    QueryId,
+                    CreationParams,
+                    refundAction: new PlayerRefundGuildCreationGems(gemCost));
+            }
+
+            return ActionResult.Success;
+        }
+    }
+
+    /// <summary>
+    /// Refunds gems that were consumed by <see cref="PlayerCreateGuildWithCost"/> when guild creation fails.
+    /// The amount is captured at charge time so a config change between charge and refund cannot diverge.
+    /// </summary>
+    [ModelAction(ActionCodes.PlayerRefundGuildCreationGems)]
+    public class PlayerRefundGuildCreationGems : PlayerSynchronizedServerAction
+    {
+        public int NumGems { get; private set; }
+
+        PlayerRefundGuildCreationGems() { }
+        public PlayerRefundGuildCreationGems(int numGems)
+        {
+            NumGems = numGems;
+        }
+
+        public override MetaActionResult Execute(PlayerModel player, bool commit)
+        {
+            if (commit)
+                player.Wallet.NumGems += NumGems;
 
             return ActionResult.Success;
         }

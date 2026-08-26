@@ -22,6 +22,3 @@ Web3:
       Ledger: ImmutableX
       ContractAddress: 0x0c61Baa20CfC1d5fAa3e732d7a14F3971C0c1529
       MetadataFolder: "metadata/test"
-
-WebSockets:
-  Enabled: true

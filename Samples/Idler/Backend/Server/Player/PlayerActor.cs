@@ -291,17 +291,17 @@ namespace Game.Server.Player
                 };
             }
 
-            protected override GuildCreationParamsBase TryCreateGuildCreationParamsFromRequest(GuildCreationRequestParamsBase paramsBase)
+            protected override Task<GuildCreationParamsBase> TryCreateGuildCreationParamsFromRequestAsync(GuildCreationRequestParamsBase paramsBase, PlayerActionBase invokingAction)
             {
                 GuildCreationRequestParams requestParams = (GuildCreationRequestParams)paramsBase;
 
                 // no special validation, or custom data. Just pass data thru. The data will
                 // be validated again in GuildRequirementsValidator
-                return new GuildCreationParams()
+                return Task.FromResult<GuildCreationParamsBase>(new GuildCreationParams()
                 {
                     DisplayName = requestParams?.DisplayName ?? "Cool Guild #" + Util.ObjectToStringInvariant(Random.Shared.Next(100, 999)),
                     Description = requestParams?.Description ?? "",
-                };
+                });
             }
 
             protected override GuildCreationParamsBase TryCreateGuildCreationParamsForTest()

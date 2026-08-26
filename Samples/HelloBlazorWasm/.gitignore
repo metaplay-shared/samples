@@ -1,0 +1,10 @@
+# Temporary build files
+**/obj/
+**/bin/
+
+# Metaplay client storage dirs
+**/PersistentData/
+**/TemporaryCache/
+
+# Generated WebAssembly serializer assembly (produced by SerializerGen; see README.md)
+Client/Serializer/

@@ -14,7 +14,7 @@ unityProjectDir: .
 dotnetRuntimeVersion: "10.0"
 
 # Specify Helm chart versions to use for server and bot deployments.
-serverChartVersion: 0.9.1
+serverChartVersion: 0.10.0
 botClientChartVersion: 0.4.2
 
 # Customize Metaplay features used in the game.

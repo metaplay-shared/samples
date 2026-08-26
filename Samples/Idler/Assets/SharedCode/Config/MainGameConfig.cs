@@ -24,14 +24,15 @@ namespace Game.Logic
         [MetaMember(9)] public int                      InitialGems                 = 10;
 
         // \todo: move to specific Guild config
-        [MetaMember(3)] public int                      GuildsNumGoldPerSoldPoke    = 50;
-        [MetaMember(4)] public int                      GuildsVanityCostNumGold     = 100;
-        [MetaMember(5)] public IReadOnlyList<int>       GuildsVanityRankThresholds  = new[] { 5, 10, 15 };
-        [MetaMember(6)] public IReadOnlyList<int>       GuildsVanityRankRewardGold  = new[] { 50, 50, 50 };
-        [MetaMember(7)] public IReadOnlyList<int>       GuildsVanityRankRewardGems  = new[] { 0, 100, 100 };
+        [MetaMember(3)]  public int                     GuildsNumGoldPerSoldPoke    = 50;
+        [MetaMember(4)]  public int                     GuildsVanityCostNumGold     = 100;
+        [MetaMember(5)]  public IReadOnlyList<int>      GuildsVanityRankThresholds  = new[] { 5, 10, 15 };
+        [MetaMember(6)]  public IReadOnlyList<int>      GuildsVanityRankRewardGold  = new[] { 50, 50, 50 };
+        [MetaMember(7)]  public IReadOnlyList<int>      GuildsVanityRankRewardGems  = new[] { 0, 100, 100 };
+        [MetaMember(11)] public int                     GuildCreationGemCost        = 10;
 
         [MetaDeserializationConstructor]
-        public GlobalConfig(MetaRef<ProducerInfo> initialProducer, int initialGold, int initialGems, int guildsNumGoldPerSoldPoke, int guildsVanityCostNumGold, IReadOnlyList<int> guildsVanityRankThresholds = null, IReadOnlyList<int> guildsVanityRankRewardGold = null, IReadOnlyList<int> guildsVanityRankRewardGems = null)
+        public GlobalConfig(MetaRef<ProducerInfo> initialProducer, int initialGold, int initialGems, int guildsNumGoldPerSoldPoke, int guildsVanityCostNumGold, IReadOnlyList<int> guildsVanityRankThresholds = null, IReadOnlyList<int> guildsVanityRankRewardGold = null, IReadOnlyList<int> guildsVanityRankRewardGems = null, int guildCreationGemCost = 10)
         {
             InitialProducer = initialProducer;
             InitialGold = initialGold;
@@ -41,6 +42,7 @@ namespace Game.Logic
             GuildsVanityRankThresholds = guildsVanityRankThresholds ?? new[] { 5, 10, 15 };
             GuildsVanityRankRewardGold = guildsVanityRankRewardGold ?? new[] { 50, 50, 50 };
             GuildsVanityRankRewardGems = guildsVanityRankRewardGems ?? new[] { 0, 100, 100 };
+            GuildCreationGemCost = guildCreationGemCost;
         }
 
         public GlobalConfig()

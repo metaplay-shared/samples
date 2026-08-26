@@ -4,6 +4,7 @@ using Game.Logic.Matchmaking;
 using Game.Logic.TypeCodes;
 using Metaplay.Core;
 using Metaplay.Core.Client;
+using Metaplay.Core.GameEngineIntegration;
 using Metaplay.Core.Message;
 using System.Threading.Tasks;
 
@@ -46,6 +47,7 @@ namespace Game.Logic
         public void EarlyUpdate() { }
         public void UpdateLogic(MetaTime time) { }
         public void FlushPendingMessages() { }
+        public void OnApplicationLifecycleEvent(AppLifecycleEvent lifecycleEvent) { }
     }
 }
 

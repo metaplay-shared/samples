@@ -4,6 +4,7 @@ using Metaplay.Core;
 using Metaplay.Core.Guild;
 using Metaplay.Core.Model;
 using System.Runtime.Serialization;
+using System.Threading.Tasks;
 
 namespace Game.Logic
 {
@@ -61,9 +62,9 @@ namespace Game.Logic
         public override int MinDescriptionLength => 0;
         public override int MaxDescriptionLength => 200;
 
-        public override bool ValidateDisplayName(string displayName)
+        public override async Task<bool> ValidateDisplayNameAsync(string displayName)
         {
-            if (!base.ValidateDisplayName(displayName))
+            if (!await base.ValidateDisplayNameAsync(displayName))
                 return false;
 
             // [todo] Add more validation steps here as necessary, each one
@@ -72,9 +73,9 @@ namespace Game.Logic
             return true;
         }
 
-        public override bool ValidateDescription(string description)
+        public override async Task<bool> ValidateDescriptionAsync(string description)
         {
-            if (!base.ValidateDescription(description))
+            if (!await base.ValidateDescriptionAsync(description))
                 return false;
 
             // [todo] Add more validation steps here as necessary, each one
@@ -83,9 +84,9 @@ namespace Game.Logic
             return true;
         }
 
-        public override bool ValidateGuildCreation(GuildCreationParamsBase baseArgs)
+        public override async Task<bool> ValidateGuildCreationAsync(GuildCreationParamsBase baseArgs)
         {
-            if (!base.ValidateGuildCreation(baseArgs))
+            if (!await base.ValidateGuildCreationAsync(baseArgs))
                 return false;
 
             // [todo] Add more validation steps here as necessary, each one
@@ -338,19 +339,6 @@ namespace Game.Logic
         public GuildMemberPlayerData(string displayName, int playerLevel) : base(displayName)
         {
             PlayerLevel = playerLevel;
-        }
-
-        public override bool IsUpToDate(GuildMemberBase memberBase)
-        {
-            if (!base.IsUpToDate(memberBase))
-                return false;
-
-            // Example: Check that if player's coolness index is up-to-date with the guild's data
-            //  GuildMember member = (GuildMember)memberBase;
-            //  if (member.CoolnessIndex != CoolnessIndex)
-            //      return false;
-
-            return true;
         }
 
         public override void ApplyOnMember(GuildMemberBase memberBase, IGuildModelBase guildBase, GuildMemberPlayerDataUpdateKind updateKind)

@@ -229,7 +229,8 @@ namespace Server.Migrations
 
                     b.HasIndex("PlayerId");
 
-                    b.HasIndex("PurchasePlatform", "PurchasePlatformUserId", "ProductId");
+                    b.HasIndex("PurchasePlatform", "PurchasePlatformUserId", "ProductId")
+                        .HasDatabaseName("IX_ServerDrivenInAppPurchases_PurchasePlatform_PurchaseP~5FF29ED");
 
                     b.ToTable("ServerDrivenInAppPurchases", (string)null);
                 });

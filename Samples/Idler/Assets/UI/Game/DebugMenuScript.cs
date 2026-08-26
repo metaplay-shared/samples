@@ -124,7 +124,7 @@ public class DebugMenuScript : MonoBehaviour
 
     public void TriggerNetworkError()
     {
-        MetaplayClient.Connection.CloseWithError(flushEnqueuedMessages: true, new Metaplay.Core.Session.ConnectionStates.TransientError.Closed());
+        MetaplayClient.Connection.CloseWithError(new Metaplay.Core.Session.ConnectionStates.TransientError.Closed());
     }
 
     public void TriggerException()
@@ -139,7 +139,7 @@ public class DebugMenuScript : MonoBehaviour
     public void TriggerSessionStartFailure()
     {
         ((GameConnectionDelegate)MetaplayClient.Connection.Delegate).FailNextSessionStart = true;
-        MetaplayClient.Connection.CloseWithError(flushEnqueuedMessages: true, new Metaplay.Core.Session.ConnectionStates.TransientError.Closed());
+        MetaplayClient.Connection.CloseWithError(new Metaplay.Core.Session.ConnectionStates.TransientError.Closed());
     }
 
     public void PauseAndSuspend()

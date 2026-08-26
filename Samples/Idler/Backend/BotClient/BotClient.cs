@@ -42,12 +42,9 @@ namespace Game.BotClient
 
     public class BotClient : BotClientBase, IPlayerModelClientListener
     {
-        BotClientState  State { get; set; } = BotClientState.Connecting;
+        BotClientState State { get; set; } = BotClientState.Connecting;
 
-        PlayerModel                 _playerModel => (PlayerModel)_playerContext.Journal.StagedModel;
-        DefaultPlayerClientContext  _playerContext;
-
-        protected override IPlayerClientContext PlayerContext => _playerContext;
+        PlayerModel _playerModel => (PlayerModel)PlayerContext.Model;
         GuildModel GuildModel => (GuildModel)GuildContext?.CommittedModel;
 
         bool _leagueJoinRequestSent = false;
@@ -83,7 +80,7 @@ namespace Game.BotClient
             }
 
             // Random guild ops
-            TickGuildLogic();
+            await TickGuildLogic();
         }
 
         protected override Task OnNetworkMessage(MetaMessage message)
@@ -91,25 +88,6 @@ namespace Game.BotClient
             //_log.Debug("OnNetworkMessage: {Message}", PrettyPrint.Compact(message));
             switch (message)
             {
-                case SessionProtocol.SessionStartSuccess success:
-                    // HandleStartSession handles the player model setup
-                    State = BotClientState.Main;
-                    break;
-
-                case PlayerAckActions ackActions:
-                    _playerContext.PurgeSnapshotsUntil(JournalPosition.FromTickOperationStep(ackActions.UntilPositionTick, ackActions.UntilPositionOperation, ackActions.UntilPositionStep));
-                    break;
-
-                case PlayerExecuteUnsynchronizedServerAction executeUnsynchronizedServerAction:
-                    _playerContext.ExecuteServerAction(executeUnsynchronizedServerAction);
-                    break;
-
-                case PlayerChecksumMismatch checksumMismatch:
-                    // On mismatch, report it and terminate bot (to avoid spamming)
-                    _log.Warning("PlayerChecksumMismatch: tick={Tick}, actionIndex={ActionIndex}", checksumMismatch.Tick, checksumMismatch.ActionIndex);
-                    _playerContext.ResolveChecksumMismatch(checksumMismatch);
-                    RequestShutdown();
-                    break;
                 case PlayerJoinIdleLeagueResponse _:
                     // Handled by IdlerLeagueClient
                     break;
@@ -121,20 +99,12 @@ namespace Game.BotClient
             return Task.CompletedTask;
         }
 
-        protected override void HandleStartSession(SessionProtocol.SessionStartSuccess success, IPlayerModelBase playerModelBase, ISharedGameConfig gameConfig)
+        protected override Task OnSessionStartedAsync(BotSessionStartedArgs args)
         {
-            PlayerModel playerModel = (PlayerModel)playerModelBase;
+            State = BotClientState.Main;
+            PlayerModel playerModel = (PlayerModel)args.PlayerModel;
             playerModel.ClientListener = this;
-
-            _playerContext = new DefaultPlayerClientContext(
-                _logChannel,
-                playerModel,
-                success.PlayerState,
-                _actualPlayerId,
-                _logicVersion,
-                timelineHistory: null,
-                SendToServer,
-                MetaTime.Now);
+            return Task.CompletedTask;
         }
 
         async Task TickMainState()
@@ -150,7 +120,7 @@ namespace Game.BotClient
             {
                 // Check that producer not yet unlocked & category is Normal & has enough gold to unlock
                 if (!_playerModel.Producers.ContainsKey(producerInfo.Id) && producerInfo.Category == ProducerCategory.Normal && _playerModel.Wallet.NumGold >= producerInfo.GetUnlockCost(activeHappyHours, _playerModel.GameConfig))
-                    _playerContext.ExecuteAction(new PlayerUnlockProducer(producerInfo.Id));
+                    PlayerContext.ExecuteAction(new PlayerUnlockProducer(producerInfo.Id));
             }
 
             // Randomly try to upgrade a random producer
@@ -159,7 +129,7 @@ namespace Game.BotClient
                 // \note assumes that there's always at least one producer unlocked
                 ProducerModel producer = rnd.Choice(_playerModel.Producers.Values);
                 if (_playerModel.Wallet.NumGold >= producer.GetUpgradeCost(activeHappyHours, _playerModel.GameConfig))
-                    _playerContext.ExecuteAction(new PlayerUpgradeProducer(producer.Info.Id));
+                    PlayerContext.ExecuteAction(new PlayerUpgradeProducer(producer.Info.Id));
             }
 
             // Refresh MetaOffers every now and then
@@ -167,7 +137,7 @@ namespace Game.BotClient
             {
                 MetaOfferGroupsRefreshInfo refreshInfo = _playerModel.GetMetaOfferGroupsRefreshInfo();
                 if (refreshInfo.HasAny())
-                    _playerContext.ExecuteAction(new PlayerRefreshMetaOffers(refreshInfo));
+                    PlayerContext.ExecuteAction(new PlayerRefreshMetaOffers(refreshInfo));
             }
 
             // Try to make (fake) in-app purchases every now and then
@@ -218,7 +188,11 @@ namespace Game.BotClient
 
                 MetaOfferGroupInfoBase offerGroupInfo = rnd.Choice(activeOfferGroupInfos);
                 MetaOfferGroupModelBase offerGroupModel = _playerModel.MetaOfferGroups.TryGetState(offerGroupInfo.GroupId);
-                IEnumerable<MetaOfferStatus> purchasableOffers = _playerModel.MetaOfferGroups.GetOffersInGroup(offerGroupInfo, _playerModel).Where(_playerModel.MetaOfferGroups.OfferIsPurchasable);
+                IEnumerable<MetaOfferStatus> purchasableOffers =
+                    _playerModel.MetaOfferGroups
+                    .GetOffersInGroup(offerGroupInfo, _playerModel)
+                    .Where(offerStatus => _playerModel.MetaOfferGroups.OfferIsPurchasable(offerStatus)
+                                          && offerStatus.Info.InAppProduct != null /* Skip in-game currency offers */);
 
                 if (!purchasableOffers.Any())
                     return;
@@ -241,11 +215,11 @@ namespace Game.BotClient
                     return;
 
                 // \note BotClientBase will automatically start the fake purchase after the MetaOffer purchase preparation has completed.
-                _playerContext.ExecuteAction(new PlayerPreparePurchaseMetaOffer(offerGroupInfo, offerInfo, analyticsContext: null));
+                PlayerContext.ExecuteAction(new PlayerPreparePurchaseMetaOffer(offerGroupInfo, offerInfo, analyticsContext: null));
             }
         }
 
-        void TickGuildLogic()
+        async Task TickGuildLogic()
         {
             Random random = Random.Shared;
 
@@ -280,8 +254,8 @@ namespace Game.BotClient
                 creationParams.DisplayName = GenerateRandomGuildName();
                 creationParams.Description = GenerateRandomGuildDescription();
                 GuildRequirementsValidator guildRequirements = IntegrationRegistry.Get<GuildRequirementsValidator>();
-                if (guildRequirements.ValidateDisplayName(creationParams.DisplayName)
-                    && guildRequirements.ValidateDescription(creationParams.Description))
+                if (await guildRequirements.ValidateDisplayNameAsync(creationParams.DisplayName)
+                    && await guildRequirements.ValidateDescriptionAsync(creationParams.Description))
                 {
                     GuildClient.BeginCreateGuild(creationParams, onCompletion: null);
                 }

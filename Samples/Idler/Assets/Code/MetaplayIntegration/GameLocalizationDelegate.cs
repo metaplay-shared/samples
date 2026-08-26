@@ -1,4 +1,4 @@
-using Metaplay.Unity.DefaultIntegration;
+using Metaplay.Client;
 
 /// <summary>
 /// Example localization handling delegate.

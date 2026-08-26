@@ -32,6 +32,7 @@ public class ShopMetaOfferItemScript : MonoBehaviour
 
     public GameObject           PurchasingIndicator;
     public GameObject           SoldOutIndicator;
+    public GameObject           CannotAffordIndicator;
 
     bool _isPurchasing = false;
 
@@ -42,11 +43,7 @@ public class ShopMetaOfferItemScript : MonoBehaviour
         if (!player.MetaOfferGroups.IsActive(OfferGroupId, player))
             return;
 
-        IdlerOfferInfo                  offerInfo           = player.GameConfig.Offers[OfferId];
-        IAPManager.StoreProductInfo?    storeProductMaybe   = MetaplayClient.IAPManager.TryGetStoreProductInfo(offerInfo.InAppProduct.Ref.ProductId);
-
-        if (!storeProductMaybe.HasValue)
-            return;
+        IdlerOfferInfo offerInfo = player.GameConfig.Offers[OfferId];
 
         if (ColorUtility.TryParseHtmlString(offerInfo.BackgroundColor, out Color backgroundColor))
             BackgroundImage.color = backgroundColor;
@@ -57,10 +54,18 @@ public class ShopMetaOfferItemScript : MonoBehaviour
             RemainingCountText.color = textColor;
         }
 
-        IAPManager.StoreProductInfo storeProduct = storeProductMaybe.Value;
-
         NameText.text = offerInfo.DisplayName;
-        PriceText.text = storeProduct.LocalizedPriceString;
+
+        if (offerInfo.HasInGameCurrencyCost)
+        {
+            PriceText.text = $"{offerInfo.GemCost} gems";
+        }
+        else
+        {
+            IAPManager.StoreProductInfo? storeProduct = MetaplayClient.IAPManager.TryGetStoreProductInfo(offerInfo.InAppProduct.Ref.ProductId);
+            if (storeProduct.HasValue)
+                PriceText.text = storeProduct.Value.LocalizedPriceString;
+        }
 
         string producersText = null;
 
@@ -141,6 +146,11 @@ public class ShopMetaOfferItemScript : MonoBehaviour
         // Set/unset purchasing indicator
 
         PurchasingIndicator.SetActive(_isPurchasing);
+
+        // For in-game cost offers, set/unset "cannot afford" indicator
+
+        if (offerInfo.HasInGameCurrencyCost)
+            CannotAffordIndicator.SetActive(!offerInfo.CanAffordInGameCurrencyCost(player, offerGroupInfo));
     }
 
     public void OnClickBuy()
@@ -152,24 +162,36 @@ public class ShopMetaOfferItemScript : MonoBehaviour
         MetaOfferGroupInfoBase  offerGroupInfo  = player.GameConfig.OfferGroups[OfferGroupId];
         MetaOfferInfoBase       offerInfo       = player.GameConfig.Offers[OfferId];
 
-        // Note that actual store IAP purchase is not initiated immediately.
-        // Instead we go through the dynamic-content assignment flow:
-        // - PlayerPreparePurchaseMetaOffer assigns the offer as the pending dynamic content for the in-app product.
-        // - PlayerPreparePurchaseMetaOffer calls IPlayerModelClientListenerCore.PendingDynamicPurchaseContentAssigned,
-        //   which on the client is implemented in ApplicationStateManager and calls IAPManager.RegisterPendingDynamicPurchase
-        //   to start tracking the dynamic content assignment status.
-        // - When the server has confirmed the dynamic content assignment, IAPManager will initiate the IAP purchase.
-        MetaActionResult prepareResult = MetaplayClient.PlayerContext.ExecuteAction(new PlayerPreparePurchaseMetaOffer(
-            offerGroupInfo,
-            offerInfo,
-            new IdlerPurchaseAnalyticsContext(
-                placement: offerGroupInfo.Placement.ToString(),
-                group: OfferGroupId.ToString())));
+        PurchaseAnalyticsContext analyticsContext = new IdlerPurchaseAnalyticsContext(
+            placement: offerGroupInfo.Placement.ToString(),
+            group: OfferGroupId.ToString());
 
-        if (prepareResult.IsSuccess)
+        if (offerInfo.HasInGameCurrencyCost)
         {
-            _isPurchasing = true;
-            RegisterIAPFlowListener();
+            MetaplayClient.PlayerContext.ExecuteAction(new PlayerPurchaseInGameCurrencyMetaOffer(
+                offerGroupInfo,
+                offerInfo,
+                analyticsContext));
+        }
+        else
+        {
+            // Note that actual store IAP purchase is not initiated immediately.
+            // Instead we go through the dynamic-content assignment flow:
+            // - PlayerPreparePurchaseMetaOffer assigns the offer as the pending dynamic content for the in-app product.
+            // - PlayerPreparePurchaseMetaOffer calls IPlayerModelClientListenerCore.PendingDynamicPurchaseContentAssigned,
+            //   which on the client is implemented in ApplicationStateManager and calls IAPManager.RegisterPendingDynamicPurchase
+            //   to start tracking the dynamic content assignment status.
+            // - When the server has confirmed the dynamic content assignment, IAPManager will initiate the IAP purchase.
+            MetaActionResult prepareResult = MetaplayClient.PlayerContext.ExecuteAction(new PlayerPreparePurchaseMetaOffer(
+                offerGroupInfo,
+                offerInfo,
+                analyticsContext));
+
+            if (prepareResult.IsSuccess)
+            {
+                _isPurchasing = true;
+                RegisterIAPFlowListener();
+            }
         }
     }
 

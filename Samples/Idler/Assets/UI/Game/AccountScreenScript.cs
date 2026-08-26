@@ -76,7 +76,7 @@ public class AccountScreenScript : MonoBehaviour
         #if UNITY_WEBGL
         LoginApiBridge.Logout(MetaplaySDK.Connection.Endpoint.PublicWebApiUrl);
         if (MetaplayClient.Connection.State.Status == ConnectionStatus.Connected || MetaplayClient.Connection.State.Status == ConnectionStatus.Connecting)
-            MetaplayClient.Connection.CloseWithError(false, new TransientError.ClientTerminatedConnectionConnectionError());
+            MetaplayClient.Connection.CloseWithError(new TransientError.ClientTerminatedConnectionConnectionError());
         #endif
     }
 
