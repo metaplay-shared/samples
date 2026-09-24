@@ -1,0 +1,44 @@
+# Git LFS for sample binaries. Overrides the repo-root .gitattributes for paths
+# under Samples/; patterns without a slash match at any depth below this file.
+# The -text is required — the root sets `* text=auto`, and CRLF normalization
+# would corrupt these. CI checks out a CRLF working tree, so this is load-bearing.
+
+# Raster images. Art is rewritten whole on every revision rather than patched,
+# so without this each revision costs its full size in the packfile forever.
+*.png           filter=lfs diff=lfs merge=lfs -text
+*.jpg           filter=lfs diff=lfs merge=lfs -text
+*.jpeg          filter=lfs diff=lfs merge=lfs -text
+*.webp          filter=lfs diff=lfs merge=lfs -text
+*.gif           filter=lfs diff=lfs merge=lfs -text
+*.bmp           filter=lfs diff=lfs merge=lfs -text
+*.tga           filter=lfs diff=lfs merge=lfs -text
+*.psd           filter=lfs diff=lfs merge=lfs -text
+*.psb           filter=lfs diff=lfs merge=lfs -text
+*.ai            filter=lfs diff=lfs merge=lfs -text
+*.tif           filter=lfs diff=lfs merge=lfs -text
+*.tiff          filter=lfs diff=lfs merge=lfs -text
+*.exr           filter=lfs diff=lfs merge=lfs -text
+
+# Media
+*.mp4           filter=lfs diff=lfs merge=lfs -text
+*.mov           filter=lfs diff=lfs merge=lfs -text
+*.webm          filter=lfs diff=lfs merge=lfs -text
+*.wav           filter=lfs diff=lfs merge=lfs -text
+*.mp3           filter=lfs diff=lfs merge=lfs -text
+*.ogg           filter=lfs diff=lfs merge=lfs -text
+*.pdf           filter=lfs diff=lfs merge=lfs -text
+
+# Archives and packages. Vendored dependency tarballs are the single largest
+# thing in this repo's history: every version bump adds another copy in full.
+*.tgz           filter=lfs diff=lfs merge=lfs -text
+*.zip           filter=lfs diff=lfs merge=lfs -text
+*.7z            filter=lfs diff=lfs merge=lfs -text
+*.unitypackage  filter=lfs diff=lfs merge=lfs -text
+
+# Not here on purpose: *.svg (the root treats it as text and it diffs usefully),
+# and *.asset / *.prefab / *.unity / *.scenetemplate / *.shadergraph, which are
+# YAML text even at a couple of megabytes — LFS would kill their merges.
+
+# Prebuilt dashboards are served by the game server, which is often built on CI without LFS, so their images stay
+# plain blobs (the dashboards' own public/ folders opt out for the same reason).
+**/Backend/PrebuiltDashboard/** filter= diff= merge=
