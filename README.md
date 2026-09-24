@@ -8,6 +8,8 @@ For a full list of all Metaplay samples and their descriptions, see the [Sample 
 
 ### Prerequisites
 
+This repository stores images and other binaries with [Git LFS](https://git-lfs.com/). Install it before cloning (`git lfs install`), or the binaries check out as small pointer files. Downloading the repository as a ZIP from GitHub includes the real files.
+
 To run the samples, you'll need to get the Metaplay SDK first:
 
 1. Create an account in the [Metaplay Developer Portal](https://portal.metaplay.dev/).
