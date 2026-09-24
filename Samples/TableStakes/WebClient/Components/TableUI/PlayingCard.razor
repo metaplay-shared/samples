@@ -1,0 +1,127 @@
+@namespace WebClient.Components.TableUI
+@using Game.Logic
+@* WebClientBase has a Card UI component, so this alias makes Card refer to Game.Logic.Card. *@
+@using Card = Game.Logic.Card
+
+@* A playing card. It draws the face when Value is set and the back when Value is null. Callers pass Value
+   only for cards the viewer may see (docs/game-rules.md, "Public and private information"). *@
+
+@* The face has a rank-and-suit index in the top-left corner, the same index upside down in the bottom-right,
+   and a large suit symbol in the centre. These parts are hidden from assistive technology, and the card's
+   aria-label names the card instead. *@
+@if (Value.HasValue)
+{
+    <div class="ts-card ts-card--face @SuitColourClass @(IsCourt ? "ts-card--court" : null) @(Foil ? "ts-card--foil" : null) @Class"
+         style="@Style"
+         data-card="@Value.Value.ToString()"
+         data-foil="@(Foil ? "true" : null)"
+         data-testid="@TestId"
+         role="img"
+         aria-label="@AccessibleName">
+        <span class="ts-card__index ts-card__index--tl" aria-hidden="true">
+            <span class="ts-card__rank">@RankText</span>
+            <span class="ts-card__pip">@SuitGlyph</span>
+        </span>
+        @* The large centre suit symbol. On a jack, queen or king the stylesheet draws a ring around it to mark
+           a court card, because there is no court card art. The stylesheet hides the centre on small cards. *@
+        <span class="ts-card__centre" aria-hidden="true">
+            <span class="ts-card__centrepip">@SuitGlyph</span>
+        </span>
+        <span class="ts-card__index ts-card__index--br" aria-hidden="true">
+            <span class="ts-card__rank">@RankText</span>
+            <span class="ts-card__pip">@SuitGlyph</span>
+        </span>
+        @* The trump foil overlay, drawn on top of the card. It is hidden from assistive technology because the
+           accessible name already ends in ", trump". *@
+        @if (Foil)
+        {
+            <span class="ts-card__foil" aria-hidden="true"><span class="ts-card__sheen"></span></span>
+        }
+    </div>
+}
+else
+{
+    @* The card back. The stylesheet draws the pattern and border. This element marks the inner panel. *@
+    <div class="ts-card ts-card--back @Class" style="@Style" data-testid="@TestId" aria-hidden="true">
+        <span class="ts-card__backmark"></span>
+    </div>
+}
+
+@code {
+    /// <summary>The card to draw face-up, or null to draw a back.</summary>
+    [Parameter] public Card? Value { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    [Parameter] public string? Style { get; set; }
+
+    [Parameter] public string? TestId { get; set; }
+
+    /// <summary>
+    /// Whether to draw the trump foil. The table sets it only for a trump played to the centre. When set, the
+    /// accessible name ends in ", trump".
+    /// </summary>
+    [Parameter] public bool Foil { get; set; }
+
+    private string RankText => Card.RankSymbol(Value!.Value.Rank);
+
+    /// <summary>
+    /// The suit symbol. Public because the table also uses it to show the trump suit outside any card.
+    /// </summary>
+    public static string GlyphOf(Suit suit) => suit switch
+    {
+        Suit.Clubs    => "♣",
+        Suit.Diamonds => "♦",
+        Suit.Hearts   => "♥",
+        _             => "♠",
+    };
+
+    /// <summary>Whether the suit is hearts or diamonds.</summary>
+    public static bool IsRed(Suit suit) => suit == Suit.Hearts || suit == Suit.Diamonds;
+
+    private string SuitGlyph => GlyphOf(Value!.Value.Suit);
+
+    /// <summary>Whether the card is a jack, queen or king. Court cards get a ring around the centre suit symbol.</summary>
+    private bool IsCourt =>
+        Value!.Value.Rank == Rank.Jack || Value!.Value.Rank == Rank.Queen || Value!.Value.Rank == Rank.King;
+
+    /// <summary>The colour class: red for hearts and diamonds, black for clubs and spades.</summary>
+    private string SuitColourClass => IsRed(Value!.Value.Suit) ? "ts-card--red" : "ts-card--black";
+
+    private string SuitName => Value!.Value.Suit switch
+    {
+        Suit.Clubs    => "clubs",
+        Suit.Diamonds => "diamonds",
+        Suit.Hearts   => "hearts",
+        _             => "spades",
+    };
+
+    private string RankName => Value!.Value.Rank switch
+    {
+        Rank.Jack  => "jack",
+        Rank.Queen => "queen",
+        Rank.King  => "king",
+        Rank.Ace   => "ace",
+        Rank rank  => ((int)rank).ToString(System.Globalization.CultureInfo.InvariantCulture),
+    };
+
+    private string AccessibleName => Foil ? $"{RankName} of {SuitName}, trump" : $"{RankName} of {SuitName}";
+
+    /// <summary>
+    /// The parameters of the last render. The card depends only on its parameters, and the table re-renders
+    /// every card many times a second, so a render with the same parameters is skipped.
+    /// </summary>
+    private (Card? Value, string? Class, string? Style, string? TestId, bool Foil) _rendered;
+
+    protected override void OnInitialized() => _rendered = (Value, Class, Style, TestId, Foil);
+
+    protected override bool ShouldRender()
+    {
+        (Card? Value, string? Class, string? Style, string? TestId, bool Foil) current = (Value, Class, Style, TestId, Foil);
+        if (current.Equals(_rendered))
+            return false;
+
+        _rendered = current;
+        return true;
+    }
+}

@@ -1,0 +1,141 @@
+@using Game.Logic
+@using WebClient.Meta
+@using WebClient.Services
+@inject MetaStateService Meta
+@inject MetaplayClientService MetaplayService
+@inject NavigationManager Navigation
+
+@* Home's "Next up" card, which promotes the one action NextActionPolicy chose.
+
+   NextActionPolicy makes the choice and is unit-tested. This component only renders the choice and does not
+   decide anything (docs/meta-shell.md, "MetaSnapshot"). *@
+
+<div class="m-card m-card--claim m-card--featured m-card--tall" data-testid="next-up">
+    <MetaSectionHeading Label="Next up" Accent="claim" Align="start" />
+
+    <p class="m-card__title m-card__title--lead" data-testid="next-up-headline">@Headline</p>
+    <p class="m-card__note">@Note</p>
+
+    @if (Choice.UntilExpiry is TimeSpan left)
+    {
+        <MetaCountdown Remaining="left" EndingSoonWithin="EndingSoonWithin" />
+    }
+
+    <div class="m-next">
+        @if (Stat is (string cap, string value, string unit))
+        {
+            <div class="m-stat-block" data-testid="next-up-stat">
+                <span class="m-stat-block__cap">@cap</span>
+                <span class="m-stat-block__value">
+                    @value
+                    @if (Choice.Kind == NextActionKind.DailyReward)
+                    {
+                        <MetaIcon Name="flame" Size="18" Class="m-icon--coin" />
+                    }
+                </span>
+                <span class="m-stat-block__unit">@unit</span>
+            </div>
+        }
+
+        <MetaEmblem Name="@IconId" Accent="claim" Size="xl" />
+
+        <MetaButton Variant="MetaButtonVariant.Claim" Size="MetaButtonSize.Lg" TestId="next-up-action"
+                    OnClick="Select">@CallToAction</MetaButton>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public NextActionChoice Choice { get; set; } = default!;
+
+    private MetaSnapshot Snapshot => Meta.Snapshot;
+
+    private TimeSpan EndingSoonWithin =>
+        Snapshot.ViewOf(Choice.Feature)?.EndingSoonWithin ?? Countdown.EndingSoonThreshold;
+
+    private string Headline => Choice.Kind switch
+    {
+        NextActionKind.FirstWeekGoal   => Snapshot.FirstWeek.ClaimableDays > 0 ? "A first-week reward is waiting"
+                                                                            : "Today's goal is waiting",
+        NextActionKind.DailyReward     => "Daily reward ready",
+        NextActionKind.MissionReward   => "A mission is finished",
+        NextActionKind.Spin            => "You have a spin",
+        NextActionKind.WeeklyEventReward => "The week's reward is waiting",
+        NextActionKind.EndingSoon      => "Ending soon",
+        NextActionKind.NearestProgress => "You are nearly there",
+        _                              => "Jump into a game",
+    };
+
+    private string Note => Choice.Kind switch
+    {
+        NextActionKind.FirstWeekGoal   => Snapshot.FirstWeek.ClaimableDays > 0 ? "Collect it whenever you like — it does not expire."
+                                                                            : "Finish it before the day runs out.",
+        NextActionKind.DailyReward     => "Your streak grows the longer you keep it.",
+        NextActionKind.MissionReward   => "Collect it and pick up the next one.",
+        NextActionKind.Spin            => "One tap, one prize.",
+        NextActionKind.WeeklyEventReward => "You hit the target. Collect it before the event closes.",
+        NextActionKind.EndingSoon      => "Last chance to move up before it closes.",
+        NextActionKind.NearestProgress => "A game or two should finish this off.",
+        _                              => "Four seats, five tricks, about a minute.",
+    };
+
+    private string CallToAction => Choice.Kind switch
+    {
+        NextActionKind.DailyReward   => ButtonLabels.Claim,
+        NextActionKind.MissionReward => ButtonLabels.Claim,
+        NextActionKind.FirstWeekGoal when Snapshot.FirstWeek.ClaimableDays > 0 => ButtonLabels.Claim,
+        NextActionKind.Spin          => ButtonLabels.Spin,
+        NextActionKind.WeeklyEventReward => ButtonLabels.Claim,
+        _                            => ButtonLabels.Play,
+    };
+
+    private string IconId => Choice.Kind switch
+    {
+        NextActionKind.FirstWeekGoal   => "trophy",
+        NextActionKind.DailyReward     => "chest",
+        NextActionKind.MissionReward   => "shield",
+        NextActionKind.Spin            => "wheel",
+        NextActionKind.WeeklyEventReward => "star",
+        NextActionKind.EndingSoon      => "clock",
+        NextActionKind.NearestProgress => "star",
+        _                              => "cards",
+    };
+
+    /// <summary>
+    /// The number shown beside the headline, or null for choices without one, such as Play. Each value is read
+    /// from the same snapshot view that the destination screen draws, so the card and the screen always agree.
+    /// </summary>
+    private (string Cap, string Value, string Unit)? Stat => Choice.Kind switch
+    {
+        NextActionKind.DailyReward   => ("Login streak", Snapshot.DailyReward.StreakDays.ToString(), "days"),
+        @* First-week rewards do not expire with their day, so when any are claimable show how many
+           instead of today's goal progress. *@
+        NextActionKind.FirstWeekGoal when Snapshot.FirstWeek.ClaimableDays > 0
+                                     => ("Ready to claim", Snapshot.FirstWeek.ClaimableDays.ToString(),
+                                         Snapshot.FirstWeek.ClaimableDays == 1 ? "reward" : "rewards"),
+        NextActionKind.FirstWeekGoal => ($"Day {Snapshot.FirstWeek.CurrentDay}",
+                                         $"{Snapshot.FirstWeek.GoalsComplete}/{Snapshot.FirstWeek.GoalsTotal}",
+                                         "goals"),
+        NextActionKind.MissionReward => ("Ready to claim", Snapshot.Missions.ClaimableCount.ToString(),
+                                         Snapshot.Missions.ClaimableCount == 1 ? "reward" : "rewards"),
+        NextActionKind.Spin          => ("In hand", Snapshot.SpinWheel.SpinsAvailable.ToString(),
+                                         Snapshot.SpinWheel.SpinsAvailable == 1 ? "spin" : "spins"),
+        NextActionKind.WeeklyEventReward => ("Scored", Currencies.Format(Snapshot.WeeklyEvent.Points),
+                                             Snapshot.WeeklyEvent.Points == 1 ? "point" : "points"),
+        _                            => null,
+    };
+
+    private void Select()
+    {
+        Meta.RecordPromotedEntrySelection(PromotedEntryPlacement.NextActionCard, Choice.Feature);
+
+        // A choice without a route is the Play choice. It starts matchmaking in place, and the searching dialog
+        // opens over Home.
+        if (Choice.Route is not string route)
+        {
+            MetaplayService.EnterMatchmaking();
+            return;
+        }
+
+        EnvironmentLink.NavigateTo(Navigation, route);
+    }
+}

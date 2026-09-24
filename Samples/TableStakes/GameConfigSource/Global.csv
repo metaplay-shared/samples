@@ -1,0 +1,16 @@
+Member,Value
+StartingWallet,"3000 Coins, 100 Gems, 1 SpinTokens"
+MaxCoins,9999999
+MaxGems,999999
+MaxSpinTokens,999
+DailyResetSchedule.TimeMode,Local
+DailyResetSchedule.Start.Date,2020-01-01
+DailyResetSchedule.Start.Time,00:00:00
+DailyResetSchedule.Duration,1d
+DailyResetSchedule.Recurrence,1d
+ActiveDailyRewardTable,daily.v1
+ActiveFirstWeekSchedule,firstweek.v1
+ActiveWheelTable,wheel.v1
+ActiveDailyMissionSet,missions.daily.v1
+ActiveWeeklyMissionSet,missions.weekly.v1
+ActiveTournamentRewardTable,tournament.v1

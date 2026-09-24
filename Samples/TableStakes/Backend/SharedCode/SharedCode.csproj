@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk" ToolsVersion="15.0">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>Latest</LangVersion>
+    <RootNamespace>Game.Cloud</RootNamespace>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- SharedCode/ also holds the client build's project (SharedCode/SharedCode.Client.csproj), whose build output
+         includes generated .cs files that must not be compiled into this assembly. -->
+    <Compile Include="$(SharedCodePath)\**\*.cs" Exclude="$(SharedCodePath)\bin\**;$(SharedCodePath)\obj\**" LinkBase="SharedCode" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(MetaplayServerPath)\Cloud\Metaplay.Cloud.csproj" />
+  </ItemGroup>
+</Project>

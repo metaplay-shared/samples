@@ -1,0 +1,16 @@
+
+# Four bots is the smallest run that exercises the thing a single bot cannot: a table of four *human* seats,
+# formed inside one Matchmaking:FillWait. A lone bot is still a whole game — the matchmaker fills the other
+# three seats with computer players after the fill wait — but nothing about it loads the seat reservation of
+# a second player. Override for a real load run:
+#   metaplay dev botclient -- -MaxBots=40 -MaxBotId=200
+Bot:
+  MaxBots:                  4
+  SpawnRate:                10
+
+  # A game runs for roughly 40 seconds and the loop asks for another, so this is a few games per session
+  # rather than one. It is deliberately not long enough to be uneventful: a session that ends mid-hand is a
+  # seat that goes to grace and then to a covering bot, which is load worth generating.
+  ExpectedSessionDuration:  00:05:00
+
+  #ForceConflictingPlayerId: true

@@ -1,0 +1,51 @@
+@using WebClient.Meta
+@inherits MetaComponentBase
+@inject NavigationManager Navigation
+
+@* Home's first card: the player's avatar and name, and the Profile button. Profile has no navigation tab, so
+    this button is the only way to reach it (docs/meta-shell.md, "Screens and routes"). The card itself is not
+    clickable.
+
+    It uses PlayerAvatar, like the Profile preview and the standings, so the worn cosmetics look the same
+    everywhere.
+
+    It re-renders on meta state changes (MetaComponentBase) because the player model, and so the name, arrives
+    after the first render. Without this the row would keep showing the fixture's name. *@
+
+<div class="m-card m-idrow" data-testid="home-profile">
+    <div class="m-idrow__who">
+        <PlayerAvatar Identity="Who" Size="40" WithName="true"
+                      NameClass="@NamePlate.ClassFor(Who.DisplayName)" />
+    </div>
+
+    <MetaButton Variant="MetaButtonVariant.Secondary" Size="MetaButtonSize.Sm"
+                TestId="home-profile-action" OnClick="OpenProfile">
+        Profile
+        @if (WearsBadge)
+        {
+            <span class="m-idrow__badge"><ActionableBadge Label="A new cosmetic is waiting" /></span>
+        }
+    </MetaButton>
+</div>
+
+@code {
+    /// <summary>
+    /// Overrides the snapshot's identity, for gallery stories that show cases the fixtures do not contain,
+    /// such as a very long name. Null uses the player's own identity.
+    /// </summary>
+    [Parameter] public IdentityView? Identity { get; set; }
+
+    /// <summary>
+    /// Overrides whether the Profile badge is shown, for gallery stories. No fixture has an unseen cosmetic.
+    /// Null uses BadgePolicy.
+    /// </summary>
+    [Parameter] public bool? Badged { get; set; }
+
+    private MetaSnapshot Snapshot => Meta.Snapshot;
+
+    private IdentityView Who => Identity ?? Snapshot.Identity;
+
+    private bool WearsBadge => Badged ?? BadgePolicy.ShouldBadge(BadgeTarget.Profile, Snapshot, Meta.Seen);
+
+    private void OpenProfile() => EnvironmentLink.NavigateTo(Navigation, MetaRoutes.Profile);
+}

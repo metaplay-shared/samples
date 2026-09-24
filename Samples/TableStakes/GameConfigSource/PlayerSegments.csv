@@ -1,0 +1,4 @@
+SegmentId #key,DisplayName,Description,PropId[0],PropMin[0],PropMax[0],PropId[1],PropMin[1],PropMax[1],PropId[2],PropMin[2],PropMax[2]
+first_week_non_purchaser,"First week, no purchase","Created less than 7 days ago, has never had a purchase granted, and has not opted out of personalized offers.",AccountAgeDays,0,6,ValidatedPurchases,0,0,PersonalizedOffersEnabled,true,
+gem_funded,Gem funded,Holds at least 500 gems and has not opted out of personalized offers.,Gems,500,,PersonalizedOffersEnabled,true,,,,
+engaged_non_purchaser,"Engaged, no purchase","Has finished at least 5 games, has never had a purchase granted, and has not opted out of personalized offers.",GamesPlayed,5,,ValidatedPurchases,0,0,PersonalizedOffersEnabled,true,

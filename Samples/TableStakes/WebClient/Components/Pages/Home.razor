@@ -1,0 +1,192 @@
+@page "/"
+@layout MetaLayout
+@using Game.Logic
+@using WebClientBase.Configuration
+@inherits MetaComponentBase
+@inject MetaplayClientService MetaplayService
+@inject WebClientConfig Config
+@inject NavigationManager Navigation
+
+<PageTitle>@Config.AppTitle</PageTitle>
+
+@* The Home screen, shown first after boot. It shows the identity row, the hero, one Next-up card, at most one
+   live teaser, at most one offer teaser, and shortcuts to every Events and Compete feature. Each card shows
+   a summary and links to the feature's own screen (docs/meta-shell.md, "MetaSnapshot").
+
+   Home opens no popup on app start. Login-based rewards are promoted through the Next-up card and the
+   Events screen instead. *@
+
+<HomeIdentityRow />
+
+@* PLAY starts matchmaking directly instead of opening another screen, so a new player can start a game with
+   one tap (docs/meta-shell.md). *@
+<HeroBanner HasSession="MetaplayService.PlayerModel != null"
+            Status="MetaplayService.MatchmakingStatus"
+            OnPlay="OnPlay" />
+
+<NextUpCard Choice="NextAction" />
+
+@* The live teaser is shown only when LiveFeature has a running feature. *@
+@if (LiveFeature != null)
+{
+    <div class="m-card m-card--live m-card--tall" data-testid="live-teaser">
+        <MetaSectionHeading Label="Live now" Accent="live" Align="start" />
+
+        <div class="m-live">
+            <div class="m-live__main">
+                <div class="m-card__head">
+                    <MetaEmblem Name="shield" Accent="live" />
+                    <div class="m-card__grow">
+                        <p class="m-card__title">@LiveHeadline</p>
+                        <p class="m-card__note">@LiveNote</p>
+                    </div>
+                </div>
+
+                @if (LiveIsWeekly)
+                {
+                    <MetaProgress Current="Snapshot.WeeklyEvent.Points"
+                                  Target="Snapshot.WeeklyEvent.TargetPoints"
+                                  Label="Weekly event points" ShowNumbers="false" />
+                    <span class="m-live__points">@Currencies.Format(Snapshot.WeeklyEvent.Points) of @Currencies.Format(Snapshot.WeeklyEvent.TargetPoints) points</span>
+                }
+            </div>
+
+            <div class="m-live__aside">
+                @if (LiveFeature.UntilDeadline is TimeSpan left)
+                {
+                    <MetaCountdown Remaining="left" EndingSoonWithin="LiveFeature.EndingSoonWithin" ExpiredText="Ended" />
+                }
+                <MetaEmblem Name="gift" Accent="live" Size="sm" />
+                <MetaButton Variant="MetaButtonVariant.Live" Size="MetaButtonSize.Sm" TestId="live-teaser-action"
+                            OnClick="OpenLive">@(LiveIsWeekly ? ButtonLabels.Play : ButtonLabels.View)</MetaButton>
+            </div>
+        </div>
+    </div>
+}
+
+@* The offer teaser goes below the actionable cards, so player progress comes before promotion. *@
+@if (Snapshot.Shop.Featured is OfferView offer)
+{
+    <OfferTeaser Offer="offer" OnOpen="() => OpenOffer(offer)" />
+}
+
+@* Shortcuts to every Events and Compete feature, so each one is reachable from Home without opening a tab
+   first. *@
+<nav class="m-shortcuts" aria-label="All activities" data-testid="shortcuts">
+    @foreach (IFeatureView view in Snapshot.EventsFeatures.Concat(Snapshot.CompeteFeatures))
+    {
+        <button type="button"
+                class="m-shortcut"
+                data-testid="@($"shortcut-{view.Feature.ToString().ToLowerInvariant()}")"
+                @onclick="() => OpenFeature(view.Feature)">
+            <MetaEmblem Name="@ShortcutIcon(view.Feature)" Size="sm" />
+            <span>@ShortcutLabel(view.Feature)</span>
+        </button>
+    }
+</nav>
+
+@code {
+    private MetaSnapshot Snapshot => Meta.Snapshot;
+
+    /// <summary>
+    /// The Next-up choice. <see cref="NextActionPolicy.Choose"/> depends only on the snapshot, which is replaced
+    /// at most once a second or on a model change, so the choice is cached per snapshot instead of chosen on every
+    /// render.
+    /// </summary>
+    private NextActionChoice NextAction
+    {
+        get
+        {
+            MetaSnapshot snapshot = Snapshot;
+            if (!ReferenceEquals(snapshot, _nextActionSnapshot))
+            {
+                _nextActionSnapshot = snapshot;
+                _nextAction         = NextActionPolicy.Choose(snapshot);
+            }
+            return _nextAction!;
+        }
+    }
+
+    private MetaSnapshot? _nextActionSnapshot;
+    private NextActionChoice? _nextAction;
+
+    /// <summary>
+    /// The feature for the live teaser, or null. It is the weekly event when that is in progress, otherwise
+    /// the tournament when that is in progress. Home shows at most one live teaser.
+    /// </summary>
+    private IFeatureView? LiveFeature
+    {
+        get
+        {
+            if (Snapshot.WeeklyEvent.State == ActivityState.InProgress)
+                return Snapshot.WeeklyEvent;
+            if (Snapshot.Tournament.State == ActivityState.InProgress)
+                return Snapshot.Tournament;
+            return null;
+        }
+    }
+
+    private bool LiveIsWeekly => LiveFeature?.Feature == MetaFeature.WeeklyEvent;
+
+    private string LiveHeadline => LiveIsWeekly
+        ? Snapshot.WeeklyEvent.Theme
+        : $"{Snapshot.Tournament.Name} · Season {Snapshot.Tournament.SeasonNumber}";
+
+    private string LiveNote => LiveIsWeekly
+        ? Snapshot.WeeklyEvent.Tagline
+        : $"Rank #{Snapshot.Tournament.Rank} · {Currencies.Format(Snapshot.Tournament.Score)} pts";
+
+    protected override void OnInitialized()
+    {
+        MetaplayService.OnStateChanged += OnStateChanged;
+        base.OnInitialized();
+    }
+
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    private void OnPlay() => MetaplayService.EnterMatchmaking();
+
+    private void OpenLive()
+    {
+        if (LiveFeature is IFeatureView view)
+            OpenFeature(view.Feature);
+    }
+
+    private void OpenFeature(MetaFeature feature)
+    {
+        Meta.RecordPromotedEntrySelection(PromotedEntryPlacement.FeatureCard, feature);
+
+        if (MetaRoutes.For(feature) is string route)
+            EnvironmentLink.NavigateTo(Navigation, route);
+    }
+
+    private void OpenOffer(OfferView offer)
+    {
+        // This records only that the teaser was tapped. The shop emits its own event for the specific offer
+        // when the player takes it.
+        Meta.RecordPromotedEntrySelection(PromotedEntryPlacement.Teaser, MetaFeature.Shop);
+        EnvironmentLink.NavigateTo(Navigation, MetaRoutes.Shop);
+    }
+
+    private static string ShortcutIcon(MetaFeature feature) => feature switch
+    {
+        MetaFeature.FirstWeekEvent => "trophy",
+        MetaFeature.DailyReward    => "chest",
+        MetaFeature.Missions       => "shield",
+        MetaFeature.SpinWheel      => "wheel",
+        MetaFeature.WeeklyEvent    => "star",
+        _                          => "trophy",
+    };
+
+    private static string ShortcutLabel(MetaFeature feature) => feature switch
+    {
+        MetaFeature.FirstWeekEvent => "First Week",
+        MetaFeature.DailyReward    => "Daily",
+        MetaFeature.Missions       => "Missions",
+        MetaFeature.SpinWheel      => "Spin",
+        MetaFeature.WeeklyEvent    => "Weekly",
+        _                          => "Tournament",
+    };
+
+    protected override void OnDispose() => MetaplayService.OnStateChanged -= OnStateChanged;
+}

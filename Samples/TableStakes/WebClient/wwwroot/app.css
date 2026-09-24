@@ -1,0 +1,2019 @@
+/* Game-specific styles, loaded after WebClientBase's app-base.css. This stylesheet declares the design tokens
+   (docs/meta-shell.md, "Styles and design tokens"). The --m-* aliases in meta-shell.css and the ThemeColors
+   variables that GameTheme.cs sets resolve to these tokens. .font-display, .animate-* and .btn-glossy are in
+   app-base.css. */
+
+/* ---------------------------------------------------------------------------
+   The design tokens (docs/meta-shell.md, "Styles and design tokens").
+   The token names differ from the ThemeColors names (--bg-*, --text-*, --border-color) that App.razor
+   declares after this stylesheet, so neither overrides the other.
+   --------------------------------------------------------------------------- */
+:root {
+    /* --- Ground and surfaces. --ground is the page background, --ground-pool the lighter area above it, and
+       --surface and --surface-deep the two stops of the panel and card gradient. --- */
+    --ground:          #061711;
+    --ground-pool:     #0e2b22;
+    --surface:         #0e1b16;
+    --surface-deep:    #060f0c;
+    --surface-lift:    #13291f;   /* hover state and raised plates */
+
+    /* --- Gold. Used only for attention and rewards, not for decoration. --- */
+    --gold:            #f5c542;
+    --gold-light:      #ffe9a8;
+    --gold-deep:       #b8801a;
+    --gold-glow:       rgba(245, 197, 66, 0.55);
+    --on-gold:         #2a1f08;   /* text on a gold fill */
+    /* The avatar figure colour. It is deliberately not a gold, because gold is reserved for attention and
+       rewards. */
+    --champagne:       #f7e7c1;
+
+    /* --- Text colours. --- */
+    --ink:             #f2efe6;
+    --ink-2:           #b9c2b6;
+    --ink-3:           #8a948a;
+
+    /* --- Lines and scrims. Two neutral hairlines, one gilt line, and the scrims behind a dialog. --- */
+    --hairline:        rgba(255, 255, 255, 0.08);
+    --hairline-strong: rgba(255, 255, 255, 0.16);
+    --line-gilt:       rgba(240, 214, 147, 0.35);
+    --scrim:           rgba(2, 8, 6, 0.55);   /* the .pnl backdrop */
+    --scrim-deep:      rgba(2, 8, 6, 0.92);   /* the reward reveal's vignette edge */
+
+    /* --- Meaning accents: claimable, time-limited, informational and danger. Use them only to carry that
+       meaning, never as decoration. A border is gilt or hairline, never an accent. --- */
+    --claim:           #2ee6c5;
+    --live:            #e879f9;
+    --progress:        #60a5fa;
+    --danger:          #fb7185;
+    /* Light variants of the accents, used for flashes, the same way --gold-light relates to --gold.
+       --claim-light is currently unused. */
+    --claim-light:     #99f6e4;
+    --live-light:      #f0abfc;
+    --progress-light:  #bae6fd;
+
+    /* --- Type. Cinzel is the display font, Inter the body font, and Cormorant Garamond the card numerals.
+       Font sizes are set where they are used, following four grades:
+       eyebrow  Cinzel, wide tracking, uppercase, gilt (.pnl__eyebrow)
+       label    Cinzel 600, all-small-caps when it names a player
+       title    Cinzel 700 in --gold-light with the .ts-engraved text shadow
+       body     Inter in --ink-2 --- */
+    --font-display:    'Cinzel', 'Cormorant Garamond', Georgia, serif;
+    --font-body:       'Inter', system-ui, sans-serif;
+    --font-card:       'Cormorant Garamond', Georgia, serif;
+
+    /* --- Corner radii. --- */
+    --r-strip:         0.2rem;
+    --r-key:           0.3rem;
+    --r-panel:         0.6rem;
+    --r-card:          0.9rem;
+    --r-pill:          999px;
+
+    /* --- Shadows. The brass ring and top highlight of a plate, and the drop shadow of a panel. --- */
+    --shadow-brass-ring: 0 0 0 1px var(--gilt-deep);
+    --shadow-brass-lit:  inset 0 1px 0 rgba(240, 214, 147, 0.14);
+    --shadow-panel:      0 24px 60px rgba(0, 0, 0, 0.75);
+
+    /* --- Gradients for panels, strips and gold keys. --- */
+    --grad-panel:      linear-gradient(180deg, var(--surface), var(--surface-deep));
+    --grad-strip:      linear-gradient(180deg, #141310, #0a0a08);
+    --grad-key:        linear-gradient(180deg, #ffe27a 0%, var(--gold) 48%, var(--gold-deep) 100%);
+
+    /* --- Motion. Use these durations and this easing instead of new values. --ease-spring is in
+       app-base.css. --- */
+    --t-fast:          0.12s;
+    --t:               0.22s;
+    --t-slow:          0.42s;
+    /* The reward reveal's exit duration. RewardReveal.ExitMs in C# must match it, because the reward flow
+       waits that long before it returns to the previous screen. */
+    --reveal-exit:     0.18s;
+    --ease:            cubic-bezier(0.32, 0.72, 0, 1);
+
+    /* --- Feedback: hover lift, press scale, hover glow, and the opacity of a disabled control. --- */
+    --press-scale:      0.97;
+    --hover-lift:       -1px;
+    --hover-glow:       0 0 0 1px rgba(255, 255, 255, 0.12);
+    --disabled-opacity: 0.45;
+
+    /* --- Spacing and chrome heights. meta-shell.css reads them through its --m-* aliases. --- */
+    --gap:             0.75rem;
+    --pad:             1rem;
+    --col:             27rem;
+    --hud-h:           3rem;
+    --nav-h:           4.25rem;
+
+    /* --- The bottom safe area the app keeps clear. Every bottom inset reads this instead of env() directly.
+
+       It is capped below the full inset. iOS reports a bottom inset for the home indicator that is sized for
+       a native tab bar including its own bottom padding. The app's bars already have that padding, so the
+       full inset would add an empty band under them in the installed web app. The cap still clears the
+       home indicator.
+
+       The top inset is used in full (env(safe-area-inset-top)), because the status bar occupies all of
+       it. --- */
+    --safe-b:          min(env(safe-area-inset-bottom), 1.25rem);
+}
+
+/* In a browser tab, iOS Safari ends the page above its own toolbar, which already clears the home indicator, but
+   still reports a bottom inset. Reserving it would leave an empty band between the navigation and the toolbar. */
+@media not all and (display-mode: standalone) {
+    :root {
+        --safe-b: 0px;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   The strip (docs/meta-shell.md, "Styles and design tokens")
+   The dark brass background, gilt ring and top highlight shared by every label strip, such as the seat
+   nameplate, the turn banner and the shell's chips and tags. Add the class next to the element's own class.
+   The element sets its own radius, padding and text. An element that needs extra shadows repeats the
+   .strip box-shadow values first and adds its own after them.
+   --------------------------------------------------------------------------- */
+.strip {
+    background: var(--grad-strip);
+    box-shadow: var(--shadow-brass-ring), var(--shadow-brass-lit);
+}
+
+/* ---------------------------------------------------------------------------
+   App-like behaviour on phones and in the desktop phone frame
+   - The page never scrolls or zooms.
+   - No pull-to-refresh or overscroll bounce.
+   - No double-tap zoom and no long-press selection menus.
+
+   Text is not selectable except inside form controls, so a long press on a control does not open a
+   selection menu. This rule is the only place that sets the selection policy.
+   --------------------------------------------------------------------------- */
+html,
+body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;                 /* the document never scrolls */
+    overscroll-behavior: none;        /* no pull-to-refresh or overscroll bounce */
+    touch-action: manipulation;       /* no double-tap zoom */
+    -webkit-user-select: none;
+    user-select: none;                /* no long-press text selection menus */
+    -webkit-touch-callout: none;      /* no iOS long-press Copy/Share/Save menu */
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Block image dragging and drag-to-save. */
+img {
+    -webkit-user-drag: none;
+    user-drag: none;
+}
+
+/* Fix the body in place so mobile Safari cannot drag the whole page. */
+body {
+    position: fixed;
+    inset: 0;
+}
+
+/* Text in form controls stays selectable. */
+button,
+input,
+textarea,
+select {
+    -webkit-user-select: auto;
+    user-select: auto;
+}
+
+/* ---------------------------------------------------------------------------
+   Phone-width column
+   Limits the UI to a phone-width column, centred on a desktop window.
+   --------------------------------------------------------------------------- */
+.mp-column {
+    max-width: 26rem;
+}
+
+/* #app is the app's screen, and on a large enough window it becomes the phone frame below. Lengths inside
+   the app use percentages and container units instead of viewport units, because on a desktop `vw` measures
+   the browser window, not the frame.
+
+   `container-type: inline-size` makes `cqw` a hundredth of the app's width, both on a phone and inside the
+   frame. */
+#app {
+    height: 100%;
+    container-type: inline-size;
+}
+
+/* <main> is the only scroll surface, and scrolls only when a view is taller than the screen. The
+   transparent top bar is drawn over the top of it. */
+main {
+    height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    /* Keep clear of the bottom safe area. */
+    padding-bottom: calc(1.25rem + var(--safe-b));
+}
+
+/* No element inside the app draws a scrollbar, because a phone has none. The rule applies to every
+   element, so a scroll surface added later also hides its scrollbar. The surfaces still scroll by wheel,
+   keyboard and mouse drag (drag-scroll.js). With no scrollbar, `clientWidth` is the full width of the
+   surface on every platform. */
+#app,
+#app * {
+    scrollbar-width: none;          /* Firefox */
+    -ms-overflow-style: none;       /* legacy Edge */
+}
+
+#app::-webkit-scrollbar,
+#app *::-webkit-scrollbar {
+    display: none;                  /* Chromium, Safari */
+}
+
+/* ---------------------------------------------------------------------------
+   The phone frame
+   On a window large enough to hold it, the app is drawn in an iPhone-sized box in the middle of the window.
+   On a smaller window, such as a phone, the app fills the window. The frame has a transform, which makes it
+   the containing block for every `position: fixed` element inside it, so the HUD, navigation, table, dialogs
+   and connection shell are positioned against the frame, not the window.
+   --------------------------------------------------------------------------- */
+@media (min-width: 34rem) and (min-height: 40rem) {
+    body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        /* The background around the frame, darker than anything inside it so the frame's edge stands out. */
+        background:
+            radial-gradient(ellipse 70% 60% at 50% 40%, #10161d 0%, #05080b 70%),
+            #05080b;
+    }
+
+    #app {
+        position: relative;
+        /* content-box, so the border is the bezel around the screen and not part of it. */
+        box-sizing: content-box;
+        width: 390px;
+        max-width: calc(100vw - 3.5rem);
+        /* The iPhone screen height when the window has room, otherwise as much as fits. */
+        height: min(844px, calc(100dvh - 4rem));
+        border: 11px solid #23272f;
+        border-radius: 3rem;
+        overflow: hidden;
+        transform: translateZ(0);
+        /* A light hairline outside the bezel, a darker seam between the screen and the bezel, and the
+           frame's drop shadow. */
+        box-shadow:
+            0 0 0 1px rgba(255, 255, 255, 0.14),
+            0 0 0 12px rgba(0, 0, 0, 0.35),
+            0 0 0 1px rgba(0, 0, 0, 0.9) inset,
+            0 34px 80px -14px rgba(0, 0, 0, 0.9);
+    }
+}
+
+/* A tablet-sized window gets the same portrait layout at a larger size. The app is laid out in `rem`, so
+   raising the root font size scales the text, the spacing, the chrome and the frame together.
+
+   The query requires height as well as width, so a portrait tablet matches and a wide desktop monitor does
+   not. `rem` in a media query is always the initial 16px, so changing the root font size does not affect
+   the query. */
+@media (min-width: 32rem) and (min-height: 64rem) {
+    :root { font-size: 18px; }
+
+    #app {
+        width: 439px;
+        height: min(950px, calc(100dvh - 4rem));
+    }
+}
+
+/* ===========================================================================
+   The table
+   Four fixed seat positions with the viewer always at South, the trump indicator in the middle, the current
+   trick played toward the centre from each seat, and the viewer's hand along the bottom. The layout follows
+   the diagram in docs/game-rules.md.
+
+   The table uses position: fixed to cover the whole screen outside the phone-width column, and nothing on it
+   scrolls. It is below the shell's chrome (--layer-chrome).
+   =========================================================================== */
+:root {
+    --felt-centre: #1b4136;
+    --felt-mid:    #102c24;
+    --felt-edge:   #061711;
+    --card-face:   #efe7d5;
+    --card-face-2: #ddd1b6;
+    --card-ink:    #14100c;
+    --card-red:    #b32c22;
+    --card-back:   #143229;
+    --card-back-2: #0a1f19;
+
+    /* The gilt trim: highlight, body and shadow. Three stops make a border look like bevelled brass instead
+       of a flat yellow line. */
+    --gilt-light:  #f0d693;
+    --gilt:        #c9a961;
+    --gilt-deep:   #7d6128;
+    --gilt-ink:    #2a1f08;
+}
+
+/* The engraved label style for seat names, the turn banner and the trump intro: small caps with wide
+   tracking. */
+.ts-engraved {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--gilt-light);
+    /* A dark shadow under the letters and a faint light edge above them, so they look cut into the metal. */
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.85), 0 -1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.ts-table {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    justify-content: center;
+    overflow: hidden;
+    /* The felt in three layers: the weave, the light in the middle and the dark corners. The weave is two
+       faint line patterns at right angles. The lines are not visible on their own, but they keep the
+       gradient from looking flat. */
+    background:
+        repeating-linear-gradient(0deg,   rgba(255, 255, 255, 0.014) 0 1px, transparent 1px 3px),
+        repeating-linear-gradient(90deg,  rgba(0, 0, 0, 0.05)        0 1px, transparent 1px 3px),
+        radial-gradient(ellipse 72% 40% at 50% 42%, #275a47 0%, var(--felt-centre) 38%, var(--felt-mid) 68%, var(--felt-edge) 100%),
+        var(--bg-primary);
+    padding: calc(3.1rem + env(safe-area-inset-top)) 0.6rem calc(0.6rem + var(--safe-b));
+}
+
+/* The rail: a band of dark wood along the bottom of the screen, with a brass line where it meets the
+   felt. It is a background layer that takes no space, and the viewer's hand overlaps it. */
+.ts-table::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 3.2rem;
+    /* Above the ::after vignette, which would otherwise darken the rail's bottom corners. */
+    z-index: 1;
+    pointer-events: none;
+    background:
+        repeating-linear-gradient(93deg, rgba(0, 0, 0, 0.18) 0 2px, transparent 2px 11px),
+        linear-gradient(180deg, #3d2210 0%, #281307 45%, #120802 100%);
+    box-shadow:
+        inset 0 1px 0 rgba(240, 214, 147, 0.26),
+        inset 0 2px 3px rgba(0, 0, 0, 0.6),
+        0 -14px 26px -10px rgba(0, 0, 0, 0.7);
+}
+
+/* The vignette: the light falls off toward the screen corners, so the centre of the table is the
+   brightest area. */
+.ts-table::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: radial-gradient(ellipse 72% 52% at 50% 44%, transparent 26%, rgba(2, 10, 7, 0.45) 66%, rgba(1, 6, 4, 0.82) 100%);
+}
+
+.ts-table__grid {
+    position: relative;
+    /* Above the ::after vignette. */
+    z-index: 1;
+    width: 100%;
+    max-width: 30rem;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 0.35rem;
+}
+
+/* Each opponent seat is a plaque with that player's face-down hand under it. */
+.ts-table__north {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+}
+
+.ts-table__middle {
+    position: relative;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, auto) minmax(0, 1fr) minmax(0, auto);
+    align-items: center;
+    gap: 0.3rem;
+}
+
+/* The side seats have the least room on a phone, so they use the narrower plaque and hide the name
+   first. */
+.ts-table__west,
+.ts-table__east {
+    min-width: 0;
+    z-index: 4;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+}
+
+.ts-table__south {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+/* ---------------------------------------------------------------------------
+   The centre stage
+   A square as tall as the middle band. The trump indicator is at the exact centre, and each played card is
+   placed out from it toward the seat that played it.
+   --------------------------------------------------------------------------- */
+/* Above the side seats. On a narrow screen they can overlap at the edges, and the played card must stay
+   fully visible. */
+.ts-centre {
+    position: relative;
+    z-index: 5;
+    align-self: center;
+    width: 100%;
+    height: 100%;
+    max-height: 22rem;
+}
+
+/* The engraving in the middle of the felt: concentric rings with a rosette inside. It marks where cards
+   are played.
+
+   The rings are one repeating radial gradient and the rosette one conic gradient, so the whole ornament is
+   two paint layers. */
+.ts-centre::before {
+    content: "";
+    position: absolute;
+    /* Always a circle: the box is a square with the side length of the smaller of the stage's width and
+       height. */
+    left: 50%;
+    top: 50%;
+    width: 150%;
+    aspect-ratio: 1;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background:
+        repeating-radial-gradient(circle at 50% 50%,
+            transparent 0 calc(50% - 1px), rgba(240, 214, 147, 0.14) calc(50% - 1px) 50%),
+        repeating-conic-gradient(from 0deg at 50% 50%,
+            rgba(240, 214, 147, 0.026) 0deg 1.6deg, transparent 1.6deg 12deg);
+    /* The engraving fades out before it reaches the seats. */
+    -webkit-mask-image: radial-gradient(circle, #000 0 55%, transparent 82%);
+    mask-image: radial-gradient(circle, #000 0 55%, transparent 82%);
+    transition: opacity 0.18s ease;
+}
+
+/* The ring of light cards are played into, drawn over the engraving. It is faint at rest and lights up
+   while a card is dragged (.ts-centre--drop). */
+.ts-centre::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 62%;
+    aspect-ratio: 1;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    pointer-events: none;
+    box-shadow: inset 0 0 0 1px rgba(240, 214, 147, 0.14);
+    transition: box-shadow 0.18s ease;
+}
+
+/* A card is being dragged. */
+.ts-centre--drop::after {
+    box-shadow:
+        inset 0 0 0 2px var(--gilt),
+        inset 0 0 34px -6px var(--gold-glow),
+        0 0 40px -8px var(--gold-glow);
+}
+
+/* The trump indicator: a brass-ringed disc with the trump suit symbol at the exact centre of the stage for
+   the whole game. It is the only place the trump is shown. The rules use the turned-up card only for its
+   suit, so the table shows only the suit. The played cards are placed around it, so its size limits how
+   close together they are.
+
+   It is centred with `inset: 0; margin: auto` instead of a translate, which leaves the transform properties
+   free for the intro animation. A scale animation on top of a centring `transform` moves the element off
+   centre, because the scale also multiplies the centring offset. */
+.ts-trumpmark {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.6rem;
+    height: 2.6rem;
+    font-size: 1.3rem;
+    line-height: 1;
+}
+
+/* The disc behind the symbol, on its own layer so the intro can fade it in with opacity only. Its brass
+   ring is a box-shadow stack, which would be repainted on every frame if animated. The negative z-index
+   puts it behind the symbol and in front of the felt engraving. */
+.ts-trumpmark::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 32%, #1d453a 0%, #0b201a 72%, #061310 100%);
+    box-shadow:
+        0 0 0 2px var(--gilt-deep),
+        inset 0 1px 0 rgba(240, 214, 147, 0.28),
+        inset 0 -3px 8px rgba(0, 0, 0, 0.6),
+        0 3px 8px rgba(0, 0, 0, 0.55);
+}
+
+.ts-trumpmark--red   { color: #e05a4a; }
+.ts-trumpmark--black { color: var(--gilt-light); }
+
+/* A ring that pulses once per trump play, in time with the played card's foil flash. Table.razor keys the
+   element on the played card, so it is created again for each trump play, and it uses the same
+   --ts-foil-delay as the card's flash. The `both` fill mode keeps the transparent last frame after the
+   pulse ends. */
+.ts-trumpmark__pulse {
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    pointer-events: none;
+    box-shadow: 0 0 0 2px #ffe27a, 0 0 22px 4px rgba(255, 226, 122, 0.65);
+    animation: ts-trump-pulse 620ms ease-out var(--ts-foil-delay, 0ms) both;
+}
+
+@keyframes ts-trump-pulse {
+    0%   { transform: scale(0.8); opacity: 0; }
+    30%  { opacity: 1; }
+    100% { transform: scale(1.7); opacity: 0; }
+}
+
+/* The word shown above the disc during the trump intro. The page renders it only while the intro runs. */
+.ts-trumpintro {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 50%;
+    z-index: 2;
+    margin-bottom: 1.6rem;
+    pointer-events: none;
+    text-align: center;
+    font-size: 0.72rem;
+    letter-spacing: 0.34em;
+    /* letter-spacing adds space after the last letter too, so the same text-indent keeps the word centred. */
+    text-indent: 0.34em;
+    animation: ts-trump-word var(--ts-trump-intro, 1500ms) ease both;
+}
+
+/* ---------------------------------------------------------------------------
+   The turn banner. One line, shown only while the viewer must play a card. The other seats show their turn
+   with the lit plaque instead. It is between the centre stage and the viewer's seat.
+   --------------------------------------------------------------------------- */
+/* The banner's row keeps its height whether or not the banner is shown. The plaque, the hand and the centre
+   stage are laid out below or around it, so a row that appeared and disappeared would move all of them. */
+.ts-turnslot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 1.7rem;
+}
+
+.ts-turn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 0.22rem 1.1rem;
+    border-radius: var(--r-strip);
+    font-size: 0.8rem;
+    letter-spacing: 0.2em;
+    text-indent: 0.2em;
+    /* The .strip box-shadow values, followed by the banner's glow. */
+    box-shadow:
+        var(--shadow-brass-ring),
+        var(--shadow-brass-lit),
+        0 0 22px -6px var(--gold-glow);
+    animation: mp-pop-in 0.3s var(--ease-spring) both;
+}
+
+/* The decorative fleurons at both ends of the banner. */
+.ts-turn::before,
+.ts-turn::after {
+    content: "\2726";
+    font-size: 0.6rem;
+    line-height: 1;
+    color: var(--gilt);
+    opacity: 0.75;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ts-turn { animation: none; }
+}
+
+/* The slot sets a played card's position and its movement when the trick is taken. No other rule sets the
+   slot's transform, so the arrival animation runs on the child elements. */
+.ts-slot {
+    position: absolute;
+    /* How far the played cards sit from the centre, per axis. The slot positions and the sweep toward the
+       winner both use these values, so a screen that needs a tighter layout overrides only these two. */
+    --ts-slot-spread-v: 5.7rem;
+    --ts-slot-spread-h: 4.5rem;
+    --ts-slot-x: 0rem;
+    --ts-slot-y: 0rem;
+    /* How long a played card takes to turn face-up. The flip animation and the foil flash delay both use
+       it. Table.razor has the same duration in milliseconds for the pulse and label delays, so keep the
+       two in sync. */
+    --ts-flip: 0.44s;
+    left: 50%;
+    top: 50%;
+    z-index: 2;
+    transform: translate(-50%, -50%);
+    /* The card moves fast at first and slows as it lands. The fade starts only when the card is nearly at
+       the winner's seat, so the player sees where the trick went. */
+    transition: transform 0.52s cubic-bezier(0.25, 0.85, 0.4, 1), opacity 0.2s ease 0.34s;
+}
+
+/* The four played cards form a diamond around the trump indicator, each placed toward the seat that played
+   it. They are close enough to read as one trick and far enough apart to never cover the indicator.
+
+   The offsets are fixed lengths, not percentages of the stage, because the indicator has a fixed size and a
+   percentage would let the cards cover it on a screen with a short middle band. The diamond is taller than
+   it is wide, because the side cards must fit between the side seats. */
+.ts-slot--north { --ts-slot-y: calc(var(--ts-slot-spread-v) * -1); top:  calc(50% + var(--ts-slot-y)); }
+.ts-slot--south { --ts-slot-y: var(--ts-slot-spread-v);            top:  calc(50% + var(--ts-slot-y)); }
+.ts-slot--west  { --ts-slot-x: calc(var(--ts-slot-spread-h) * -1); left: calc(50% + var(--ts-slot-x)); }
+.ts-slot--east  { --ts-slot-x: var(--ts-slot-spread-h);            left: calc(50% + var(--ts-slot-x)); }
+
+/* Arrival: the card flies in from the seat that played it. The distance is one card size in the seat's
+   direction. The animation is on this child element, so the slot's transform stays free for the sweep. */
+.ts-slot__deal {
+    perspective: 900px;
+    animation: ts-card-deal 0.42s cubic-bezier(0.2, 0.75, 0.3, 1) backwards;
+}
+
+.ts-slot--north .ts-slot__deal { --ts-deal-x: 0;     --ts-deal-y: -240%; }
+.ts-slot--south .ts-slot__deal { --ts-deal-x: 0;     --ts-deal-y: 240%;  }
+.ts-slot--west  .ts-slot__deal { --ts-deal-x: -260%; --ts-deal-y: 0;     }
+.ts-slot--east  .ts-slot__deal { --ts-deal-x: 260%;  --ts-deal-y: 0;     }
+
+@keyframes ts-card-deal {
+    from {
+        transform: translate(var(--ts-deal-x, 0), var(--ts-deal-y, 0)) scale(0.86);
+        opacity: 0;
+    }
+    to {
+        transform: none;
+        opacity: 1;
+    }
+}
+
+/* Turning face-up. An opponent's card leaves the hand face-down and turns over as it lands. The card is
+   two elements, a face and a back rotated half a turn, and each hides itself while it faces away. The
+   viewer's own card is already face-up and does not turn. */
+/* Each played card lands at a small angle that depends on the seat, so the trick does not look like four
+   perfectly aligned rectangles.
+
+   The angle uses the `rotate` property instead of `transform`, so it combines with the flip and with the
+   slot's sweep transform without either of them repeating it. */
+.ts-slot__flip {
+    position: relative;
+    transform-style: preserve-3d;
+}
+
+.ts-slot--north .ts-slot__flip { rotate: -3.5deg; }
+.ts-slot--south .ts-slot__flip { rotate:  2.5deg; }
+.ts-slot--west  .ts-slot__flip { rotate:  4deg;   }
+.ts-slot--east  .ts-slot__flip { rotate: -3deg;   }
+
+.ts-slot__flip--turning {
+    animation: ts-card-flip var(--ts-flip, 0.44s) cubic-bezier(0.35, 0.05, 0.2, 1) both;
+}
+
+/* On a card that turns face-up, the foil flash waits for the flip to finish. The viewer's own card does not
+   turn, so its slot does not get this class and its flash has no delay. */
+.ts-slot--turning {
+    --ts-foil-delay: var(--ts-flip);
+}
+
+/* Each side is hidden while it faces away from the viewer. Both must be direct children of the rotating
+   element: a wrapper around either would flatten their shared 3D space and leave the back visible. */
+.ts-slot__face,
+.ts-slot__back {
+    backface-visibility: hidden;
+}
+
+/* The back is positioned absolutely, so it and the face take up the space of one card. The compound
+   selector is needed because `.ts-card` also sets `position`, has the same specificity as a plain
+   `.ts-slot__back`, and comes later in the file. */
+.ts-card.ts-slot__back {
+    position: absolute;
+    left: 0;
+    top: 0;
+    transform: rotateY(180deg);
+}
+
+@keyframes ts-card-flip {
+    from { transform: rotateY(180deg); }
+    to   { transform: rotateY(0deg); }
+}
+
+/* Trick resolution: the winning card is highlighted, then all four cards fly to the winner's plaque and the
+   centre clears, all within the pause the host holds after the trick. */
+.ts-slot--winner {
+    z-index: 3;
+}
+
+/* A trump card with its label shown is raised to the winner's z-index, so a neighbouring card does not cover
+   the label. */
+.ts-slot--trump {
+    z-index: 3;
+}
+
+/* The winning card gets a ring and a strong glow, so the player can see who took the trick without
+   comparing the ranks. */
+.ts-slot--winner .ts-card--face {
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.6),
+        0 0 0 2px var(--gold),
+        0 0 30px 2px rgba(245, 197, 66, 0.65),
+        0 0 70px 16px rgba(245, 197, 66, 0.28),
+        var(--ts-card-shadow);
+}
+
+/* Taken: the four cards move to the seat that won them, turning and shrinking, and fade only while moving.
+
+   `--ts-sweep-x/y` is the same destination for all four cards: the winner's corner of the table. Each card
+   subtracts its own position from it, so the cards take different paths and arrive together. A shared
+   direction would instead slide the whole diamond sideways. */
+.ts-slot--sweeping {
+    transform:
+        translate(calc(-50% + var(--ts-sweep-x, 0rem) - var(--ts-slot-x)),
+                  calc(-50% + var(--ts-sweep-y, 0rem) - var(--ts-slot-y)))
+        rotate(var(--ts-sweep-rot, 0deg))
+        scale(0.4);
+    opacity: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   Cards. Faces are drawn only for the viewer's hand, the current trick and the trump card. The other seats'
+   cards are backs, as many as the model says.
+   --------------------------------------------------------------------------- */
+/* Every card size is set by one value, --ts-card-w, and everything on the card is sized relative to it, so
+   a card keeps its proportions at every size. */
+/* The shadow is also sized relative to the card width. It has two layers: a dark contact shadow right under
+   the card and a softer shadow below it. Every state that replaces `box-shadow` must include
+   --ts-card-shadow again, or the card looks like it floats above the felt. */
+.ts-card {
+    position: relative;
+    --ts-card-shadow:
+        0 calc(var(--ts-card-w, 2.5rem) * 0.025) calc(var(--ts-card-w, 2.5rem) * 0.055) rgba(0, 0, 0, 0.5),
+        0 calc(var(--ts-card-w, 2.5rem) * 0.10)  calc(var(--ts-card-w, 2.5rem) * 0.26)  rgba(0, 0, 0, 0.6);
+    width: var(--ts-card-w, 2.5rem);
+    height: calc(var(--ts-card-w, 2.5rem) * 1.4);
+    border-radius: calc(var(--ts-card-w, 2.5rem) * 0.09);
+    line-height: 1;
+    font-family: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+    font-weight: 700;
+    box-shadow: var(--ts-card-shadow);
+}
+
+/* Aged paper: warm in the middle, darker toward the edges, with a grain texture. The inner rim is the
+   card's white cut edge. */
+.ts-card--face {
+    background:
+        repeating-linear-gradient(112deg, rgba(120, 96, 50, 0.035) 0 2px, transparent 2px 5px),
+        radial-gradient(ellipse 100% 90% at 50% 38%, #fbf6ea 0%, var(--card-face) 52%, var(--card-face-2) 100%);
+    border: 1px solid rgba(60, 45, 20, 0.35);
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.55),
+        var(--ts-card-shadow);
+}
+
+.ts-card--red   { color: var(--card-red); }
+.ts-card--black { color: var(--card-ink); }
+
+/* The corner index: rank over suit, in the top-left corner and rotated in the bottom-right corner, so the
+   card reads from either end. */
+.ts-card__index {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 0.92;
+}
+
+.ts-card__index--tl {
+    left: calc(var(--ts-card-w, 2.5rem) * 0.07);
+    top:  calc(var(--ts-card-w, 2.5rem) * 0.05);
+}
+
+.ts-card__index--br {
+    right:  calc(var(--ts-card-w, 2.5rem) * 0.07);
+    bottom: calc(var(--ts-card-w, 2.5rem) * 0.05);
+    transform: rotate(180deg);
+}
+
+.ts-card__rank { font-size: calc(var(--ts-card-w, 2.5rem) * 0.34); }
+.ts-card__pip  { font-size: calc(var(--ts-card-w, 2.5rem) * 0.26); }
+
+/* The middle of the card: a large pale suit symbol, or a framed panel on a court card. Hidden at small sizes,
+   where only the corner index fits. */
+.ts-card__centre {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ts-card__centrepip {
+    font-size: calc(var(--ts-card-w, 2.5rem) * 0.46);
+    line-height: 1;
+}
+
+/* A court card's gilt frame around the suit symbol. It tells a court card from a number card at a distance. */
+.ts-card--court .ts-card__centre {
+    width:  calc(var(--ts-card-w, 2.5rem) * 0.66);
+    height: calc(var(--ts-card-w, 2.5rem) * 0.66);
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(201, 169, 97, 0.16) 0%, transparent 72%);
+    box-shadow: inset 0 0 0 1px rgba(125, 97, 40, 0.5);
+}
+
+/* The card back: a gilt border, a lattice and a central rosette, in the table's green and gold. */
+.ts-card--back {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+        repeating-linear-gradient(45deg,  rgba(240, 214, 147, 0.10) 0 1px, transparent 1px 5px),
+        repeating-linear-gradient(-45deg, rgba(240, 214, 147, 0.10) 0 1px, transparent 1px 5px),
+        radial-gradient(ellipse 90% 80% at 50% 35%, var(--card-back) 0%, var(--card-back-2) 100%);
+    border: 1px solid var(--gilt-deep);
+    box-shadow:
+        inset 0 0 0 1px rgba(240, 214, 147, 0.22),
+        var(--ts-card-shadow);
+}
+
+.ts-card__backmark {
+    width:  calc(var(--ts-card-w, 2.5rem) * 0.34);
+    height: calc(var(--ts-card-w, 2.5rem) * 0.34);
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(240, 214, 147, 0.30) 0%, transparent 70%);
+    box-shadow: 0 0 0 1px rgba(240, 214, 147, 0.28);
+}
+
+/* The holographic foil on a played trump. It is blended over the paper, so the index and the suit stay
+   readable. `border-radius: inherit` keeps it inside the card's corners, and it takes no pointer input. */
+.ts-card__foil {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    overflow: hidden;
+    pointer-events: none;
+    mix-blend-mode: overlay;
+    opacity: 0.55;
+    background: conic-gradient(from 210deg at 30% 20%, #ffd86b, #ff8fb1, #8fd3ff, #b8ffb0, #ffe27a, #ffd86b);
+}
+
+/* A light band moving across the foil while the card lies on the table. It animates only translate, so the
+   loop is composited. The parent's `overflow: hidden` clips the oversized gradient. */
+.ts-card__sheen {
+    position: absolute;
+    inset: -40% -60%;
+    background: linear-gradient(105deg, transparent 40%, rgba(255, 255, 255, 0.75) 50%, transparent 60%);
+    animation: ts-foil-sheen 2.6s linear infinite;
+}
+
+@keyframes ts-foil-sheen {
+    from { transform: translateX(-45%); }
+    to   { transform: translateX(45%); }
+}
+
+/* The foil card's white inner rim, gilt edge and gold glow, combined with --ts-card-shadow. */
+.ts-card--foil {
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.6),
+        0 0 0 1.5px #ffe27a,
+        0 0 18px -2px rgba(255, 226, 122, 0.7),
+        var(--ts-card-shadow);
+}
+
+/* On the centre stage the foil flashes as the card lands: from nothing to full strength, then down to the
+   idle level. The `both` fill mode keeps the first keyframe during the delay, so a card that is still
+   turning over shows no foil on its back. The sheen runs its own loop on the inner span. */
+.ts-slot .ts-card__foil {
+    animation: ts-foil-flash 520ms ease-out var(--ts-foil-delay, 0ms) both;
+}
+
+@keyframes ts-foil-flash {
+    0%   { opacity: 0; }
+    35%  { opacity: 1; }
+    100% { opacity: 0.55; }
+}
+
+/* The trick and the viewer's hand are the cards the player reads and plays, so they are as large as the
+   screen allows. The other elements on the table are sized around them. */
+.ts-card--trick { --ts-card-w: 4rem; }
+.ts-card--hand  { --ts-card-w: 4.75rem; }
+
+/* An opponent's card: always a back, and the largest size at which a full fan still leaves room for the
+   centre stage. The gilt edge is thinner, because a full-width edge is too heavy on a card this small. */
+.ts-card--seat  { --ts-card-w: 2.6rem; }
+
+.ts-card--seat.ts-card--back {
+    border-color: rgba(125, 97, 40, 0.62);
+    box-shadow: inset 0 0 0 1px rgba(240, 214, 147, 0.12), var(--ts-card-shadow);
+}
+
+/* At this size only the corner index fits, and it is the part that identifies the card. */
+.ts-card--seat .ts-card__centre { display: none; }
+
+/* ---------------------------------------------------------------------------
+   The opening animation. The felt appears, the four seats appear in play order, the cards are dealt one at
+   a time from the centre around the table, and the trump is shown over the deal. It runs only when this
+   client saw the game from its start. A page reloaded during a game shows the current state without it.
+
+   These animations use only the `translate`, `rotate`, `scale` and `opacity` properties, never `transform`.
+   Those properties combine with an element's existing transform, such as a card's place in the fan, the
+   scale of a plaque on turn, or the trump indicator's centring, so nothing jumps when an animation ends.
+   --------------------------------------------------------------------------- */
+
+/* The felt appears first. */
+.ts-table--dealing .ts-centre::before {
+    animation: ts-felt-in 0.42s cubic-bezier(0.2, 0.75, 0.3, 1) both;
+}
+
+@keyframes ts-felt-in {
+    from { opacity: 0; scale: 0.86; }
+    to   { opacity: 1; scale: 1; }
+}
+
+/* The seats appear in the order the deal reaches them. */
+.ts-table--dealing .ts-plaque {
+    animation: ts-seat-in 0.4s var(--ease-spring) var(--ts-seat-delay, 0s) backwards;
+}
+
+@keyframes ts-seat-in {
+    from { opacity: 0; scale: 0.78; translate: 0 0.7rem; }
+    to   { opacity: 1; scale: 1;    translate: 0 0; }
+}
+
+/* The deal. Each card flies from the centre of the table, turning, and lands in its fan.
+
+   The animation is on the card inside the fan slot, not on the slot, because the slot holds the card's place
+   in the arc for the whole game. One direction works for every seat: each fan is rotated to face its player,
+   so "up out of the fan" points at the centre from every seat. */
+.ts-table--dealing .ts-handcard,
+.ts-table--dealing .ts-seathand__card {
+    perspective: 800px;
+}
+
+.ts-table--dealing .ts-handcard .ts-card,
+.ts-table--dealing .ts-seathand__card .ts-card {
+    animation: ts-deal-in 0.46s cubic-bezier(0.2, 0.7, 0.3, 1) var(--ts-deal-delay, 0s) backwards;
+}
+
+.ts-table--dealing .ts-handcard .ts-card { --ts-deck-distance: -12rem; }
+
+@keyframes ts-deal-in {
+    from {
+        opacity: 0;
+        translate: 0 var(--ts-deck-distance, -7rem);
+        rotate: y -78deg;
+        scale: 0.55;
+    }
+    35% { opacity: 1; }
+    to {
+        opacity: 1;
+        translate: 0 0;
+        rotate: y 0deg;
+        scale: 1;
+    }
+}
+
+/* The trump intro runs during the deal. The word appears on the felt, the suit symbol flies in under it and
+   settles at the centre, the word fades, and the disc appears under the symbol. It ends with the deal, and
+   the player can play a card while it runs.
+
+   Its duration comes from Table.razor as `--ts-trump-intro`, so the animations end on the same frame that
+   Table.razor stops rendering the word. */
+@keyframes ts-trump-word {
+    0%   { opacity: 0; translate: 0 0.45rem; }
+    14%  { opacity: 1; translate: 0 0; }
+    44%  { opacity: 1; translate: 0 0; }
+    68%  { opacity: 0; translate: 0 -0.7rem; }
+    100% { opacity: 0; translate: 0 -0.7rem; }
+}
+
+/* The suit symbol appears large under the word and shrinks into place as the word fades. The scale does not
+   change until the symbol has faded in, so the movement happens while it is visible. */
+.ts-table--dealing .ts-trumpmark {
+    animation: ts-trump-settle var(--ts-trump-intro, 1500ms) cubic-bezier(0.32, 0.06, 0.18, 1) both;
+}
+
+@keyframes ts-trump-settle {
+    0%   { opacity: 0; scale: var(--ts-trump-lift, 3); translate: 0 -0.5rem; }
+    26%  { opacity: 0; scale: var(--ts-trump-lift, 3); translate: 0 -0.5rem; }
+    44%  { opacity: 1; scale: calc(var(--ts-trump-lift, 3) * 0.9); translate: 0 -0.42rem; }
+    86%  { opacity: 1; scale: 1; translate: 0 0; }
+    100% { opacity: 1; scale: 1; translate: 0 0; }
+}
+
+/* The disc appears last, after the symbol has settled. */
+.ts-table--dealing .ts-trumpmark::before {
+    animation: ts-trump-ring var(--ts-trump-intro, 1500ms) ease both;
+}
+
+@keyframes ts-trump-ring {
+    0%   { opacity: 0; }
+    60%  { opacity: 0; }
+    88%  { opacity: 1; }
+    100% { opacity: 1; }
+}
+
+/* ---------------------------------------------------------------------------
+   Opponent hands. Each opponent seat shows a face-down fan of its remaining cards, rotated to face that
+   seat. The card count comes from the model. The client does not know the faces.
+
+   The fan is the viewer's arc, rotated: upside down for North and a quarter turn for the side seats, so the
+   card tops point toward the table. The box is sized here, because rotation does not change the space an
+   element takes in the layout.
+   --------------------------------------------------------------------------- */
+.ts-seathand {
+    position: relative;
+    flex: 0 0 auto;
+    pointer-events: none;
+}
+
+.ts-seathand--north { width: 100%;   height: 4.7rem; }
+.ts-seathand--west,
+.ts-seathand--east  { width: 4.7rem; height: 8.6rem; }
+
+.ts-seathand__arc {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    display: flex;
+    /* The translate and the rotation together centre the fan in its box for any rotation. */
+    transform: translate(-50%, -50%) rotate(var(--ts-fan-rot, 0deg));
+}
+
+.ts-seathand--north .ts-seathand__arc { --ts-fan-rot: 180deg; }
+.ts-seathand--west  .ts-seathand__arc { --ts-fan-rot: 90deg;  }
+.ts-seathand--east  .ts-seathand__arc { --ts-fan-rot: -90deg; }
+
+/* Each card's tilt and vertical offset in the fan, set on the element by CardArcStyle. */
+.ts-seathand__card {
+    --ts-arc-depth: 0.6rem;
+    transform: translateY(calc(var(--ts-arc-lift, 0) * var(--ts-arc-depth) * -1)) rotate(var(--ts-arc-rot, 0deg));
+    transition: transform 0.28s var(--ease-spring);
+}
+
+/* The cards overlap like a held hand. */
+.ts-seathand__card + .ts-seathand__card {
+    margin-left: -1.3rem;
+}
+
+/* ---------------------------------------------------------------------------
+   The medallion (docs/meta-shell.md, "Styles and design tokens")
+   The shared disc for every portrait and feature plaque: the seat portrait, the meta emblem, the avatar disc
+   and the profile plate. It draws a two-stop radial disc (green by default), a gilt ring over a dark
+   counter-ring, a rim highlight and shade, a drop shadow, and a light spot across the top (::after). Users
+   of the class change it only through the --med-* properties. The medallion creates its own stacking
+   context and the light has a negative z-index, so the element's content, such as a frame or a symbol, is
+   drawn above the light.
+   --------------------------------------------------------------------------- */
+.medallion {
+    position: relative;
+    isolation: isolate;
+    border-radius: var(--r-pill);
+    background: radial-gradient(circle at 50% 26%, var(--med-hi, var(--surface-lift)) 0%, var(--med-lo, var(--surface-deep)) 74%);
+    box-shadow:
+        var(--med-ring, 0 0 0 2px var(--gilt)),
+        var(--med-counter, 0 0 0 3px rgba(0, 0, 0, 0.6)),
+        var(--med-struck, inset 0 1px 0 rgba(240, 214, 147, 0.35)),
+        var(--med-shade, inset 0 -4px 10px rgba(0, 0, 0, 0.6)),
+        var(--med-halo, 0 4px 12px -2px rgba(0, 0, 0, 0.7));
+}
+
+/* The light spot: a circle the size of the medallion, shifted up and clipped by the rim, so the highlight
+   follows the disc's shape. */
+.medallion::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: radial-gradient(circle at 50% 6%,
+        rgba(255, 255, 255, 0.28) 0%,
+        rgba(255, 255, 255, 0.10) 40%,
+        transparent 66%);
+    pointer-events: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Seat plaques: name, bot mark, tricks won, cards left, and whose turn it is.
+   --------------------------------------------------------------------------- */
+/* A seat is a portrait medallion with a nameplate under it. The plaque has no box of its own. Each part has
+   its own edges. */
+.ts-plaque {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.18rem;
+    min-width: 0;
+    max-width: 9rem;
+    font-size: 0.66rem;
+    color: var(--text-secondary);
+    transition: box-shadow 0.2s ease, transform 0.22s var(--ease-spring);
+}
+
+/* The portrait: the shell's avatar (meta-shell.css, .m-avatar) on the medallion, with a richer green disc than the
+   default. It shows the player's equipped avatar and frame, the same as in the standings
+   (docs/cosmetics.md). .m-avatar sets the frame's ring on --med-ring, and the on-turn states below do not
+   change it. The table sets the disc, the size and the on-turn light. */
+.ts-plaque__avatar {
+    --ts-plaque-avatar: 3.2rem;
+    --med-hi: #22423a;
+    --med-lo: #071411;
+    transition: box-shadow 0.2s ease;
+}
+
+/* The nameplate: one dark brass strip with the name and the score. */
+.ts-plaque__nameplate {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.34rem;
+    max-width: 100%;
+    padding: 0.16rem 0.55rem;
+    border-radius: var(--r-strip);
+    font-size: 0.74rem;
+    /* Capitals through small caps instead of `text-transform`. A player name is data, and small caps change only
+   how the letters are drawn, while `text-transform` also changes the text that is copied or read back. */
+    text-transform: none;
+    font-variant-caps: all-small-caps;
+    /* The .strip box-shadow values, followed by the plate's drop shadow. */
+    box-shadow:
+        var(--shadow-brass-ring),
+        var(--shadow-brass-lit),
+        0 2px 5px rgba(0, 0, 0, 0.5);
+}
+
+/* The score at the right end of the plate: tricks won in this game. The divider separates it from the name. */
+.ts-plaque__score {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: baseline;
+    padding-left: 0.34rem;
+    border-left: 1px solid rgba(201, 169, 97, 0.35);
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--gilt-light);
+}
+
+.ts-plaque__of {
+    color: var(--gilt-deep);
+}
+
+/* On turn: the whole plaque is scaled up and lit. */
+.ts-plaque--on-turn {
+    transform: scale(1.05);
+}
+
+/* The on-turn states change the counter-ring, not the ring, because .m-avatar puts the equipped frame's glow
+   on --med-ring and the frame must stay visible during the player's turn. */
+.ts-plaque--on-turn .ts-plaque__avatar {
+    --med-counter: 0 0 0 2px var(--gilt-light), 0 0 0 5px rgba(240, 214, 147, 0.22);
+    --med-struck: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    --med-shade: inset 0 -4px 10px rgba(0, 0, 0, 0.5);
+    --med-halo: 0 0 26px 2px var(--gold-glow);
+}
+
+.ts-plaque--on-turn .ts-plaque__nameplate {
+    box-shadow: 0 0 0 1px var(--gilt), 0 0 16px -6px var(--gold-glow);
+}
+
+/* The winner's plaque scales up as the four trick cards arrive at it. */
+.ts-plaque--taking-trick {
+    transform: scale(1.12);
+}
+
+.ts-plaque--taking-trick .ts-plaque__avatar {
+    --med-counter: 0 0 0 2px var(--gilt-light);
+    --med-struck: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    /* No under-rim shade, because the disc is lit from the front. */
+    --med-shade: inset 0 -4px 10px transparent;
+    --med-halo: 0 0 34px -2px var(--gold-glow);
+}
+
+.ts-plaque--taking-trick .ts-plaque__nameplate {
+    box-shadow: 0 0 0 1px var(--gilt-light), 0 0 22px -4px var(--gold-glow);
+}
+
+/* On the side seats the plaque and a played card compete for the same space, because the west and east
+   trick cards are at the same height as the side seats. The name is shortened first. The full name remains
+   available through the `title` attribute and the accessible name. */
+.ts-plaque--west,
+.ts-plaque--east {
+    max-width: 5.3rem;
+}
+
+/* Smaller text fits more of the side seats' names in the same width. */
+.ts-plaque--west .ts-plaque__nameplate,
+.ts-plaque--east .ts-plaque__nameplate {
+    padding: 0.14rem 0.36rem;
+    font-size: 0.62rem;
+}
+
+.ts-plaque--west .ts-plaque__name,
+.ts-plaque--east .ts-plaque__name {
+    max-width: 3.6rem;
+}
+
+.ts-plaque__name {
+    max-width: 6.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ts-plaque__you {
+    flex: 0 0 auto;
+    font-size: 0.5rem;
+    letter-spacing: 0.12em;
+    color: var(--gilt-deep);
+}
+
+/* The turn deadline ring is drawn around the portrait, because players look at the portrait to see whose
+   turn it is. */
+.ts-plaque__ring {
+    position: absolute;
+    top: -0.35rem;
+    right: -0.35rem;
+    width: 1.7rem;
+    height: 1.7rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Floating text. A short label that appears over the element that renders it, rises and fades, such as the
+   point label over the trick winner's plaque and the trump label over a played trump.
+   --------------------------------------------------------------------------- */
+/* The label is positioned absolutely against the nearest positioned ancestor, which is the element the
+   caller renders it inside, such as a plaque or a card slot. It takes no pointer input, stays on one line,
+   and has a z-index above the table's slots, hands and centre stage, so the cards do not cover it. The
+   caller's `--ts-float-stack` offsets a second label on the same anchor above the first. */
+.ts-float {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    z-index: 6;
+    transform: translate(-50%, calc(-100% - var(--ts-float-stack, 0rem)));
+    pointer-events: none;
+    white-space: nowrap;
+    font-family: var(--font-display);
+}
+
+/* The rise animation is on the inner span, so the outer element's translate keeps the anchor position. The
+   `both` fill mode keeps the label on its first keyframe (hidden) during the caller's delay. Only transform
+   and opacity are animated, so the animation is composited. */
+.ts-float__text {
+    display: inline-block;
+    animation: ts-float-rise var(--ts-float-ms, 900ms) cubic-bezier(0.2, 0.9, 0.3, 1) var(--ts-float-delay, 0ms) both;
+}
+
+@keyframes ts-float-rise {
+    0%  { opacity: 0; transform: translateY(0) scale(0.6); }
+    18% { opacity: 1; transform: translateY(-0.3rem) scale(1.12); }
+    32% { transform: translateY(-0.6rem) scale(1); }
+    72% { opacity: 1; }
+    100% { opacity: 0; transform: translateY(-2.5rem) scale(1); }
+}
+
+/* The point label uses the score's gold and the same glow as the plaque that takes the trick. */
+.ts-float--point .ts-float__text {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--gold-light);
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.9), 0 0 12px var(--gold-glow);
+}
+
+/* The trump label: small tracked text in the pink and blue of the card's foil flash. */
+.ts-float--trump .ts-float__text {
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-indent: 0.18em;
+    text-transform: uppercase;
+    color: #fff4c2;
+    text-shadow: 0 0 8px #ff8fb1, 0 0 14px #8fd3ff, 0 1px 0 rgba(0, 0, 0, 0.9);
+}
+
+/* ---------------------------------------------------------------------------
+   The move deadline ring. Shown only as the deadline approaches, with an urgent state at the end.
+   --------------------------------------------------------------------------- */
+.ts-ring {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.ts-ring__track {
+    fill: rgba(2, 12, 9, 0.75);
+    stroke: rgba(255, 255, 255, 0.14);
+    stroke-width: 4;
+}
+
+.ts-ring__sweep {
+    fill: none;
+    stroke: var(--gold);
+    stroke-width: 4;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.12s linear, stroke 0.25s ease;
+}
+
+.ts-ring--urgent {
+    animation: ts-ring-urgent 0.9s ease-in-out infinite;
+}
+
+.ts-ring--urgent .ts-ring__sweep {
+    stroke: var(--danger);
+}
+
+@keyframes ts-ring-urgent {
+    0%, 100% { transform: rotate(-90deg) scale(1); }
+    50%      { transform: rotate(-90deg) scale(1.14); }
+}
+
+/* ---------------------------------------------------------------------------
+   The viewer's hand. On the viewer's turn, legal cards are raised, bright and clickable, and illegal cards
+   are lowered, dimmed and disabled. The doubled class selectors override the base stylesheet's
+   button:disabled opacity.
+   --------------------------------------------------------------------------- */
+/* A fixed height, not a minimum. The hand is the last row of the table's south column, so a change in its
+   height would move the plaque and the centre stage above it. Raised or lifted cards overflow the box instead
+   of growing it. The bottom padding keeps the rotated outer cards' lower corners on screen. */
+.ts-hand {
+    position: relative;
+    z-index: 6;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-top: 1.4rem;
+    padding-bottom: 2.4rem;
+    height: 10.6rem;
+}
+
+/* The cards overlap like a held hand. The overlap is a negative margin, because a gap cannot be negative. It
+   is set on the card's wrapper box, not on the card, so it does not interfere with the arc rotation. */
+.ts-handcard + .ts-handcard {
+    margin-left: -0.85rem;
+}
+
+/* The hand is an arc. Every state adds a lift and a scale to the arc through custom properties instead of
+   setting `transform`, which would put the card back in a flat row. CardArcStyle sets the arc values on the
+   element. The arc depth is larger than for the opponent fans, because the viewer's cards are larger. */
+.ts-handcard {
+    --ts-arc-depth: 0.9rem;
+    padding: 0;
+    border: 0;
+    background: none;
+    touch-action: none;
+    transform:
+        translateY(calc(var(--ts-hand-lift, 0rem) - var(--ts-arc-lift, 0) * var(--ts-arc-depth)))
+        rotate(var(--ts-hand-rot, var(--ts-arc-rot, 0deg)))
+        scale(var(--ts-hand-scale, 1));
+    transition: transform 0.18s var(--ease-spring), opacity 0.18s ease, filter 0.18s ease;
+}
+
+/* An illegal card is a disabled button, and the base stylesheet gives disabled buttons half opacity. The
+   hand restores full opacity, with a doubled class to outrank `button:disabled`, and dims the card with a
+   filter instead. */
+.ts-handcard.ts-handcard {
+    opacity: 1;
+}
+
+.ts-handcard.ts-handcard--playable {
+    --ts-hand-lift: -0.5rem;
+    filter: none;
+}
+
+/* A legal card gets a glow behind it instead of an outline, because a glow is easier to see on the dark felt.
+   It is the same glow as the seat on turn. */
+.ts-handcard.ts-handcard--playable .ts-card {
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.7),
+        0 0 0 1.5px var(--gilt-light),
+        0 0 22px 1px var(--gold-glow),
+        0 0 44px 6px rgba(245, 197, 66, 0.16),
+        var(--ts-card-shadow);
+}
+
+/* An illegal card. Cards are never transparent, because a transparent card looks like a rendering fault. An
+   illegal card is lowered and darkened instead, the opposite of a legal card. */
+.ts-handcard.ts-handcard--blocked {
+    --ts-hand-lift: 0.5rem;
+    filter: grayscale(0.5) brightness(0.66);
+    cursor: default;
+}
+
+/* Not the viewer's turn: all cards are at the same level and slightly dimmed. */
+.ts-handcard.ts-handcard--waiting {
+    filter: brightness(0.88);
+    cursor: default;
+}
+
+/* The lifted card: raised above the hand while its move waits for the server, before any game state has
+   changed. It straightens out of the arc as it rises. */
+.ts-handcard.ts-handcard--lifted {
+    --ts-hand-lift: -2.6rem;
+    --ts-hand-scale: 1.06;
+    --ts-hand-rot: 0deg;
+    z-index: 5;
+    filter: none;
+}
+
+.ts-handcard.ts-handcard--lifted .ts-card {
+    box-shadow: 0 0 0 2px var(--gold), 0 16px 28px rgba(0, 0, 0, 0.7), var(--ts-card-shadow);
+}
+
+/* A move is waiting for the server: the rest of the hand is darkened and cannot be played. It is darkened,
+   not faded, so the lifted card is the only card at full brightness. */
+.ts-hand--locked .ts-handcard:not(.ts-handcard--lifted) {
+    filter: grayscale(0.4) brightness(0.5);
+}
+
+/* A card held under the pointer. The card does not follow the pointer, because that would need a render
+   per pointer event. Instead it rises out of the fan, and the centre stage lights up as the drop target. */
+.ts-handcard.ts-handcard--grabbed {
+    --ts-hand-lift: -1.7rem;
+    --ts-hand-scale: 1.08;
+    --ts-hand-rot: 0deg;
+    z-index: 6;
+}
+
+.ts-handcard.ts-handcard--grabbed .ts-card {
+    box-shadow:
+        0 0 0 2px var(--gold),
+        0 0 24px -4px var(--gold-glow),
+        0 14px 26px rgba(0, 0, 0, 0.7),
+        var(--ts-card-shadow);
+}
+
+/* Rendered only while a card is dragged, so it can receive a release away from the card, and so no pointer
+   events are handled when no drag is running. */
+.ts-drag-surface {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    touch-action: none;
+}
+
+/* ---------------------------------------------------------------------------
+   A refused move, shown above the hand.
+   --------------------------------------------------------------------------- */
+.ts-refusal {
+    position: absolute;
+    left: 50%;
+    bottom: calc(6.6rem + var(--safe-b));
+    z-index: 30;
+    transform: translateX(-50%);
+    max-width: 18rem;
+    padding: 0.45rem 0.8rem;
+    border-radius: var(--r-panel);
+    font-size: 0.75rem;
+    text-align: center;
+    color: var(--text-primary);
+    background: rgba(120, 20, 20, 0.9);
+    border: 1px solid var(--danger);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.6);
+}
+
+/* The dark gilt secondary button: the cancel in matchmaking, the leave on the table and the close in the
+   rules. One style for all of them. The background and ring come from .strip, which the element also has.
+   The size modifiers set the padding, the radius and the font size together. */
+.ts-btn--dark {
+    border: none;
+    font-family: var(--font-display);
+    letter-spacing: 0.12em;
+    text-indent: 0.12em;
+    text-transform: uppercase;
+    color: var(--gilt-light);
+    cursor: pointer;
+    transition: transform 0.12s var(--ease-spring), box-shadow 0.15s ease, color 0.15s ease;
+}
+
+.ts-btn--dark:hover:not(:disabled),
+.ts-btn--dark:focus-visible {
+    box-shadow: 0 0 0 1px var(--gilt), inset 0 1px 0 rgba(240, 214, 147, 0.2);
+    color: #fff4d8;
+}
+
+/* On press, the button moves down and its top highlight fades, like the .btn-glossy buttons. */
+.ts-btn--dark:active:not(:disabled) {
+    transform: translateY(3px) scale(0.99);
+    box-shadow: 0 0 0 1px var(--gilt-deep), inset 0 1px 0 rgba(240, 214, 147, 0.06);
+}
+
+.ts-btn--dark--sm { padding: 0.24rem 0.7rem; border-radius: var(--r-strip); font-size: 0.6rem; }
+.ts-btn--dark--md { padding: 0.42rem 1.4rem; border-radius: var(--r-key); font-size: 0.72rem; }
+.ts-btn--dark--lg { padding: 0.5rem 1.6rem; border-radius: var(--r-pill); font-size: 0.85rem; }
+
+/* ---------------------------------------------------------------------------
+   No table: the notice shown for one frame before the player is sent back to the menu, and while a table is
+   being attached after a reload.
+   --------------------------------------------------------------------------- */
+.ts-notable {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.9rem;
+    min-height: 60%;
+}
+
+.ts-notable__text {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+/* The spinner, used by the notice above and by the matchmaking dial.
+
+   The animation changes only `transform`, so the browser runs it on the compositor without repainting, at
+   the display's refresh rate even when the main thread is busy. `will-change` creates the compositor layer
+   in advance. */
+.ts-searching__spinner {
+    width: 2.2rem;
+    height: 2.2rem;
+    border-radius: 50%;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--gilt-light);
+    will-change: transform;
+    animation: ts-searching-spin 900ms linear infinite;
+}
+
+/* Both keyframes are explicit. An implicit keyframe takes its value from the element's computed transform,
+   which would make the animation depend on that style. */
+@keyframes ts-searching-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+/* ---------------------------------------------------------------------------
+   Raised panels. Every dialog and overlay, such as the results and abandoned panels on the table, the
+   matchmaking and help dialogs and the meta sheet, is rendered by Components/Meta/ModalPanel.razor with these
+   classes: `.pnl` is the scrim, `.pnl__panel` the brass card, and the rest are the head and the actions.
+   The table and the meta layer use the same panel style.
+   --------------------------------------------------------------------------- */
+.pnl {
+    position: fixed;
+    inset: 0;
+    /* Below the connection shell, so a dialog never covers the connection state (docs/web-client.md,
+       "Connection trouble"). Both layers are defined in app-base.css. */
+    z-index: var(--layer-dialog, 65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    /* Dimmed and slightly blurred, not black, so the player still sees the screen behind the dialog. */
+    background: rgba(2, 8, 6, 0.55);
+    backdrop-filter: blur(2px);
+    /* The scrim fades in while the card pops in (ModalPanel.razor gives the card `animate-pop-in`). The fade is
+       shorter than the pop, so the scrim is at full strength before the card lands. */
+    animation: mp-fade-in var(--t-fast) ease both;
+}
+
+/* Reduced motion: the scrim appears at once. The card's entrance is also shortened, by the
+   `.animate-pop-in` reduced-motion rule in app-base.css. */
+@media (prefers-reduced-motion: reduce) {
+    .pnl {
+        animation: none;
+    }
+}
+
+/* Anchored to the bottom instead of the middle, so the centre stage stays visible behind it. The scrim is a
+   gradient that darkens toward the bottom, with no blur, so the table stays sharp behind the result. */
+.pnl--bottom {
+    align-items: flex-end;
+    padding: 1rem 1rem calc(1rem + var(--safe-b));
+    background: linear-gradient(to bottom, rgba(2, 8, 6, 0.15) 0%, rgba(2, 8, 6, 0.6) 55%);
+    backdrop-filter: none;
+}
+
+/* The panel: a dark green-black card with a brass frame. It is also a drag-scroll surface
+   (drag-scroll.js) for content taller than the panel. */
+.pnl__panel {
+    position: relative;
+    width: 100%;
+    max-width: 20rem;
+    max-height: 85%;
+    overflow-y: auto;
+    padding: 1.15rem 1.15rem 1rem;
+    border-radius: var(--r-panel);
+    text-align: center;
+    background: linear-gradient(180deg, #0e1b16 0%, #060f0c 100%);
+    box-shadow:
+        0 0 0 1px var(--gilt-deep),
+        inset 0 1px 0 rgba(240, 214, 147, 0.14),
+        0 24px 60px rgba(0, 0, 0, 0.75);
+}
+
+/* The three panel widths: the matchmaking dialog, the results panel, and the meta layer's content column.
+   In the phone frame the wide panel is limited to the frame's width. */
+.pnl__panel--narrow   { max-width: 17rem; }
+.pnl__panel--standard { max-width: 20rem; }
+.pnl__panel--wide     { max-width: 27rem; }
+
+/* The close button is positioned over the panel's corner, so the title stays centred. */
+.pnl__close {
+    position: absolute;
+    top: 0.55rem;
+    right: 0.55rem;
+}
+
+.pnl__eyebrow {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 0.58rem;
+    letter-spacing: 0.24em;
+    text-indent: 0.24em;
+    text-transform: uppercase;
+    color: var(--gilt);
+    opacity: 0.8;
+}
+
+.pnl__title {
+    margin: 0.25rem 0 0;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.45rem;
+    color: var(--gilt-light);
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.85);
+}
+
+.pnl__body {
+    margin: 0.35rem 0 0;
+    font-size: 0.76rem;
+    color: var(--text-secondary);
+}
+
+/* The scrim is a DOM child of the drag-scroll surface behind it and would otherwise inherit its grab cursor,
+   although drag-scroll.js does not let a press on the scrim scroll that surface. */
+@media (hover: hover) and (pointer: fine) {
+    .pnl {
+        cursor: default;
+    }
+}
+
+/* The actions row: one centred row, with one or two buttons. */
+.pnl__actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    margin-top: 0.9rem;
+}
+
+/* The primary button, as an anchor or a button, in the gold --grad-key with --on-gold text. */
+.pnl__key {
+    display: inline-block;
+    padding: 0.55rem 1.6rem;
+    border-radius: var(--r-key);
+    border: none;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 0.85rem;
+    letter-spacing: 0.1em;
+    text-indent: 0.1em;
+    text-transform: uppercase;
+    text-decoration: none;
+    cursor: pointer;
+    color: var(--on-gold);
+    background: var(--grad-key);
+    --glow-color: var(--gold-glow);
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+    box-shadow: 0 4px 0 rgba(0, 0, 0, 0.35),
+                0 8px 24px -6px var(--glow-color),
+                inset 0 1px 0 rgba(255, 255, 255, 0.30);
+    transition: filter 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Hover and keyboard focus brighten the button and strengthen its top highlight, like .ts-btn--dark. The
+   press effect comes from .btn-glossy, because the global button:active rule does not apply to anchors. */
+.pnl__key:hover,
+.pnl__key:focus-visible {
+    filter: brightness(1.06);
+    box-shadow: 0 4px 0 rgba(0, 0, 0, 0.35),
+                0 8px 24px -6px var(--glow-color),
+                inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+/* ---------------------------------------------------------------------------
+   The matchmaking dialog's own parts: the dial, the detail line and the cancel button. The panel, head and
+   actions use the raised panel classes above.
+   --------------------------------------------------------------------------- */
+/* The dial: the spinner with the countdown inside it. The grid centres the number, so the number does not
+   rotate with the spinner. */
+.ts-mm__dial {
+    display: grid;
+    place-items: center;
+    width: 5rem;
+    height: 5rem;
+    margin: 1rem auto 0.9rem;
+}
+
+.ts-mm__dial > * {
+    grid-area: 1 / 1;
+}
+
+.ts-mm__spinner {
+    width: 5rem;
+    height: 5rem;
+    border-radius: 50%;
+    border: 3px solid rgba(125, 97, 40, 0.35);
+    border-top-color: var(--gilt-light);
+    will-change: transform;
+    animation: ts-searching-spin 1.1s linear infinite;
+}
+
+.ts-mm__seconds {
+    font-family: var(--font-display);
+    font-size: 1.8rem;
+    line-height: 1;
+    color: var(--gilt-light);
+    font-variant-numeric: tabular-nums;
+}
+
+.ts-mm__detail {
+    margin: 0;
+    min-height: 2.4rem;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+}
+
+/* Cancel uses the secondary style, because leaving the queue is not the main action. After the seat is
+   committed, the button stays in place, disabled and dimmed by the base stylesheet's button:disabled rule. */
+.ts-mm__cancel {
+    margin-top: 0.9rem;
+}
+
+/* ---------------------------------------------------------------------------
+   The standings row (docs/meta-shell.md, "Styles and design tokens")
+   The row style for a rank, a name and a score, used by the results overlay list and the leaderboard
+   (Standings.razor): a faint fill and a brass inset ring. .stand-row--gilt is the first-place row. Each
+   board sets its own layout: the overlay's rows are flex list items, and the leaderboard's are grid rows.
+   A board's own state tint must go in background-color, so the first-place background-image stays on top
+   of it.
+   --------------------------------------------------------------------------- */
+.stand-row {
+    background-color: rgba(255, 255, 255, 0.035);
+    box-shadow: inset 0 0 0 1px rgba(125, 97, 40, 0.35);
+    border-radius: var(--r-strip);
+}
+
+/* First place: a brass gradient background, a full gilt ring and gilt text. */
+.stand-row--gilt {
+    color: var(--gilt-light);
+    background-image: linear-gradient(180deg, rgba(201, 169, 97, 0.14) 0%, rgba(201, 169, 97, 0.05) 100%);
+    box-shadow: inset 0 0 0 1px var(--gilt);
+}
+
+.ts-standings {
+    display: flex;
+    flex-direction: column;
+    gap: 0.28rem;
+    margin: 0.85rem 0 0.55rem;
+    padding: 0;
+    list-style: none;
+    /* The list sets the default text colour, so a row's own colour, such as the first-place gilt, overrides it
+       through inheritance regardless of source order. */
+    color: var(--text-secondary);
+}
+
+/* The overlay's rows lay out .stand-row as list items. */
+.ts-standings__row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.55rem;
+    font-size: 0.8rem;
+}
+
+/* The viewer's own row gets gilt text. The colour is set on the row, not on the name, because a name effect
+   cosmetic sets its own colour (docs/cosmetics.md) and would be overwritten. A plain name inherits the gilt,
+   and a name effect overrides it. */
+.ts-standings__row--viewer {
+    color: var(--gilt-light);
+}
+
+.ts-standings__row--viewer .ts-standings__name {
+    font-weight: 600;
+}
+
+.ts-standings__rank {
+    width: 1.1rem;
+    text-align: center;
+    font-weight: 700;
+    color: var(--text-muted);
+}
+
+/* The portrait on a results row: the shell's avatar at the row's size, on the same green disc as the seat
+   plaques. */
+.ts-standings .m-avatar {
+    --med-hi: #22423a;
+    --med-lo: #071411;
+}
+
+.ts-standings__name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ts-standings__tricks {
+    flex: 0 0 auto;
+    color: var(--text-muted);
+}
+
+/* ---------------------------------------------------------------------------
+   The results celebration. The headline uses CascadeTitle.razor: gold letters for a win, and the winner's
+   name in deep gilt for a loss. The confetti is shown only for a win. ConfettiPlan computes every piece in
+   C#. The confetti is on the --layer-fx layer (app-base.css), above the dialog layer.
+   --------------------------------------------------------------------------- */
+.ft-results__cascade {
+    font-size: clamp(1.9rem, 9cqw, 2.6rem);
+    line-height: 1.1;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+/* A win: the panel's ring becomes gilt and gets the gold glow. A loss keeps the normal panel. */
+.ft-results--won {
+    box-shadow: 0 0 0 1px var(--gilt-light),
+                inset 0 1px 0 rgba(240, 214, 147, 0.3),
+                0 0 48px -8px var(--gold-glow),
+                var(--shadow-panel);
+}
+
+.ft-results--lost .ft-results__cascade { color: var(--gilt-deep); }
+
+/* The confetti layer: fixed like the panel and ignoring pointer input. Each piece's movement comes from its
+   own custom properties. */
+.ft-confetti {
+    position: fixed;
+    inset: 0;
+    z-index: var(--layer-fx, 74);
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.ft-confetti__piece {
+    position: absolute;
+    top: -3%;
+    left: var(--cx);
+    width: 0.45rem;
+    height: 0.7rem;
+    border-radius: 0.1rem;
+    animation: ft-confetti-fall var(--cf) cubic-bezier(0.3, 0.1, 0.6, 1) var(--cd) both;
+}
+
+/* The piece colours: gold and gilt first, then a red, a blue and a pale gold, so the confetti does not look
+   like the wallet coins. */
+.ft-confetti__piece--0 { background: var(--gold); }
+.ft-confetti__piece--1 { background: var(--gilt-light); }
+.ft-confetti__piece--2 { background: #e05a4a; }
+.ft-confetti__piece--3 { background: #8fd3ff; }
+.ft-confetti__piece--4 { background: #fff8d6; }
+
+/* One fall, no loop: a piece fades in near the top, falls across the screen while rotating, and is gone
+   before the bottom. Only transform and opacity are animated, so it runs on the compositor. */
+@keyframes ft-confetti-fall {
+    0%   { opacity: 0; transform: translate(0, 0) rotate(0) scale(var(--csc)); }
+    8%   { opacity: 1; }
+    85%  { opacity: 1; }
+    100% { opacity: 0; transform: translate(var(--cdr), 108vh) rotate(var(--cs)) scale(var(--csc)); }
+}
+
+
+/* Short viewports: a phone in landscape, or a small screen with the browser toolbar showing. */
+@media (max-height: 660px) {
+    .ts-card--hand  { --ts-card-w: 3.4rem; }
+    .ts-card--trick { --ts-card-w: 2.9rem; }
+    .ts-card--seat  { --ts-card-w: 2.1rem; }
+    .ts-hand         { height: 7.2rem; padding-top: 0.9rem; padding-bottom: 1.5rem; }
+    .ts-turnslot     { height: 1.5rem; }
+    .ts-handcard     { --ts-arc-depth: 0.7rem; }
+    .ts-plaque__avatar  { --ts-plaque-avatar: 2.5rem; }
+    /* The trump intro is smaller too, because on a short screen the full-size suit symbol would reach the
+       hand. */
+    .ts-trumpmark    { width: 2.1rem; height: 2.1rem; font-size: 1.05rem; --ts-trump-lift: 2.1; }
+    .ts-trumpintro   { margin-bottom: 1.15rem; font-size: 0.64rem; }
+    .ts-table::before { height: 2.6rem; }
+    /* The opponent fans shrink with their cards. */
+    .ts-seathand--north { height: 3.9rem; }
+    .ts-seathand--west,
+    .ts-seathand--east  { width: 3.9rem; height: 7.2rem; }
+    .ts-seathand__card { --ts-arc-depth: 0.45rem; }
+    .ts-seathand__card + .ts-seathand__card { margin-left: -1.05rem; }
+    /* The played cards move closer, because the trump indicator they are placed around is also smaller. */
+    .ts-slot { --ts-slot-spread-v: 3.9rem; --ts-slot-spread-h: 3.3rem; }
+}
+
+@media (max-width: 360px) {
+    .ts-card--hand  { --ts-card-w: 4.2rem; }
+    .ts-card--trick { --ts-card-w: 3.5rem; }
+    .ts-slot        { --ts-slot-spread-h: 4.1rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ts-slot {
+        animation-duration: 0.001s;
+        transition-duration: 0.001s;
+    }
+    /* The card still appears face-up in its slot, without the flight and the flip. */
+    .ts-slot__deal,
+    .ts-slot__flip--turning {
+        animation-duration: 0.001s;
+    }
+    /* The opening animation is decoration only, so reduced motion removes it and the table appears already
+       dealt. */
+    .ts-table--dealing .ts-centre::before,
+    .ts-table--dealing .ts-plaque,
+    .ts-table--dealing .ts-handcard .ts-card,
+    .ts-table--dealing .ts-seathand__card .ts-card,
+    .ts-table--dealing .ts-trumpmark,
+    .ts-table--dealing .ts-trumpmark::before {
+        animation: none;
+    }
+    /* Reduced motion shows the end state of the trump intro: the suit on its disc at the centre, with no word.
+       The word only repeats what the disc shows. */
+    .ts-trumpintro {
+        display: none;
+    }
+    .ts-seathand__card {
+        transition-duration: 0.001s;
+    }
+    .ts-handcard,
+    .ts-plaque,
+    .ts-centre::before,
+    .ts-ring__sweep {
+        transition-duration: 0.001s;
+    }
+    .ts-ring--urgent {
+        animation: none;
+    }
+    /* The spinner stops rotating but stays visible. */
+    .ts-searching__spinner,
+    .ts-mm__spinner {
+        animation: none;
+    }
+    /* The floating text is shown still, slightly above its anchor, without the pop, rise and fade. */
+    .ts-float__text {
+        animation: none;
+        opacity: 1;
+        transform: translateY(-0.6rem);
+    }
+    /* The foil stays, because it marks the card as a trump: the wash and the gilt edge remain. The sheen is
+       removed, because a still sheen would be a white streak across the card. The pulse is set to its
+       transparent end state, because `animation: none` alone would leave the ring visible for as long as the
+       trump is on the table. The data-powering attribute still carries the same information. */
+    .ts-card__sheen {
+        display: none;
+    }
+    .ts-trumpmark__pulse {
+        animation: none;
+        opacity: 0;
+    }
+    .ts-slot .ts-card__foil {
+        animation: none;
+        opacity: 0.55;
+    }
+}
+
+/* ===========================================================================
+   Leaving the table.
+   =========================================================================== */
+
+/* The Leave button, in the top corner away from the hand and the centre stage. It is positioned against the
+   table's grid instead of the screen, so on a wide window it stays next to the game and below the top bar.
+   The button's style is .ts-btn--dark at its smallest size. */
+.ts-leave {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 35;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ts-btn--dark {
+        transition-duration: 0.001s;
+    }
+    /* The confetti is decoration, because the headline already states the result, so reduced motion hides
+       the whole layer. The CascadeTitle letters fall back to plain text under meta-shell.css's reduced-motion
+       rule. */
+    .ft-confetti {
+        display: none;
+    }
+}

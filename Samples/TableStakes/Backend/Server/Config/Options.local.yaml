@@ -1,0 +1,14 @@
+# Option overrides when running server locally
+
+# Bind the WebSocket listener to all interfaces (default is 127.0.0.1 in local environments) so the
+# browser-based WebClient can connect from other devices on the LAN, not just this machine.
+WebSockets:
+  ListenHost: "0.0.0.0"
+
+# Serve the Blazor WASM WebClient from the game server's public web host (PublicWebApi, port 5560).
+# Points at the WebClient *publish* output (relative to the server working dir, Backend/Server). A plain
+# `dotnet build` does not produce a self-contained wwwroot (index.html and static assets are resolved
+# via a static-web-assets manifest, not copied), so a publish is required. Produce it first with:
+#   dotnet publish WebClient/WebClient.csproj -c Release
+WebClientHosting:
+  WebRootPath: "../../WebClient/bin/Release/net10.0-browser/publish/wwwroot"

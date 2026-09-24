@@ -1,0 +1,6 @@
+Id #key,Cadence,Missions[]
+missions.daily.v1,Daily,daily.play1
+,,daily.play3
+,,daily.win1
+missions.weekly.v1,Weekly,weekly.play10
+,,weekly.win3

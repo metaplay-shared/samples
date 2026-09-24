@@ -1,0 +1,96 @@
+@using WebClient.Meta
+
+@* A standings board. It includes bots, so the board is populated from the player's first visit. Bot rows are
+   labelled "Computer", as at the table. The player's own row is marked with a "You" label as well as a colour.
+
+   The rank movement chip is drawn only when RankDelta is nonzero. The tournament keeps no standings history,
+   so StepRailBuilder.cs always produces a delta of zero and the chip is not shown.
+
+   Each row shows the prize for its rank from Placements. A rank that no placement band covers shows no prize.
+
+   The stylesheet lays each tr out with display: grid, which removes the implicit table semantics. The
+   explicit role attributes restore them for assistive technology. *@
+
+<div class="m-card" data-testid="standings">
+    <table class="m-standings" role="table">
+        <thead>
+            <tr role="row">
+                <th role="columnheader" scope="col">Rank</th><th role="columnheader" scope="col">Player</th><th role="columnheader" scope="col">Score</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (StandingRow row in Rows)
+            {
+                bool promoting = row.Rank <= PromotionZoneSize;
+                RewardView prize = PrizeOf(row.Rank);
+
+                <tr role="row" class="stand-row @(row.IsSelf ? "m-standings__self" : null) @(promoting ? "m-standings__promoting" : null) @(row.Rank == 1 ? "stand-row--gilt" : null)"
+                    data-testid="@(row.IsSelf ? "standings-self" : "standings-row")">
+                    <td role="cell">
+                        @if (row.Rank == 1)
+                        {
+                            <MetaIcon Name="trophy" Size="16" Label="First place" />
+                        }
+                        @row.Rank
+                    </td>
+                    <td role="cell">
+                        <span class="m-standings__who">
+                            <PlayerAvatar Identity="IdentityOf(row)" Size="30" WithName="true" />
+                            @if (row.IsBot)
+                            {
+                                <span class="m-standings__bot" data-testid="standings-bot">Computer</span>
+                            }
+                            @if (row.IsSelf)
+                            {
+                                <span class="m-standings__you">You</span>
+                            }
+                        </span>
+                        @if (!prize.IsEmpty)
+                        {
+                            <span class="m-standings__prize @(row.Rank == 1 ? "m-standings__prize--first" : null)" data-testid="standings-prize">
+                                wins <RewardPreview Bundle="prize" Compact="true" />
+                            </span>
+                        }
+                    </td>
+                    <td role="cell">
+                        @if (row.RankDelta != 0)
+                        {
+                            <span class="m-standings__delta m-standings__delta--@DeltaClass(row)">
+                                <MetaIcon Name="@DeltaIcon(row)" Size="14" Label="@DeltaLabel(row)" />
+                                @Math.Abs(row.RankDelta)
+                            </span>
+                        }
+                        @Currencies.Format(row.Score) pts
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <p class="m-state__note">Scores update every 5 minutes.</p>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<StandingRow> Rows { get; set; } = Array.Empty<StandingRow>();
+
+    /// <summary>How many ranks from the top are in the promotion zone. Those rows get the promoting style.</summary>
+    [Parameter] public int PromotionZoneSize { get; set; }
+
+    /// <summary>The season's placement bands, in ascending rank order. When empty, no prizes are shown.</summary>
+    [Parameter] public IReadOnlyList<PlacementBandView> Placements { get; set; } = [];
+
+    private RewardView PrizeOf(int rank) => PlacementBandView.RewardFor(Placements, rank);
+
+    private static IdentityView IdentityOf(StandingRow row) =>
+        new IdentityView(row.DisplayName, row.AvatarToken, row.FrameToken, row.NameEffectToken, 0, "", row.Rank);
+
+    private static string DeltaClass(StandingRow row) => row.RankDelta > 0 ? "up" : row.RankDelta < 0 ? "down" : "flat";
+    private static string DeltaIcon(StandingRow row) => row.RankDelta > 0 ? "up" : row.RankDelta < 0 ? "down" : "dash";
+
+    private static string DeltaLabel(StandingRow row) => row.RankDelta switch
+    {
+        > 0 => $"Up {row.RankDelta} places",
+        < 0 => $"Down {Math.Abs(row.RankDelta)} places",
+        _   => "No change",
+    };
+}

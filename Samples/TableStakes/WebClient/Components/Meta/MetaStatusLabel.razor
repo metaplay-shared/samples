@@ -1,0 +1,35 @@
+@using WebClient.Meta.Ui
+
+@* A non-interactive label shaped like a button, for states such as "Purchased", "Sold out" or "Reward
+   collected". It uses the MetaButton classes so it lines up with a button beside it, plus m-status, which
+   removes the pointer cursor so players do not try to tap it.
+
+   A variant other than Ghost is allowed for a label inside a card that is itself the button, such as the
+   hero card's PLAY label, because the card handles the tap. *@
+
+<span class="@CssClass" data-testid="@TestId">@ChildContent</span>
+
+@code {
+    /// <summary>The button style to copy. Defaults to Ghost.</summary>
+    [Parameter] public MetaButtonVariant Variant { get; set; } = MetaButtonVariant.Ghost;
+
+    [Parameter] public MetaButtonSize Size { get; set; } = MetaButtonSize.Md;
+
+    /// <summary>Whether the status fills the width of its column.</summary>
+    [Parameter] public bool Block { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    [Parameter] public string? TestId { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private string CssClass
+    {
+        get
+        {
+            string classes = $"{MetaButtonClasses.For(Variant, Size, Block, iconOnly: false)} m-status";
+            return string.IsNullOrEmpty(Class) ? classes : $"{classes} {Class}";
+        }
+    }
+}

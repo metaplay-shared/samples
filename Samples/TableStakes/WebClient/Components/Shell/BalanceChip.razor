@@ -1,0 +1,100 @@
+@using WebClient.Meta
+
+@* One currency balance chip in the HUD. The amount is shown in full with digit grouping, never abbreviated,
+   so the player can compare it with prices, which are also shown in full.
+
+   wallet-burst.js finds the chips by data-wallet-target and measures their positions, which change as the
+   digits change. data-amount holds the real balance, unformatted. Tests should read it, not the visible
+   digits, which show the count-up animation while a reward arrives. *@
+
+<div class="m-balance m-balance--@Kind.ToString().ToLowerInvariant() @StateClass"
+     data-testid="@($"balance-{Kind.ToString().ToLowerInvariant()}")"
+     data-wallet-target="@Kind.ToString().ToLowerInvariant()"
+     data-amount="@Amount"
+     style="@ProgressStyle"
+     role="status"
+     aria-label="@($"{Currencies.Format(Amount)} {Currencies.NameOf(Kind, Amount)}")">
+    <MetaIcon Name="@RewardViewItem.IconIdFor(Kind)" Size="18" Class="@IconClass" />
+    <span>
+        <span class="m-balance__amount" aria-hidden="true">@Currencies.Format(Digits)</span>
+        <span class="m-balance__label" aria-hidden="true">@Currencies.ShortNameOf(Kind)</span>
+    </span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public CurrencyKind Kind { get; set; }
+
+    /// <summary>The real balance, used for the aria-label and data-amount.</summary>
+    [Parameter, EditorRequired] public long Amount { get; set; }
+
+    /// <summary>
+    /// The value shown by the digits during the count-up animation, or null to show <see cref="Amount"/>. The
+    /// aria-label uses <see cref="Amount"/> instead, so the status region does not announce every animation
+    /// frame.
+    /// </summary>
+    [Parameter] public long? DisplayedAmount { get; set; }
+
+    /// <summary>Whether reward sprites are flying to this chip. The chip is highlighted while they are.</summary>
+    [Parameter] public bool IsReceivingReward { get; set; }
+
+    /// <summary>
+    /// The fraction of the incoming reward that has landed, from 0 to 1. It drives the rim glow while
+    /// <see cref="IsReceivingReward"/> is true, and is 1 otherwise.
+    /// </summary>
+    [Parameter] public double Progress { get; set; } = 1;
+
+    private long _lastAmount;
+    private bool _bumped;
+    private bool _landed;
+    private bool _wasCatching;
+
+    private long Digits => DisplayedAmount ?? Amount;
+
+    /// <summary>
+    /// The --fx-progress custom property, formatted with the invariant culture because CSS always expects a
+    /// "." decimal separator.
+    /// </summary>
+    private string ProgressStyle => string.Create(
+        System.Globalization.CultureInfo.InvariantCulture,
+        $"--fx-progress:{ClampedProgress:0.##}");
+
+    /// <summary><see cref="Progress"/> clamped to the range 0 to 1.</summary>
+    private double ClampedProgress => Math.Clamp(Progress, 0.0, 1.0);
+
+    private string IconClass => Kind switch
+    {
+        CurrencyKind.Coins      => "m-icon--coin",
+        CurrencyKind.Gems       => "m-icon--gem",
+        _                       => "m-icon--spin",
+    };
+
+    private string StateClass => string.Join(' ', new[]
+    {
+        _bumped           ? "m-balance--bumped"   : null,
+        _landed           ? "m-balance--landed"   : null,
+        IsReceivingReward ? "m-balance--catching" : null,
+    }.Where(name => name != null));
+
+    /// <summary>
+    /// Sets the animation classes. A balance that changed without a reward animation gets one bump animation.
+    /// <para>
+    /// While a reward is arriving the chip gets no bump, because the count-up is the animation. When the
+    /// sprites finish, the chip flashes once with the landed class.
+    /// </para>
+    /// </summary>
+    protected override void OnParametersSet()
+    {
+        // _landed stays set across renders. The component re-renders on every state change, and removing the
+        // class on the next render would cancel the flash animation. It is cleared when the next reward starts
+        // arriving, which also lets that reward's landing flash again.
+        if (IsReceivingReward)
+            _landed = false;
+        else if (_wasCatching)
+            _landed = true;
+
+        _bumped = !IsReceivingReward && !_landed && _lastAmount != 0 && _lastAmount != Amount;
+
+        _wasCatching = IsReceivingReward;
+        _lastAmount  = Amount;
+    }
+}

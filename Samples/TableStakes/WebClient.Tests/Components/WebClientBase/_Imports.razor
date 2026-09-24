@@ -1,0 +1,9 @@
+@* Namespace and usings for WebClientBase's connection shell components, which the csproj links into this
+   directory from ..\WebClientBase\Components. The explicit @namespace is required: the namespace derived from
+   this directory's path would be WebClient.Components.WebClientBase, which hides the real WebClientBase
+   namespace from every component under WebClient.Components. *@
+@namespace WebClientBase.Components
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.JSInterop
+@using WebClientBase.Configuration
+@using WebClientBase.Services

@@ -1,0 +1,45 @@
+@namespace WebClient.Components.TableUI
+@using Game.Logic
+
+@* An opponent's hand, drawn as card backs in the same arc as the viewer's hand and rotated to face the seat
+   (docs/game-rules.md, "Public and private information").
+
+   The component receives only the card count, which is public, so it cannot draw card faces.
+
+   The fan is the only place the table shows how many cards a seat holds, so the count is also its accessible
+   name. The card backs are hidden from assistive technology. *@
+
+<div class="ts-seathand ts-seathand--@PositionName"
+     data-testid="@($"seat-{Seat}-hand")"
+     data-cards="@CardCount"
+     role="img"
+     aria-label="@Label">
+    <div class="ts-seathand__arc" aria-hidden="true">
+        @for (int ndx = 0; ndx < CardCount; ndx++)
+        {
+            <div class="ts-seathand__card" style="@CardArcStyle.For(ndx, CardCount, Position)">
+                <PlayingCard Class="ts-card--seat" />
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    /// <summary>The model seat index of this hand. Used in the test id.</summary>
+    [Parameter] public int Seat { get; set; }
+
+    /// <summary>Where the seat is drawn on screen. The fan is rotated to face this position.</summary>
+    [Parameter] public TableScreenPosition Position { get; set; }
+
+    /// <summary>How many cards the seat still holds.</summary>
+    [Parameter] public int CardCount { get; set; }
+
+    /// <summary>The seat's player name, used in the accessible name.</summary>
+    [Parameter] public string? SeatName { get; set; }
+
+    private string PositionName => SeatRotation.ToCssName(Position);
+
+    private string Label => CardCount == 1
+        ? $"{SeatName} holds 1 card"
+        : $"{SeatName} holds {CardCount} cards";
+}

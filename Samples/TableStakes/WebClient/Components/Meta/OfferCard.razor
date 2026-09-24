@@ -1,0 +1,156 @@
+@using WebClient.Meta
+
+@* A shop offer card: contents, price, availability and timer. Each reason an offer cannot be bought has its
+   own status text, so the player always sees why.
+
+   The foot row under the reward preview has the countdown and the price on the left and the Buy button, or
+   the status that replaces it, on the right, in the same place on every card. Explanatory sentences, such as
+   the shortfall or the demo note, render full-width below the foot. *@
+
+<div class="m-card @(Featured ? "m-card--featured" : null) @(Offer.Price.Kind == OfferPriceKind.Demo ? "m-card--live" : null)"
+     data-testid="@($"offer-{Offer.Id}")">
+
+    @if (Offer.IsTargeted)
+    {
+        <span class="m-card__eyebrow">Just for you</span>
+    }
+
+    <div class="m-card__row">
+        <span class="m-card__emblem" aria-hidden="true"><MetaIcon Name="@Offer.IconId" Size="@(Featured ? 56 : 34)" /></span>
+        <div class="m-card__grow">
+            <span class="m-card__title">@Offer.Title</span>
+            <span class="m-card__note">@Offer.Note</span>
+        </div>
+        @if (Offer.BonusPercent is int bonus)
+        {
+            <span class="m-offer__bonus" data-testid="offer-bonus">+@(bonus)% extra</span>
+        }
+    </div>
+
+    <RewardPreview Bundle="Offer.Contents" Compact="@(!Featured)" />
+
+    <div class="m-offer__foot" data-testid="offer-foot">
+        @* An expired offer shows no countdown, because the "Offer ended" status on the same row already says
+           so. *@
+        @if (Offer.Remaining is TimeSpan left && Offer.Availability != OfferAvailability.Expired)
+        {
+            <MetaCountdown Remaining="left" ExpiredText="Offer ended" />
+        }
+
+        @switch (Offer.Availability)
+        {
+            case OfferAvailability.Available when Shortfall > 0:
+                @* The player cannot afford the price, so no Buy button is shown. The server checks the price
+                   against its own wallet and would refuse the purchase (docs/economy.md). The price stays
+                   visible and the status names the missing currency. *@
+                <span class="strip m-chip m-chip--gold" data-testid="offer-price">
+                    <MetaIcon Name="@RewardViewItem.IconIdFor(Offer.Price.Currency)" Size="16" />
+                    @Currencies.Format(Offer.Price.Amount)
+                </span>
+                <MetaStatusLabel TestId="offer-unaffordable">
+                    Not enough @Currencies.NameOf(Offer.Price.Currency, Offer.Price.Amount)
+                </MetaStatusLabel>
+                break;
+
+            case OfferAvailability.Available when Offer.BlockedBy is CurrencyKind full:
+                @* The player can afford the price, but granting the contents would take a balance past its
+                   cap. The server settles the price and the contents as one transaction and refuses the whole
+                   purchase (docs/offers.md), so no Buy button is shown. The status names the full balance. *@
+                <span class="strip m-chip m-chip--gold" data-testid="offer-price">
+                    <MetaIcon Name="@RewardViewItem.IconIdFor(Offer.Price.Currency)" Size="16" />
+                    @Currencies.Format(Offer.Price.Amount)
+                </span>
+                <MetaStatusLabel TestId="offer-wallet-full">
+                    @Currencies.NameOf(full) full
+                </MetaStatusLabel>
+                break;
+
+            case OfferAvailability.Available:
+                @* A demo price has no currency icon. The demo note below the foot explains it. *@
+                @if (Offer.Price.Kind == OfferPriceKind.Demo)
+                {
+                    <span class="strip m-chip m-chip--gold" data-testid="offer-price">@Offer.Price.DemoText</span>
+                }
+                else
+                {
+                    <span class="strip m-chip m-chip--gold" data-testid="offer-price">
+                        <MetaIcon Name="@RewardViewItem.IconIdFor(Offer.Price.Currency)" Size="16" />
+                        @Currencies.Format(Offer.Price.Amount)
+                    </span>
+                }
+                <MetaButton Variant="MetaButtonVariant.Primary"
+                            Size="@(Featured ? MetaButtonSize.Lg : MetaButtonSize.Md)"
+                            TestId="offer-buy" OnClick="OnBuy">@ButtonLabels.Buy</MetaButton>
+                break;
+
+            case OfferAvailability.Purchased:
+                <MetaStatusLabel TestId="offer-purchased">Purchased</MetaStatusLabel>
+                break;
+
+            case OfferAvailability.SoldOut:
+                <MetaStatusLabel TestId="offer-soldout">Sold out</MetaStatusLabel>
+                break;
+
+            case OfferAvailability.Expired:
+                <MetaStatusLabel TestId="offer-expired">Offer ended</MetaStatusLabel>
+                break;
+
+            case OfferAvailability.Locked:
+                <MetaStatusLabel TestId="offer-locked">
+                    <MetaIcon Name="lock" Size="16" /> @Offer.LockReason
+                </MetaStatusLabel>
+                break;
+
+            default:
+                <MetaStatusLabel TestId="offer-unavailable">Not available to you</MetaStatusLabel>
+                break;
+        }
+    </div>
+
+    @* Full-width explanation text and follow-up actions for some states. *@
+    @switch (Offer.Availability)
+    {
+        case OfferAvailability.Available when Shortfall > 0:
+            <p class="m-state__note" data-testid="offer-shortfall">
+                You need @Currencies.Format(Shortfall) more @Currencies.NameOf(Offer.Price.Currency, Shortfall).
+            </p>
+            @* Link to the Events hub to earn the currency. The config build rejects an offer priced in a
+               currency the Events hub cannot grant, so this link always leads somewhere that pays it. *@
+            <div class="m-offer__foot m-offer__foot--secondary">
+                <MetaButton Variant="MetaButtonVariant.Ghost" Size="MetaButtonSize.Sm"
+                            Href="@MetaRoutes.Events" TestId="offer-earn">@ButtonLabels.Earn</MetaButton>
+            </div>
+            break;
+
+        case OfferAvailability.Available when Offer.BlockedBy is CurrencyKind full:
+            @* No follow-up button: the fix is to spend some of the balance, which the player can do from any
+               screen that spends it. *@
+            <p class="m-state__note" data-testid="offer-wallet-full-note">
+                Your @Currencies.NameOf(full) balance is full, so this would not fit. Spend some and come back.
+            </p>
+            break;
+
+        case OfferAvailability.Available when Offer.Price.Kind == OfferPriceKind.Demo:
+            <p class="m-state__note" data-testid="offer-demo-note">Demo purchase — no real charge.</p>
+            break;
+
+        case OfferAvailability.SoldOut:
+            <p class="m-state__note">Check back tomorrow.</p>
+            break;
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public OfferView Offer { get; set; } = default!;
+    [Parameter] public bool Featured { get; set; }
+    [Parameter] public EventCallback OnBuy { get; set; }
+
+    /// <summary>
+    /// The player's wallet, used to check whether a wallet price is affordable. When the caller passes none,
+    /// every wallet-priced offer shows as unaffordable, so the card never offers a Buy the server would refuse.
+    /// </summary>
+    [Parameter] public WalletView Wallet { get; set; } = WalletView.Empty;
+
+    /// <summary>How much the wallet is short of the price, computed by OfferView.ShortfallAgainst.</summary>
+    private long Shortfall => Offer.ShortfallAgainst(Wallet);
+}

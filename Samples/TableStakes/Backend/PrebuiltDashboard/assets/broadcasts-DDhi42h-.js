@@ -1,0 +1,1 @@
+import{a as e,c as t,l as n}from"./src-d8I-ch48.js";function r(){return{permission:`api.broadcasts.view`,pollingPolicy:e(5e3),fetcherPolicy:n(`/broadcasts`),cacheRetentionPolicy:t(6e4)}}function i(r){return{permission:`api.broadcasts.view`,pollingPolicy:e(5e3),fetcherPolicy:n(`/broadcasts/${r}`),cacheRetentionPolicy:t(1e4)}}export{i as n,r as t};

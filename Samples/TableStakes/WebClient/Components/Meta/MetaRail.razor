@@ -1,0 +1,100 @@
+@using WebClient.Meta
+
+@* A row of steps with the player's position marked, shared by the daily streak and the first-week event.
+
+   The rail is an ordered list for screen readers, and each step announces its state in words, because the
+   check mark and the ring are visual only. *@
+
+<ol class="m-rail" data-testid="rail" aria-label="@Label">
+    @for (int i = 0; i < Steps.Count; i++)
+    {
+        RailStep step = Steps[i];
+        bool afterDone = i > 0 && Steps[i - 1].State == RailStepState.Done;
+
+        <li class="m-rail__step @StepClass(step) @(afterDone ? "m-rail__step--after-done" : null)"
+            data-testid="rail-step">
+            <span class="m-rail__node @NodeClass(step)">
+                @if (step.State == RailStepState.Done)
+                {
+                    <MetaIcon Name="check" Size="16" />
+                }
+                else if (step.State == RailStepState.Locked)
+                {
+                    <MetaIcon Name="lock" Size="14" />
+                }
+                else if (step.State == RailStepState.Prize)
+                {
+                    <MetaIcon Name="star" Size="15" />
+                }
+                else
+                {
+                    @step.NodeText
+                }
+            </span>
+            <span class="m-rail__label">@step.Label</span>
+            <span class="u-sr-only">@StepScreenReaderText(step)</span>
+        </li>
+    }
+</ol>
+
+@if (Steps.Any(s => s.Caption != null))
+{
+    <div class="m-rail-values" aria-hidden="true">
+        @foreach (RailStep step in Steps)
+        {
+            <span class="m-rail-value @(step.State == RailStepState.Current ? "m-rail-value--current" : null)">
+                @if (ValueIcon != null)
+                {
+                    <MetaIcon Name="@ValueIcon" Size="14" Class="m-icon--coin" />
+                }
+                @step.Caption
+            </span>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<RailStep> Steps { get; set; } = Array.Empty<RailStep>();
+
+    /// <summary>The rail's accessible name, such as "Login streak".</summary>
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    /// <summary>The icon drawn beside each step's value, such as a currency icon. Null draws no icon.</summary>
+    [Parameter] public string? ValueIcon { get; set; }
+
+    private static string? StepClass(RailStep step) => step.State switch
+    {
+        RailStepState.Done    => "m-rail__step--done",
+        RailStepState.Current => "m-rail__step--current",
+        RailStepState.Missed  => "m-rail__step--missed",
+        _                     => null,
+    };
+
+    private static string? NodeClass(RailStep step) => step.State switch
+    {
+        RailStepState.Done    => "m-rail__node--done",
+        RailStepState.Current => "m-rail__node--current",
+        RailStepState.Prize   => "m-rail__node--prize",
+        RailStepState.Missed  => "m-rail__node--missed",
+        _                     => null,
+    };
+
+    /// <summary>
+    /// The screen reader text for a step: its state and, when set, its value. The values row under the rail is
+    /// aria-hidden because it is not read in step order, so each step's value is announced here instead.
+    /// </summary>
+    private static string StepScreenReaderText(RailStep step)
+    {
+        string stateText = step.State switch
+        {
+            RailStepState.Done    => "complete",
+            RailStepState.Current => "you are here",
+            RailStepState.Locked  => "locked",
+            RailStepState.Prize   => "final reward",
+            RailStepState.Missed  => "missed",
+            _                     => "to come",
+        };
+
+        return step.Caption == null ? stateText : $"{stateText}, {step.Caption}";
+    }
+}

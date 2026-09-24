@@ -1,0 +1,10 @@
+@* A dot that marks something as actionable or unseen. It never shows a number, because a value inside a dot
+   is too small to read. It has an accessible label so screen readers can announce the state
+   (docs/meta-shell.md, "MetaSnapshot"). *@
+
+<span class="m-badge" role="status" aria-label="@Label" data-testid="badge"></span>
+
+@code {
+    /// <summary>The accessible name of the dot, which screen readers announce. Required.</summary>
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+}

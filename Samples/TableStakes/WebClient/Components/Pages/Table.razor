@@ -1,0 +1,1086 @@
+@page "/table"
+@layout GameLayout
+@using Game.Logic
+@using Metaplay.Core
+@using WebClient.Components.TableUI
+@using WebClient.Integration
+@using WebClient.Meta
+@* WebClientBase has a Card UI component, so this alias makes Card refer to Game.Logic.Card. *@
+@using Card = Game.Logic.Card
+@using WebClientBase.Configuration
+@using Metaplay.Unity
+@using WebClientBase.Services
+@inject MetaplayClientService MetaplayService
+@inject WebClientConfig Config
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>@Config.AppTitle</PageTitle>
+
+@* The table screen. The four seats have fixed screen positions with the viewer always at South. The trump
+   suit is shown at the centre for the whole game, each card of the current trick sits next to the seat that
+   played it, and the viewer's hand is along the bottom. Only the viewer's hand shows card faces.
+
+   Two rules apply throughout:
+   · Legal plays are highlighted, not explained. They come from MatchClient.GetLegalPlays(), which uses the
+     same shared rules function the host validates with.
+   · Presented time and authoritative time are never mixed. Anything the player sees uses presented time,
+     and anything that decides what the host will accept uses authoritative time. The two use different
+     types, so mixing them does not compile (docs/web-client.md, "The table's two clocks"). *@
+
+@* This page never checks the connection state. ConnectionOverlay shows connection problems over every screen
+   and blocks input, so a second connection UI here would conflict with it
+   (docs/web-client.md, "Connection trouble"). *@
+
+@* Shown when the player has no table, for the one frame before OnAfterRender navigates to the menu, which is
+   the only place matchmaking starts.
+
+   SessionIsUp is checked first so a reload at a live table does not flash this. Before the session is up the
+   match slot is empty because it has not been loaded yet, which looks the same as having no table. *@
+@if (SessionIsUp && MetaplayService.HasNoTable)
+{
+    <div class="ts-notable">
+        <p class="ts-notable__text">You are not at a table.</p>
+        <a class="pnl__key btn-glossy" href="@EnvironmentLink.Href(Navigation, MetaRoutes.Home)">Back to menu</a>
+    </div>
+}
+else if (Match == null)
+{
+    @* No match model yet, and the slot has not reported that there is no table. This happens on a reload at a
+       live table while the session starts or the table is attached. A new game never reaches this state,
+       because matchmaking navigates here only once the table exists. Connection problems are shown by
+       ConnectionOverlay, not here. *@
+    <div class="ts-notable">
+        <div class="ts-searching__spinner" aria-hidden="true"></div>
+        <p class="ts-notable__text" data-testid="table-loading">Getting your table…</p>
+    </div>
+}
+
+@if (Match != null)
+{
+    @* Read the clock, the board and the hand once per render, so everything below uses the same values. *@
+    ObserveTable();
+
+    <div class="ts-table @(TableIsBeingDealt ? "ts-table--dealing" : null)" style="@TableStyle" data-testid="table" data-dealing="@(TableIsBeingDealt ? "true" : "false")">
+        <div class="ts-table__grid">
+
+            @* Leave takes one tap with no confirmation. The host covers the seat with a bot immediately, like
+               a disconnect without the grace period, and the game is still played out and recorded
+               (docs/match.md, "Leaving the table"). The host then releases the player, which navigates away
+               from this page without showing the results.
+
+               The button is inside the grid, which is the phone-width game column, so on a wide window it
+               stays next to the game. *@
+            @if (PresentedPhase == MatchPhase.Playing)
+            {
+                <div class="ts-leave">
+                    <button type="button" class="strip ts-btn--dark ts-btn--dark--sm" data-testid="leave" @onclick="OnLeaveRequested">Leave</button>
+                </div>
+            }
+
+            @* North: the seat opposite the viewer, with its card backs below its plaque. *@
+            <div class="ts-table__north">
+                @PlaqueAt(TableScreenPosition.North)
+                @HandAt(TableScreenPosition.North)
+            </div>
+
+            @* The middle row: the West and East seats with the centre between them. *@
+            <div class="ts-table__middle">
+                <div class="ts-table__west">
+                    @PlaqueAt(TableScreenPosition.West)
+                    @HandAt(TableScreenPosition.West)
+                </div>
+
+                @* While a card is dragged, the centre shows the drop-target style. That is the only drag
+                   feedback: the card does not follow the pointer, because that would need a render per pointer
+                   move. A drag renders only on press and release. *@
+                <div class="ts-centre @(IsDragging ? "ts-centre--drop" : null)" data-testid="centre" data-drop-target="@(IsDragging ? "true" : "false")">
+                    @* The trump suit symbol at the centre, shown for the whole game. The rules use only the
+                       trump card's suit, so only the suit is shown.
+
+                       It has the only accessible name for the trump suit on the table.
+
+                       data-powering is true while a trump is in the current trick. Each trump play adds a pulse
+                       element, delayed to match the card's flip. The pulse is keyed on the played card, so each
+                       trump play creates a new element and its animation starts from the beginning. *@
+                    <div class="ts-trumpmark @(PlayingCard.IsRed(Board.TrumpSuit) ? "ts-trumpmark--red" : "ts-trumpmark--black")"
+                         data-testid="trump-suit"
+                         data-suit="@Board.TrumpSuit"
+                         data-powering="@(TrumpIsPowering ? "true" : "false")"
+                         role="img"
+                         aria-label="@($"Trump suit: {Board.TrumpSuit}")">@PlayingCard.GlyphOf(Board.TrumpSuit)@if (LatestCentreTrumpPlay is PlayRecord latestTrumpPlay)
+                        {
+                            bool latestTrumpIsViewers = SeatRotation.IsSeated(Match!.OwnSeat) && latestTrumpPlay.Seat == Match.OwnSeat;
+                            <span class="ts-trumpmark__pulse" @key="latestTrumpPlay.Card" aria-hidden="true"
+                                  style="@FormattableString.Invariant($"--ts-foil-delay:{(latestTrumpIsViewers ? 0 : FlipDurationMs)}ms")"></span>
+                        }</div>
+
+                    @* The "Trump" word shown during the trump intro. It is aria-hidden because the trump suit
+                       element already has the accessible name.
+
+                       It is removed from the DOM when the intro ends instead of staying invisible, so it never
+                       covers a card played to the centre. *@
+                    @if (TrumpIntroIsPlaying)
+                    {
+                        <div class="ts-trumpintro ts-engraved" data-testid="trump-intro" aria-hidden="true">Trump</div>
+                    }
+
+                    @* Each played card flies in from its seat. Cards from other seats start as a back and flip
+                       face up on the way.
+
+                       The @key is the card. Without it Blazor would reuse the previous trick's first element for
+                       the next trick's first card, and that card would appear without its fly-in animation.
+                       Each card appears once per game, so the key gives one element per play. *@
+                    @foreach (PlayRecord play in CentrePlays)
+                    {
+                        TableScreenPosition seatPosition  = SeatRotation.ToScreenPosition(play.Seat, Match.OwnSeat);
+                        bool                isWinner      = play.Seat == CentreWinnerSeat;
+                        bool                isViewersCard = SeatRotation.IsSeated(Match.OwnSeat) && play.Seat == Match.OwnSeat;
+                        bool                isTrump       = play.Card.Suit == Board.TrumpSuit;
+
+                        <div @key="play.Card"
+                             class="ts-slot ts-slot--@PositionName(seatPosition) @(isWinner ? "ts-slot--winner" : null) @(isTrump ? "ts-slot--trump" : null) @(isViewersCard ? null : "ts-slot--turning") @(IsSweeping ? "ts-slot--sweeping" : null)"
+                             style="@SweepStyle"
+                             data-testid="trick-card"
+                             data-seat="@play.Seat"
+                             data-position="@PositionName(seatPosition)"
+                             data-winner="@(isWinner ? "true" : "false")"
+                             data-trump="@(isTrump ? "true" : "false")"
+                             data-sweeping="@(IsSweeping ? "true" : "false")">
+                            <div class="ts-slot__deal">
+                                <div class="ts-slot__flip @(isViewersCard ? null : "ts-slot__flip--turning")" data-testid="@(isViewersCard ? "played-card" : "flipped-card")">
+                                    @if (!isViewersCard)
+                                    {
+                                        @* The card back. The back and the face form one two-sided card,
+                                           and each side is hidden while it faces away during the flip. *@
+                                        <PlayingCard Class="ts-card--trick ts-slot__back" />
+                                    }
+                                    <PlayingCard Value="play.Card" Class="ts-card--trick ts-slot__face" Foil="isTrump" />
+                                </div>
+                            </div>
+                            @* The "TRUMP CARD!" label over a played trump. It is keyed on the card, so it
+                               animates once per trump play. Its delay matches the flip and the pulse: zero for
+                               the viewer's own card, the flip duration for other seats' cards. *@
+                            @if (isTrump)
+                            {
+                                <FloatingText @key="play.Card" Text="TRUMP CARD!" Variant="FloatingTextVariant.Trump"
+                                              DelayMs="@(isViewersCard ? 0 : FlipDurationMs)" />
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="ts-table__east">
+                    @PlaqueAt(TableScreenPosition.East)
+                    @HandAt(TableScreenPosition.East)
+                </div>
+            </div>
+
+            @* South: the viewer's plaque and hand. *@
+            <div class="ts-table__south">
+                @* The "Your turn" banner, shown only while it is the viewer's turn in presented time, so it
+                   matches what the player sees rather than the latest board.
+
+                   The ts-turnslot container is always rendered and only the banner inside it is conditional,
+                   so the layout does not shift when the turn changes. *@
+                <div class="ts-turnslot">
+                    @if (ViewerIsOnTurn && PresentedPhase == MatchPhase.Playing)
+                    {
+                        <div class="strip ts-turn ts-engraved" role="status" data-testid="turn-banner">Your turn</div>
+                    }
+                </div>
+
+                @PlaqueAt(TableScreenPosition.South)
+
+                @* The viewer's hand uses the same arc as the other seats, with larger cards. The inline style
+                   sets only the card's position in the arc. The state classes (playable, blocked, lifted) add
+                   offsets to that position instead of replacing it. *@
+                <div class="ts-hand @(HandIsLocked ? "ts-hand--locked" : null)" data-testid="own-hand">
+                    @for (int ndx = 0; ndx < SortedHand.Count; ndx++)
+                    {
+                        Card card       = SortedHand[ndx];
+                        bool isLifted   = _liftedCard.HasValue && _liftedCard.Value == card;
+                        bool isPlayable = IsPlayable(card);
+                        bool isBlocked  = ViewerIsOnTurn && !LegalPlays.Contains(card);
+                        bool isGrabbed  = _dragCard.HasValue && _dragCard.Value == card;
+
+                        <button type="button"
+                                class="ts-handcard @HandCardStateClass(isLifted, isPlayable, isBlocked) @(isGrabbed ? "ts-handcard--grabbed" : null)"
+                                style="@CardArcStyle.For(ndx, SortedHand.Count, TableScreenPosition.South)"
+                                data-testid="@HandCardTestId(isLifted, isPlayable, isBlocked)"
+                                data-card="@card.ToString()"
+                                disabled="@(!isPlayable && !isLifted)"
+                                @onpointerdown="@((PointerEventArgs args) => OnCardPointerDown(card, args))"
+                                @onpointerup="OnDragPointerUp"
+                                @onpointercancel="OnDragCancel"
+                                @onlostpointercapture="OnDragCancel"
+                                @onclick="@((MouseEventArgs args) => OnCardClick(card, args))">
+                            <PlayingCard Value="card" Class="ts-card--hand" />
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* A full-screen surface that exists only during a drag, so a release away from the card is still
+           received and no pointer events are handled when no drag is active. Every way a pointer gesture can
+           end removes it, including a new press on it, which recovers from a gesture that ended without any
+           other event. *@
+        @if (IsDragging)
+        {
+            <div class="ts-drag-surface"
+                 @onpointerdown="OnDragCancel"
+                 @onpointerup="OnDragPointerUp"
+                 @onpointercancel="OnDragCancel"
+                 @onpointerleave="OnDragCancel"
+                 @onlostpointercapture="OnDragCancel"
+                 @oncontextmenu="OnDragContextMenu"></div>
+        }
+
+        @if (RefusalToShow != null)
+        {
+            <div class="ts-refusal animate-pop-in" role="alert" data-testid="move-refusal">
+                <span class="ts-refusal__text">@RefusalText(RefusalToShow.Reason)</span>
+                <span class="ts-refusal__reason">@RefusalToShow.Reason</span>
+            </div>
+        }
+
+        @* The end panels use the presented phase, so they do not open before the last trick has finished
+           animating. An abandoned match has no standings and gets AbandonedPanel. *@
+        @if (PresentedPhase == MatchPhase.Ended)
+        {
+            <ResultsOverlay Match="Match" />
+        }
+        else if (PresentedPhase == MatchPhase.Abandoned)
+        {
+            <AbandonedPanel />
+        }
+
+        @* Hidden table state for the E2E tests, for values that have no visible element. *@
+        <div class="u-sr-only" aria-hidden="true">
+            <span data-testid="match-id">@Match.EntityId</span>
+            <span data-testid="match-phase">@PresentedPhase</span>
+            <span data-testid="turn-phase">@Board.TurnPhase</span>
+            <span data-testid="beat-playing">@(IsBeatPlaying ? "true" : "false")</span>
+            <span data-testid="presented-seat-on-turn">@PresentedSeatOnTurn</span>
+            <span data-testid="trick-winner-seat">@CentreWinnerSeat</span>
+            <span data-testid="play-index">@Board.PlayIndex</span>
+            <span data-testid="plays-count">@Board.Plays.Count</span>
+            <span data-testid="seat-on-turn">@Board.SeatOnTurn</span>
+            <span data-testid="leader-seat">@Board.CurrentLeaderSeat</span>
+            <span data-testid="tricks-resolved">@Board.TrickWinnerSeats.Count</span>
+            <span data-testid="own-seat">@Match.OwnSeat</span>
+            <span data-testid="own-hand-count">@OwnHand.Count</span>
+            <span data-testid="own-hand-index">@Match.OwnHandDeliveredAtPlayIndex</span>
+            <span data-testid="hand-locked">@(HandIsLocked ? "true" : "false")</span>
+            <span data-testid="deadline-in-force">@(Board.HasMoveDeadline ? "true" : "false")</span>
+            <span data-testid="own-occupancy">@OwnOccupancy</span>
+            <span data-testid="covered-seats">@CoveredSeatCount</span>
+        </div>
+    </div>
+}
+
+@code {
+    #region Presentation constants
+
+    /// <summary>
+    /// The default duration of the trick-resolve beat: highlight the winning card, then sweep the trick's
+    /// cards to the winner's plaque. It must be shorter than <see cref="MatchTimings.ResolvePause"/>, so the
+    /// beat finishes inside the host's resolve pause.
+    /// </summary>
+    private static readonly MetaDuration DefaultBeatDuration = MetaDuration.FromMilliseconds(1100);
+
+    /// <summary>
+    /// The default duration of the trump intro: the "Trump" word shows over the deal while the suit symbol
+    /// moves to the centre, then the word is removed. It ends with the deal, not after it, because nothing
+    /// waits for it and the first card can be played while it runs.
+    /// </summary>
+    private static readonly MetaDuration DefaultTrumpIntroDuration = MetaDuration.FromMilliseconds(1500);
+
+    /// <summary>
+    /// The share of the beat, in percent, that highlights the winning card before the sweep starts. It is a
+    /// percentage so a beat lengthened by a test keeps the same proportions.
+    /// </summary>
+    private const int BeatIndicatePercent = 38;
+
+    /// <summary>
+    /// How long before the move deadline the deadline ring appears. Before that, no ring is shown.
+    /// </summary>
+    private static readonly MetaDuration RingWindow = MetaDuration.FromSeconds(8);
+
+    /// <summary>How far up, in pixels, a card must be dragged for the release to count as a play.</summary>
+    private const double DragPlayThresholdPx = 48.0;
+
+    /// <summary>
+    /// How often the table checks whether it must re-render. The match model does not tick, so its model time
+    /// does not advance, and the beat and the ring are computed from the wall clock against absolute timestamps.
+    /// </summary>
+    private static readonly TimeSpan RepaintInterval = TimeSpan.FromMilliseconds(100);
+
+    #endregion
+
+    #region The frame
+
+    private RepaintTicker? _repaintTicker;
+
+    /// <summary>
+    /// The match channel activation count at the last render, or -1 before the first render.
+    /// <para>
+    /// It uses the activation count, not the match entity id, because a reconnect to the same table keeps the
+    /// same id. Comparing ids would keep the trick count from before the disconnect, and the player would see
+    /// a sweep animation for a trick resolved while they were away. The activation count changes on every
+    /// attach and every reconnect.
+    /// </para>
+    /// </summary>
+    private int _renderedActivationCount = -1;
+
+    /// <summary>The number of resolved tricks at the last render. An increase starts a beat.</summary>
+    private int _frameTrickCount;
+
+    /// <summary>
+    /// Whether the table had no card played when it attached, which enables the deal animation. It is set once
+    /// on the first render and not changed afterwards, because the first bot play happens during the deal and
+    /// clearing the flag then would stop the deal animation halfway.
+    /// </summary>
+    private bool _tableIsBeingDealt;
+
+    private MetaTime _beatStartedAt = MetaTime.Epoch;
+    private MetaTime _beatEndsAt    = MetaTime.Epoch;
+    private int      _beatTrickIndex = -1;
+
+    /// <summary>The index of the trick whose "+1 point!" has been shown, so each trick shows it only once.</summary>
+    private int _pointTrickIndex = -1;
+
+    /// <summary>When the current "+1 point!" started, which is when the sweep started.</summary>
+    private MetaTime _pointShownAt = MetaTime.Epoch;
+
+    /// <summary>The seat the current "+1 point!" is shown over, or <see cref="SeatRotation.NoSeat"/>.</summary>
+    private int _pointSeat = SeatRotation.NoSeat;
+
+    /// <summary>
+    /// The beat duration: the <c>beatMs</c> query parameter if set, otherwise <see cref="DefaultBeatDuration"/>.
+    /// <para>
+    /// The default beat is too short for a test to assert on reliably, so tests lengthen it with the query
+    /// parameter, as they do with the host's timings (<c>docs/testing.md</c>, "Forcing timers").
+    /// </para>
+    /// </summary>
+    private MetaDuration _beatDuration = DefaultBeatDuration;
+
+    /// <summary>
+    /// The trump intro duration: the <c>trumpIntroMs</c> query parameter if set, otherwise
+    /// <see cref="DefaultTrumpIntroDuration"/>. Tests lengthen it to observe the intro, or shorten it so they
+    /// do not wait for it on every table.
+    /// </summary>
+    private MetaDuration _trumpIntroDuration = DefaultTrumpIntroDuration;
+
+    /// <summary>
+    /// When the trump intro ends, or <see cref="MetaTime.Epoch"/> when the table is not being dealt. It is set
+    /// together with <see cref="_tableIsBeingDealt"/>.
+    /// </summary>
+    private MetaTime _trumpIntroEndsAt = MetaTime.Epoch;
+
+    private MetaDuration BeatIndicateDuration => MetaDuration.FromMilliseconds(_beatDuration.Milliseconds * BeatIndicatePercent / 100);
+
+    private AuthoritativeTime _now       = AuthoritativeTime.Now;
+    private PresentedTime     _presented = PresentedTime.CaughtUpWith(AuthoritativeTime.Now);
+
+    private List<Card> _ownHand    = new List<Card>();
+    private List<Card> _legalPlays = new List<Card>();
+    private List<Card> _sortedHand = new List<Card>();
+
+    /// <summary>The empty legal-play list for a viewer with no seat. Shared, so it must never be mutated.</summary>
+    private static readonly List<Card> NoLegalPlays = new List<Card>();
+
+    /// <summary>
+    /// Reads the clock, the board and the hand once per render and updates the beat state. The markup uses
+    /// only the values set here.
+    /// </summary>
+    private void ObserveTable()
+    {
+        MatchModel match = Match!;
+        MatchBoard board = match.Board;
+
+        _now     = AuthoritativeTime.Now;
+        _ownHand = match.GetOwnHand();
+
+        // Build the legal plays from the hand already read. Asking the service would rebuild the hand from the
+        // play history a second time on every render.
+        _legalPlays = match.OwnSeat >= 0
+            ? MatchSeatView.FromBoard(board, match.OwnSeat, _ownHand).GetLegalPlays()
+            : NoLegalPlays;
+
+        // Refill the sorted buffer instead of allocating a new list.
+        _sortedHand.Clear();
+        _sortedHand.AddRange(_ownHand);
+        _sortedHand.Sort();
+
+        if (_renderedActivationCount != MetaplayService.MatchActivationCount)
+        {
+            // First render of this activation. A new subscribe or a reconnect delivers the whole state, which
+            // is rendered as it is, without replaying beats the player did not see. A client that arrives
+            // during a resolve pause shows the board after the resolve.
+            //
+            // The lifted card is also cleared, because it belongs to a tap made on a previous table or before
+            // the disconnect, and keeping it would lock the hand for the wrong play.
+            _renderedActivationCount = MetaplayService.MatchActivationCount;
+            _frameTrickCount = board.TrickWinnerSeats.Count;
+
+            // Animate the deal only when no card has been played yet. A table joined mid-game is drawn as it
+            // is, because animating a deal that happened earlier would misrepresent the game.
+            _tableIsBeingDealt = board.Plays.Count == 0;
+
+            // The trump intro plays only with the deal, so a reload mid-game does not replay it.
+            _trumpIntroEndsAt = _tableIsBeingDealt ? _now.Timestamp + _trumpIntroDuration : MetaTime.Epoch;
+            _beatStartedAt    = MetaTime.Epoch;
+            _beatEndsAt       = MetaTime.Epoch;
+            _beatTrickIndex   = -1;
+
+            // No "+1 point!" for a trick this client did not see resolve, such as when arriving mid-pause.
+            _pointTrickIndex = -1;
+            _pointShownAt    = MetaTime.Epoch;
+            _pointSeat       = SeatRotation.NoSeat;
+            ClearLiftedCard();
+        }
+        else if (board.TrickWinnerSeats.Count > _frameTrickCount)
+        {
+            // A trick resolved while this page was rendering the table, so start a beat. MatchTableTime.GetBeatEndsAt
+            // fits the beat inside the host's resolve pause. With no pause there is no beat.
+            _frameTrickCount = board.TrickWinnerSeats.Count;
+            _beatTrickIndex  = _frameTrickCount - 1;
+            _beatStartedAt   = _now.Timestamp;
+            _beatEndsAt      = MatchTableTime.GetBeatEndsAt(board, _now, _beatDuration);
+        }
+
+        // Presented time trails only while a beat is still playing after the host has left the resolve pause.
+        // During the pause the model and the screen agree, so presented time is caught up.
+        MetaDuration behind = IsBeatPlaying && board.TurnPhase != MatchTurnPhase.ResolvingTrick
+            ? _beatEndsAt - _now.Timestamp
+            : MetaDuration.Zero;
+
+        _presented = behind > MetaDuration.Zero
+            ? PresentedTime.Trailing(_now, behind)
+            : PresentedTime.CaughtUpWith(_now);
+
+        // Start the "+1 point!" on the first render of the sweep, once per trick. It uses the beat's trick
+        // index instead of tracking the trick count separately.
+        if (IsSweeping && _beatTrickIndex != _pointTrickIndex)
+        {
+            _pointTrickIndex = _beatTrickIndex;
+            _pointSeat       = CentreWinnerSeat;
+            _pointShownAt    = _now.Timestamp;
+        }
+
+        ReconcileLiftedCard();
+
+        // Read the centre cards last, because they depend on the beat state set above. The markup uses them in
+        // three places, and each read builds a list from the play history, so they are read once here.
+        _centrePlays = ReadCentrePlays();
+    }
+
+    private bool IsBeatPlaying => MatchTableTime.IsBeatPlaying(_beatStartedAt, _beatEndsAt, _now);
+
+    /// <summary>Whether the opening animation plays: the seats appearing and the cards being dealt.</summary>
+    private bool TableIsBeingDealt => _tableIsBeingDealt;
+
+    /// <summary>Whether the "Trump" intro word is shown. The trump suit symbol is always shown.</summary>
+    private bool TrumpIntroIsPlaying => _now.Timestamp < _trumpIntroEndsAt;
+
+    /// <summary>
+    /// Passes the trump intro duration to the stylesheet as <c>--ts-trump-intro</c>, so the CSS animations and
+    /// the time this page renders the word use the same value.
+    /// </summary>
+    private string TableStyle =>
+        FormattableString.Invariant($"--ts-trump-intro: {_trumpIntroDuration.Milliseconds}ms");
+
+    /// <summary>
+    /// Whether the beat is in its sweep phase, where the trick's cards move to the winner's plaque.
+    /// <para>
+    /// This includes the last trick. The beat ends inside the host's resolve pause, so the sweep finishes
+    /// before the match reaches its end phase and the results overlay opens
+    /// (docs/web-client.md, "The table's two clocks").
+    /// </para>
+    /// </summary>
+    private bool IsSweeping => IsBeatPlaying && (_now.Timestamp - _beatStartedAt) >= BeatIndicateDuration;
+
+    /// <summary>
+    /// The duration of the "+1 point!" label: the larger of the label's default and a fixed share of the beat,
+    /// so a beat lengthened by a test keeps the label visible through the sweep.
+    /// </summary>
+    private int PointDurationMs => System.Math.Max(FloatingTextTiming.FullMotionLifetimeMs, (int)(_beatDuration.Milliseconds * 6 / 10));
+
+    /// <summary>Whether a "+1 point!" is currently shown over the winner's plaque.</summary>
+    private bool PointIsShowing
+        => _pointSeat != SeatRotation.NoSeat && _now.Timestamp < _pointShownAt + MetaDuration.FromMilliseconds(PointDurationMs);
+
+    #endregion
+
+    #region What the table shows
+
+    private MatchModel? Match => MetaplayService.Match;
+
+    private MatchBoard Board => Match!.Board;
+
+    private List<Card> OwnHand => _ownHand;
+
+    private List<Card> LegalPlays => _legalPlays;
+
+    private List<Card> SortedHand => _sortedHand;
+
+    /// <summary>
+    /// The match phase in presented time. An end phase is withheld while presented time trails, so the end
+    /// panels do not open before the last trick has finished animating.
+    /// </summary>
+    private MatchPhase PresentedPhase => MatchTableTime.GetPresentedPhase(Match!, _presented);
+
+    /// <summary>
+    /// The seat shown as on turn, in presented time, so the next leader is not highlighted while the previous
+    /// trick is still being swept.
+    /// </summary>
+    private int PresentedSeatOnTurn => MatchTableTime.GetPresentedSeatOnTurn(Board, _presented);
+
+    /// <summary>
+    /// Whether the viewer is shown as on turn, in presented time. It drives the legal-play highlight. Whether a
+    /// tap is accepted is decided by <see cref="IsPlayable"/>, which uses authoritative time.
+    /// </summary>
+    private bool ViewerIsOnTurn => SeatRotation.IsSeated(Match!.OwnSeat) && PresentedSeatOnTurn == Match.OwnSeat;
+
+    /// <summary>
+    /// The occupancy of the viewer's seat, or empty when the viewer has no seat. It does not fall back to seat
+    /// 0, because a test checking that the seat returned to its owner would then pass on another player's seat.
+    /// </summary>
+    private string OwnOccupancy => Match!.OwnSeat >= 0 ? Match.GetSeat(Match.OwnSeat).Occupancy.ToString() : string.Empty;
+
+    private static readonly List<PlayRecord> NoPlays = new List<PlayRecord>();
+
+    /// <summary>
+    /// The cards in the centre. While a beat plays, they are the resolving trick. During a resolve pause with
+    /// no beat, for example after arriving mid-pause, the centre is empty. Otherwise they are the current trick.
+    /// </summary>
+    private IReadOnlyList<PlayRecord> CentrePlays => _centrePlays;
+
+    private IReadOnlyList<PlayRecord> _centrePlays = NoPlays;
+
+    private IReadOnlyList<PlayRecord> ReadCentrePlays()
+    {
+        if (IsBeatPlaying && _beatTrickIndex >= 0)
+            return TrickPlays(_beatTrickIndex);
+        if (Board.TurnPhase == MatchTurnPhase.ResolvingTrick)
+            return NoPlays;
+        return Board.GetCurrentTrickPlays();
+    }
+
+    /// <summary>The seat whose card is highlighted as the trick winner during a beat, or <see cref="SeatRotation.NoSeat"/>.</summary>
+    private int CentreWinnerSeat
+    {
+        get
+        {
+            if (!IsBeatPlaying || _beatTrickIndex < 0 || _beatTrickIndex >= Board.TrickWinnerSeats.Count)
+                return SeatRotation.NoSeat;
+            return Board.TrickWinnerSeats[_beatTrickIndex];
+        }
+    }
+
+    private List<PlayRecord> TrickPlays(int trickIndex) => Board.GetTrickPlays(trickIndex);
+
+    /// <summary>
+    /// The flip duration of a card played by another seat, in milliseconds. The foil flash, the trump pulse and
+    /// the "TRUMP CARD!" label wait this long, so they start when the card is face up. Must match
+    /// <c>--ts-flip</c> in app.css, which cannot be read from C#.
+    /// </summary>
+    private const int FlipDurationMs = 440;
+
+    /// <summary>Whether any card in the centre is a trump. Drives the trump symbol's data-powering attribute.</summary>
+    private bool TrumpIsPowering
+    {
+        get
+        {
+            foreach (PlayRecord play in CentrePlays)
+            {
+                if (play.Card.Suit == Board.TrumpSuit)
+                    return true;
+            }
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The most recent trump played in the centre, or null. The trump pulse is keyed on its card, so each trump
+    /// play gets a new pulse element and the animation restarts.
+    /// </summary>
+    private PlayRecord? LatestCentreTrumpPlay
+    {
+        get
+        {
+            IReadOnlyList<PlayRecord> plays = CentrePlays;
+            for (int ndx = plays.Count - 1; ndx >= 0; ndx--)
+            {
+                if (plays[ndx].Card.Suit == Board.TrumpSuit)
+                    return plays[ndx];
+            }
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The sweep target as CSS custom properties: one point just past the winner's plaque, plus a rotation.
+    /// The stylesheet subtracts each card's own offset from it, so all the trick's cards converge on the
+    /// winner instead of moving in parallel.
+    /// <para>
+    /// The target is measured from the centre in the same units as the card offsets, because the stylesheet
+    /// subtracts one from the other.
+    /// </para>
+    /// </summary>
+    private string? SweepStyle
+    {
+        get
+        {
+            if (!IsSweeping || CentreWinnerSeat == SeatRotation.NoSeat)
+                return null;
+
+            TableScreenPosition winner = SeatRotation.ToScreenPosition(CentreWinnerSeat, Match!.OwnSeat);
+            return winner switch
+            {
+                TableScreenPosition.North => "--ts-sweep-x: 0rem;    --ts-sweep-y: -20rem; --ts-sweep-rot: -16deg;",
+                TableScreenPosition.South => "--ts-sweep-x: 0rem;    --ts-sweep-y: 16rem;  --ts-sweep-rot: 16deg;",
+                TableScreenPosition.West  => "--ts-sweep-x: -9.5rem; --ts-sweep-y: 0rem;   --ts-sweep-rot: -22deg;",
+                _                         => "--ts-sweep-x: 9.5rem;  --ts-sweep-y: 0rem;   --ts-sweep-rot: 22deg;",
+            };
+        }
+    }
+
+    private RenderFragment PlaqueAt(TableScreenPosition position)
+    {
+        int       seatIndex = SeatRotation.ToSeat(position, Match!.OwnSeat);
+        MatchSeat seat      = Match.GetSeat(seatIndex);
+        bool      isOnTurn  = PresentedSeatOnTurn == seatIndex;
+        bool      isViewer  = SeatRotation.IsSeated(Match.OwnSeat) && seatIndex == Match.OwnSeat;
+
+        // The winner's plaque is highlighted while the trick's cards sweep to it.
+        bool      isTakingTrick = IsSweeping && CentreWinnerSeat == seatIndex;
+
+        double    ringRemainingFraction = 0.0;
+        int       ringSeconds           = 0;
+        bool      hasRing               = isOnTurn && TryGetDeadlineRing(out ringRemainingFraction, out ringSeconds);
+
+        RenderFragment? ring = hasRing
+            ? @<DeadlineRing RemainingFraction="ringRemainingFraction" SecondsLeft="ringSeconds" />
+            : null;
+
+        // The "+1 point!" over the winner's plaque. The @key is the trick index, so each trick gets a new
+        // FloatingText instance whose animation starts from the beginning.
+        RenderFragment? pointText = PointIsShowing && seatIndex == _pointSeat
+            ? @<FloatingText @key="_pointTrickIndex" Text="+1 point!" DurationMs="PointDurationMs" TestId="point-text" />
+            : null;
+
+        return @<SeatPlaque Seat="seat"
+                            Identity="IdentityOf(seat)"
+                            Position="position"
+                            Style="@CardArcStyle.ForSeat(position)"
+                            TricksWon="Board.GetTricksWon(seatIndex)"
+                            IsOnTurn="isOnTurn"
+                            IsViewer="isViewer"
+                            IsTakingTrick="isTakingTrick"
+                            Ring="ring"
+                            FloatingLabel="pointText" />;
+    }
+
+    /// <summary>
+    /// The seat's identity with its worn cosmetics converted to style tokens.
+    /// <para>
+    /// It uses <see cref="CosmeticsPolicy.ViewOf"/> with the match's game config, the same conversion as the
+    /// Profile preview, so the seat looks as the preview showed (<c>docs/cosmetics.md</c>). An item missing
+    /// from this client's game config draws the default.
+    /// </para>
+    /// </summary>
+    private IdentityView IdentityOf(MatchSeat seat) =>
+        CosmeticsPolicy.ViewOf(Match?.GameConfig as SharedGameConfig, seat.Identity);
+
+    /// <summary>
+    /// Another seat's cards, drawn as backs. The viewer's own hand is rendered separately, because it shows
+    /// faces, takes input and sits at the bottom of the table.
+    /// </summary>
+    private RenderFragment HandAt(TableScreenPosition position)
+    {
+        int seatIndex = SeatRotation.ToSeat(position, Match!.OwnSeat);
+        return @<SeatHand Seat="seatIndex"
+                          Position="position"
+                          CardCount="Board.GetCardsRemaining(seatIndex)"
+                          SeatName="@Match.GetSeat(seatIndex).DisplayName" />;
+    }
+
+    /// <summary>
+    /// Whether the deadline ring is shown, and the fraction of <see cref="RingWindow"/> left.
+    /// <see cref="MatchTableTime.TryGetMoveDeadlineRemaining"/> decides whether there is a deadline to show.
+    /// This method adds only the rule that the ring appears within <see cref="RingWindow"/> of the deadline.
+    /// </summary>
+    private bool TryGetDeadlineRing(out double remainingFraction, out int secondsLeft)
+    {
+        remainingFraction = 0.0;
+        secondsLeft       = 0;
+
+        if (!MatchTableTime.TryGetMoveDeadlineRemaining(Board, _presented, out MetaDuration remaining))
+            return false;
+        if (remaining > RingWindow)
+            return false;
+
+        remainingFraction = (double)remaining.Milliseconds / RingWindow.Milliseconds;
+        secondsLeft       = MatchmakingWaitText.SecondsShown(remaining);
+        return true;
+    }
+
+    private static string PositionName(TableScreenPosition position) => SeatRotation.ToCssName(position);
+
+    #endregion
+
+    #region Playing a card: lift and lock
+
+    /// <summary>
+    /// How long a lifted card waits for the host's answer before it returns to the hand, so a lost message
+    /// does not lock the hand for the rest of the turn.
+    /// </summary>
+    private static readonly MetaDuration LiftAnswerTimeout = MetaDuration.FromSeconds(5);
+
+    /// <summary>The card lifted out of the hand while its move is in flight, or null when the hand is unlocked.</summary>
+    private Card? _liftedCard;
+
+    /// <summary>The play index when the card was lifted. Confirmations and refusals are matched against it.</summary>
+    private int _liftedAtPlayIndex = -1;
+
+    /// <summary>When the card was lifted, used for <see cref="LiftAnswerTimeout"/>.</summary>
+    private MetaTime _liftedAt = MetaTime.Epoch;
+
+    private bool HandIsLocked => _liftedCard.HasValue;
+
+    /// <summary>
+    /// Whether the card can be played now: the hand is unlocked, the card is legal by the shared rules the host
+    /// validates with, and the host would still accept a move. The last check uses authoritative time, because
+    /// presented time can lag behind the host.
+    /// </summary>
+    private bool IsPlayable(Card card)
+        => !HandIsLocked
+        && LegalPlays.Contains(card)
+        && MatchTableTime.CanStillSubmitMove(Board, _now);
+
+    /// <summary>
+    /// Lifts the card and locks the hand <i>before</i> sending the move, so the tap gets immediate feedback
+    /// and a second tap cannot be sent. The game state does not change until the host's update arrives
+    /// (docs/match.md, "Client messages").
+    /// </summary>
+    private void PlayCard(Card card)
+    {
+        if (Match == null || HandIsLocked || !LegalPlays.Contains(card))
+            return;
+
+        // Read the authoritative clock at the tap, not the value sampled at the last render.
+        AuthoritativeTime now = AuthoritativeTime.Now;
+        if (!MatchTableTime.CanStillSubmitMove(Board, now))
+            return;
+
+        _liftedCard        = card;
+        _liftedAtPlayIndex = Board.PlayIndex;
+        _liftedAt          = now.Timestamp;
+        MetaplayService.PlayCard(card);
+    }
+
+    /// <summary>
+    /// Unlocks the hand as soon as any condition below resolves the lifted card. Each condition alone is
+    /// enough, and the method does nothing when no card is lifted, so the confirmation and the refusal can
+    /// arrive in either order.
+    /// </summary>
+    private void ReconcileLiftedCard()
+    {
+        if (!_liftedCard.HasValue)
+            return;
+
+        MatchModel match = Match!;
+
+        // The board moved past the lifted play index, so the move was confirmed or the turn is over.
+        bool confirmed = match.Board.PlayIndex != _liftedAtPlayIndex;
+
+        // The host refused the move for this play index.
+        MatchMoveRefused? refusal = MetaplayService.LastMoveRefusal;
+        bool refused = refusal != null && refusal.PlayIndex == _liftedAtPlayIndex;
+
+        // Unusual cases that must still unlock the hand: a hand correction removed the card, or the match ended.
+        // ObserveTable has already read this render's hand.
+        bool noLongerHeld = !_ownHand.Contains(_liftedCard.Value);
+        bool matchOver    = match.Phase != MatchPhase.Playing;
+
+        // No answer arrived. Every check above depends on a host message, so a lost send or reply would lock
+        // the hand until a reload. The timeout uses authoritative time because it decides whether the hand
+        // takes input.
+        bool unanswered = _now.HasReached(_liftedAt + LiftAnswerTimeout);
+
+        if (confirmed || refused || noLongerHeld || matchOver || unanswered)
+            ClearLiftedCard();
+    }
+
+    private void ClearLiftedCard()
+    {
+        _liftedCard        = null;
+        _liftedAtPlayIndex = -1;
+        _liftedAt          = MetaTime.Epoch;
+    }
+
+    /// <summary>
+    /// The last move refusal, if it is for the current play index. Once the board has moved on, the refusal
+    /// is stale and is not shown.
+    /// </summary>
+    private MatchMoveRefused? RefusalToShow
+    {
+        get
+        {
+            MatchMoveRefused? refusal = MetaplayService.LastMoveRefusal;
+            if (refusal == null || Match == null)
+                return null;
+            return refusal.PlayIndex == Match.Board.PlayIndex ? refusal : null;
+        }
+    }
+
+    private static string RefusalText(MoveRefusalReason reason) => reason switch
+    {
+        MoveRefusalReason.StalePlayIndex     => "Too late — that turn has already been taken.",
+        MoveRefusalReason.NotYourTurn        => "Not your turn.",
+        MoveRefusalReason.NotInPlayablePhase => "The table is not waiting for a card.",
+        MoveRefusalReason.MustFollowSuit     => "You have to follow the suit that was led.",
+        MoveRefusalReason.CardNotInHand      => "That card is not in your hand.",
+        _                                    => "That card could not be played.",
+    };
+
+    private static string HandCardStateClass(bool isLifted, bool isPlayable, bool isBlocked)
+    {
+        if (isLifted)
+            return "ts-handcard--lifted";
+        if (isPlayable)
+            return "ts-handcard--playable";
+        if (isBlocked)
+            return "ts-handcard--blocked";
+        return "ts-handcard--waiting";
+    }
+
+    private static string HandCardTestId(bool isLifted, bool isPlayable, bool isBlocked)
+    {
+        if (isLifted)
+            return "lifted-card";
+        if (isPlayable)
+            return "legal-card";
+        if (isBlocked)
+            return "illegal-card";
+        return "waiting-card";
+    }
+
+    #endregion
+
+    #region Dragging a card into the centre
+
+    private Card?  _dragCard;
+    private double _dragOriginX;
+    private double _dragOriginY;
+
+    /// <summary>
+    /// Set when a drag was released away from the centre. The browser still fires a click after the pointer
+    /// events, and without this flag that click would play the card the player put back. Only a pointer click
+    /// consumes it, never a keyboard activation.
+    /// </summary>
+    private bool _suppressNextClick;
+
+    /// <summary>Pointer movement below this many pixels in both directions counts as a tap, not a drag.</summary>
+    private const double TapMaxMovementPx = 12.0;
+
+    private bool IsDragging => _dragCard.HasValue;
+
+    private void OnCardPointerDown(Card card, PointerEventArgs args)
+    {
+        _suppressNextClick = false;
+        if (!IsPlayable(card))
+            return;
+
+        _dragCard    = card;
+        _dragOriginX = args.ClientX;
+        _dragOriginY = args.ClientY;
+    }
+
+    /// <summary>
+    /// Ends a pointer gesture on a card. A tap or a drag up into the centre plays the card. The release
+    /// coordinates decide which gesture it was, so a gesture renders only on press and release.
+    /// <para>
+    /// The handler is bound to both the card and the drag surface, because the surface appears only on the
+    /// render after the press and a quick tap can end before then. The first handler to run clears
+    /// <c>_dragCard</c>, so the card is played at most once.
+    /// </para>
+    /// </summary>
+    private void OnDragPointerUp(PointerEventArgs args)
+    {
+        if (!IsDragging)
+            return;
+
+        Card card = _dragCard!.Value;
+        _dragCard = null;
+
+        double dx = args.ClientX - _dragOriginX;
+        double dy = args.ClientY - _dragOriginY;
+
+        bool draggedIntoCentre = dy <= -DragPlayThresholdPx;
+        bool wasATap           = System.Math.Abs(dx) < TapMaxMovementPx && System.Math.Abs(dy) < TapMaxMovementPx;
+
+        if (draggedIntoCentre || wasATap)
+            PlayCard(card);
+        else
+            _suppressNextClick = true;
+    }
+
+    /// <summary>
+    /// Ends a gesture without playing the card. The drag surface covers the whole viewport, so every such
+    /// event must remove it, or it would block all input.
+    /// </summary>
+    private void OnDragCancel(PointerEventArgs args) => _dragCard = null;
+
+    private void OnDragContextMenu(MouseEventArgs args) => _dragCard = null;
+
+    /// <summary>
+    /// Handles the click that follows a tap, and keyboard Enter and Space. If the pointer handler already
+    /// played the card, the hand is locked and <see cref="PlayCard"/> does nothing.
+    /// <para>
+    /// A keyboard activation has a click detail of zero, and a pointer click does not. Only pointer clicks
+    /// are suppressed, because <c>_suppressNextClick</c> stays set until the next press and a following key
+    /// press must still play the card.
+    /// </para>
+    /// </summary>
+    private void OnCardClick(Card card, MouseEventArgs args)
+    {
+        bool fromPointer = args.Detail != 0;
+        if (fromPointer && _suppressNextClick)
+        {
+            _suppressNextClick = false;
+            return;
+        }
+        PlayCard(card);
+    }
+
+    #endregion
+
+    #region Lifecycle
+
+    protected override void OnInitialized()
+    {
+        MetaplayService.OnStateChanged += OnStateChanged;
+        _beatDuration       = ReadDurationFromQuery("beatMs", DefaultBeatDuration);
+        _trumpIntroDuration = ReadDurationFromQuery("trumpIntroMs", DefaultTrumpIntroDuration);
+
+        // Also repaint on a timer, because the beat and the ring count down against absolute timestamps and no
+        // model update fires as they progress.
+        _repaintTicker = RepaintTicker.Start(RepaintInterval, NeedsClockRepaint, () => InvokeAsync(StateHasChanged));
+    }
+
+    /// <summary>
+    /// Reads an animation duration override in milliseconds from the query string, or returns
+    /// <paramref name="shipped"/>. These are client animation durations, so this page reads them itself, using
+    /// the same query string as the host timing overrides.
+    /// </summary>
+    private MetaDuration ReadDurationFromQuery(string key, MetaDuration shipped)
+    {
+        int? milliseconds = TestQuerySettings.TryGetInt(new Uri(Navigation.Uri).Query, key);
+        return milliseconds.HasValue ? MetaDuration.FromMilliseconds(milliseconds.Value) : shipped;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await MetaplayService.ConnectAsync();
+    }
+
+    /// <summary>
+    /// Navigates a player with no table to Home, for example after a cancelled search, a Leave, or a direct
+    /// visit to this URL. It runs after the render, because navigating during a render produces half-rendered
+    /// frames. It runs only with a session (<see cref="SessionIsUp"/>), otherwise a reload while seated would be
+    /// sent to Home.
+    /// </summary>
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (SessionIsUp && MetaplayService.HasNoTable)
+            EnvironmentLink.NavigateTo(Navigation, MetaRoutes.Home);
+    }
+
+    /// <summary>
+    /// Whether anything on screen depends on the wall clock. When nothing does, for example while waiting for
+    /// a bot with no deadline or after the game ends, the timer skips the render until the next host update.
+    /// <para>
+    /// It reads the clock itself instead of using <c>_now</c>, because <c>_now</c> is updated only by a
+    /// render and this decides whether to render. It uses authoritative time, the clock all the compared
+    /// timestamps are in. The device clock differs from it by the server offset, which could leave a beat
+    /// that never ends.
+    /// </para>
+    /// </summary>
+    private bool NeedsClockRepaint()
+    {
+        MatchModel? match = Match;
+        if (match == null)
+            return false;
+
+        // A running beat is also what withholds the end phase, so repainting here guarantees the results
+        // overlay eventually opens.
+        if (MatchTableTime.IsBeatPlaying(_beatStartedAt, _beatEndsAt, AuthoritativeTime.Now))
+            return true;
+
+        // The trump intro word. Only the timer removes it, because no host update marks its end.
+        if (AuthoritativeTime.Now.Timestamp < _trumpIntroEndsAt)
+            return true;
+
+        // The "+1 point!" label, for the same reason as the trump intro.
+        if (PointIsShowing)
+            return true;
+
+        // A lifted card waiting for an answer. If the answer is lost, only the timer can reach
+        // LiftAnswerTimeout and unlock the hand.
+        if (_liftedCard.HasValue)
+            return true;
+
+        MatchBoard board = match.Board;
+        if (board.TurnPhase == MatchTurnPhase.ResolvingTrick)
+            return true;
+        return board.TurnPhase == MatchTurnPhase.AwaitingMove && board.HasMoveDeadline;
+    }
+
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    /// <summary>
+    /// The number of seats where a bot covers for a human player. For the E2E tests, which have no visible
+    /// element for it.
+    /// </summary>
+    private int CoveredSeatCount
+    {
+        get
+        {
+            int covered = 0;
+            foreach (MatchSeat seat in Match!.Seats)
+            {
+                if (seat.Occupancy == MatchSeatOccupancy.HumanCoveredByBot)
+                    covered++;
+            }
+            return covered;
+        }
+    }
+
+    /// <summary>
+    /// Asks the host to release the player's seat (see the Leave button markup). The page does not navigate
+    /// here. The host's release empties the match slot, and <see cref="OnAfterRender"/> then navigates to Home.
+    /// </summary>
+    private void OnLeaveRequested()
+    {
+        MetaplaySDK.RunOnMainThreadAsync(() => MetaplayService.MatchClient.Leave());
+    }
+
+    /// <summary>
+    /// Whether the session is up. The player model and the match association arrive in the same handshake, so
+    /// once the player model exists, an empty match slot means the player has no table. Before that, the slot
+    /// is empty only because it has not been loaded.
+    /// </summary>
+    private bool SessionIsUp => MetaplayService.PlayerModel != null;
+
+    public void Dispose()
+    {
+        MetaplayService.OnStateChanged -= OnStateChanged;
+        _repaintTicker?.Dispose();
+    }
+
+    #endregion
+}

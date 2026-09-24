@@ -1,0 +1,45 @@
+@* A title that animates in one letter at a time, used by the reward reveal and the results overlay. Each
+   letter starts one step after the previous one. RevealCascade.StepMs shortens the step for longer titles,
+   so the total duration stays within RevealCascade's budget.
+
+   The letters are aria-hidden, and the root element's aria-label holds the whole title, so screen readers
+   read the title as text rather than as separate letters.
+
+   The styling lives in the .cascade rules in meta-shell.css. This component only renders the structure (gaps, word
+   groups, letters) and each letter's index for its animation delay. *@
+
+<span class="cascade @(Muted ? "cascade--muted" : null) @Class"
+      style="@($"--cascade-step:{RevealCascade.StepMs(RevealCascade.LetterCount(Text))}ms")"
+      aria-label="@Text" data-testid="@TestId">
+    @foreach ((string word, int firstLetter) in RevealCascade.WordsOf(Text))
+    {
+        @if (firstLetter > 0)
+        {
+            @* The space is a Razor expression because the Razor compiler trims whitespace-only element
+               content, which would run the words together. *@
+            <span class="cascade__gap">@(" ")</span>
+        }
+        @* Each word is one inline box, so a long title wraps between words and never inside one. *@
+        <span class="cascade__word-group">
+            @for (int i = 0; i < word.Length; i++)
+            {
+                <span class="cascade__letter" aria-hidden="true" style="--i:@(firstLetter + i)">@word[i]</span>
+            }
+        </span>
+    }
+</span>
+
+@code {
+    /// <summary>The title text. Upper-case it with CSS, not in the string.</summary>
+    [Parameter, EditorRequired] public string Text { get; set; } = "";
+
+    /// <summary>Draws the letters in the caller's text colour without the gold gradient and shine. Use it for
+    /// results that are not a win.</summary>
+    [Parameter] public bool Muted { get; set; }
+
+    /// <summary>Extra CSS classes added to the root span, for example for sizing.</summary>
+    [Parameter] public string? Class { get; set; }
+
+    /// <summary>The data-testid of the root span. Null renders no test id.</summary>
+    [Parameter] public string? TestId { get; set; }
+}

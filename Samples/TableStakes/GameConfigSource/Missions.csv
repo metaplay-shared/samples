@@ -1,0 +1,6 @@
+Id #key,Cadence,Objective,TargetCount,Reward
+daily.play1,Daily,MatchesCompleted,1,100 Coins
+daily.play3,Daily,MatchesCompleted,3,150 Coins
+daily.win1,Daily,MatchesWon,1,150 Coins
+weekly.play10,Weekly,MatchesCompleted,10,1 SpinTokens
+weekly.win3,Weekly,MatchesWon,3,1 SpinTokens

@@ -1,0 +1,177 @@
+@page "/compete"
+@page "/compete/tournament"
+@layout MetaLayout
+@inherits MetaComponentBase
+@inject MetaplayClientService MetaplayService
+@inject NavigationManager Navigation
+@using Game.Logic
+
+@* The Compete screen, which shows the seasonal tournament (docs/seasonal-tournament.md). Both /compete and
+   /compete/tournament route here. *@
+
+<ChildPageHeader Title="Compete" Subtitle="One week. Ten matches. Twenty players." />
+
+@if (!Tournament.State.IsLive())
+{
+    <ActivityStateBlock State="Tournament.State" />
+}
+else
+{
+    <div class="m-card m-card--live m-card--featured" data-testid="tournament-summary">
+        <span class="m-card__eyebrow">@Tournament.PhaseLabel</span>
+        <p class="m-card__title">@Tournament.Name</p>
+
+        @if (Tournament.UntilStart is TimeSpan start)
+        {
+            <p class="m-card__note">Starts in <MetaCountdown Remaining="start" ExpiredText="now" /></p>
+        }
+        else
+        {
+            <MetaCountdown Remaining="Tournament.UntilEnd" EndingSoonWithin="Tournament.EndingSoonWithin" ExpiredText="Season ended" />
+        }
+
+        @if (Tournament.IsInSeason)
+        {
+            <div class="m-card__row">
+                <span><strong data-testid="tournament-rank">#@Tournament.Rank</strong> <span class="m-card__note">your place</span></span>
+                <span><strong data-testid="tournament-score">@Tournament.Score</strong> <span class="m-card__note">points</span></span>
+            </div>
+
+            <MetaProgress Current="Tournament.ScoredMatches" Target="Tournament.MatchCap" Label="matches counted" ShowNumbers="true" />
+        }
+        else
+        {
+            <p class="m-card__note" data-testid="tournament-rules">
+                Free to enter. Your first @Tournament.MatchCap matches count, and every win is one point.
+                You join a group of @TournamentRules.GroupSize, and it is full from the moment you do.
+            </p>
+            <p class="m-card__note" data-testid="tournament-first-prize">
+                First place wins <RewardPreview Bundle="Tournament.RewardFor(1)" Compact="true" />
+            </p>
+        }
+
+        <div class="m-card__foot">
+            @if (!Tournament.IsInSeason)
+            {
+                <MetaButton Variant="MetaButtonVariant.Hero" Block="true" Size="MetaButtonSize.Lg"
+                            TestId="tournament-join" Disabled="@_requestInFlight" OnClick="Join">@ButtonLabels.Join</MetaButton>
+            }
+            else if (Tournament.IsCapReached)
+            {
+                @* The player has used every counted match this season, so a status replaces the Play
+                   button. *@
+                <MetaStatusLabel Block="true" Size="MetaButtonSize.Lg" TestId="compete-cap">All @Tournament.MatchCap matches counted</MetaStatusLabel>
+            }
+            else
+            {
+                <MetaButton Variant="MetaButtonVariant.Hero" Block="true" Size="MetaButtonSize.Lg"
+                            TestId="compete-play" OnClick="Play">@ButtonLabels.Play</MetaButton>
+            }
+        </div>
+    </div>
+
+    @if (Tournament.HasClaimableReward)
+    {
+        <MetaSectionHeading Label="Last season" Accent="claim" />
+
+        <div class="m-card m-card--claim" data-testid="tournament-reward-awaiting">
+            <p class="m-card__title">You finished #@Tournament.PendingRank</p>
+            <RewardPreview Bundle="Tournament.PendingReward" />
+            <div class="m-card__foot">
+                <MetaButton Variant="MetaButtonVariant.Claim" Block="true" Size="MetaButtonSize.Lg"
+                            TestId="tournament-claim-placement" Disabled="@_requestInFlight" OnClick="ClaimPlacement">@ButtonLabels.Claim</MetaButton>
+            </div>
+        </div>
+    }
+
+    @if (_refusalMessage != null)
+    {
+        <p class="m-state__note" data-testid="tournament-refusal">@_refusalMessage</p>
+    }
+
+    @* Before joining, the player is in no group, because the league manager assigns the group on join. The
+       board is therefore hidden until there are rows, so the screen never shows an empty board
+       (docs/seasonal-tournament.md). *@
+    @if (Tournament.Standings.Count > 0)
+    {
+        <MetaSectionHeading Label="The group" />
+
+        <Standings Rows="Tournament.Standings" Placements="Tournament.PlacementBands" PromotionZoneSize="0" />
+    }
+
+    <MetaSectionHeading Label="Taking part" Accent="claim" />
+
+    <div class="m-card" data-testid="tournament-milestones">
+        <p class="m-card__note">Earned by playing, whether you win or not.</p>
+
+        <div class="m-goal-list">
+            @foreach (TournamentMilestoneView milestone in Tournament.Milestones)
+            {
+                <TournamentMilestoneRow Milestone="milestone" Busy="_requestInFlight" ScoredSoFar="Tournament.ScoredMatches"
+                                        OnClaim="ClaimMilestone" />
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private TournamentView Tournament => Meta.Snapshot.Tournament;
+
+    private bool _requestInFlight;
+
+    /// <summary>The message for the last refused join or claim, or null.</summary>
+    private string? _refusalMessage;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        MetaplayService.OnStateChanged += OnChanged;
+    }
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task Join()
+    {
+        _requestInFlight = true;
+        _refusalMessage = null;
+
+        TournamentJoinResponse response = await MetaplayService.JoinTournamentAsync();
+        _refusalMessage = response.Joined || response.Refusal == TournamentJoinRefusal.AlreadyJoined
+            ? null
+            : Explain(response.Refusal);
+
+        _requestInFlight = false;
+        StateHasChanged();
+    }
+
+    private Task ClaimMilestone(int index) => Claim(TournamentClaimRequest.ForMilestone(index));
+
+    private Task ClaimPlacement() => Claim(TournamentClaimRequest.ForPlacement(MetaplayService.PendingTournamentDivision));
+
+    private async Task Claim(TournamentClaimRequest request)
+    {
+        _requestInFlight = true;
+        _refusalMessage = null;
+
+        TournamentClaimResponse response = await MetaplayService.ClaimTournamentAsync(request);
+        _refusalMessage = response.Paid ? null : "That could not be collected. Try again in a moment.";
+
+        _requestInFlight = false;
+        StateHasChanged();
+    }
+
+    private static string Explain(TournamentJoinRefusal refusal) => refusal switch
+    {
+        TournamentJoinRefusal.NoSeasonRunning => "The next season has not opened yet.",
+        TournamentJoinRefusal.SeasonChanging  => "A new season is starting. Try again in a moment.",
+        _                                     => "Could not enter right now. Try again in a moment.",
+    };
+
+    /// <summary>
+    /// Starts matchmaking, like every Play button in the meta layer. The searching dialog opens over this
+    /// screen, and the table route replaces it once a match is found.
+    /// </summary>
+    private void Play() => MetaplayService.EnterMatchmaking();
+
+    protected override void OnDispose() => MetaplayService.OnStateChanged -= OnChanged;
+}

@@ -1,0 +1,26 @@
+@* A confirmation dialog with a question and a confirm and a cancel button, drawn on MetaSheet.
+
+   Tapping the scrim does not dismiss it, because a stray tap would then cancel without the player choosing to. *@
+
+<MetaSheet Open="Open" Title="@Title" TestId="confirm" DismissOnScrim="false" OnDismiss="OnCancel">
+    <p class="pnl__body">@Question</p>
+
+    <div class="pnl__actions">
+        <MetaButton Variant="MetaButtonVariant.Ghost" TestId="confirm-cancel" OnClick="OnCancel">
+            @CancelText
+        </MetaButton>
+        <MetaButton Variant="MetaButtonVariant.Primary" TestId="confirm-accept" OnClick="OnConfirm">
+            @ConfirmText
+        </MetaButton>
+    </div>
+</MetaSheet>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter, EditorRequired] public string Question { get; set; } = "";
+    [Parameter] public string ConfirmText { get; set; } = "Confirm";
+    [Parameter] public string CancelText { get; set; } = ButtonLabels.Cancel;
+    [Parameter] public EventCallback OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+}

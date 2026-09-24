@@ -1,0 +1,62 @@
+@using WebClient.Meta
+
+@* A player's avatar inside the worn frame, optionally followed by the name with its name effect. Every screen
+   that shows a player's identity uses it, so the cosmetics look the same everywhere
+   (docs/player.md, "Public identity"). *@
+
+<span class="medallion m-avatar @FrameClass @Class" style="@($"--m-avatar-size: {Diameter};")" data-testid="@TestId">
+    <span class="m-avatar__face" aria-hidden="true"><AvatarIcon Token="@Identity.AvatarToken" /></span>
+    <AvatarFrame Token="@Identity.FrameToken" />
+    @if (Badged)
+    {
+        <span class="m-avatar__badge"><ActionableBadge Label="A new cosmetic is waiting" /></span>
+    }
+</span>
+
+@if (WithName)
+{
+    <PlayerName Identity="Identity" Class="@NameClass" />
+}
+
+@code {
+    [Parameter, EditorRequired] public IdentityView Identity { get; set; } = default!;
+    [Parameter] public int Size { get; set; } = 44;
+    [Parameter] public bool WithName { get; set; }
+    [Parameter] public bool Badged { get; set; }
+
+    /// <summary>
+    /// The test id. Pages that draw many avatars, such as the cosmetics frame tiles, pass another id so the
+    /// page has only one "avatar".
+    /// </summary>
+    [Parameter] public string? TestId { get; set; } = "avatar";
+
+    /// <summary>
+    /// An extra CSS class for the name, such as a size class from <see cref="NamePlate"/>. Used only when
+    /// <see cref="WithName"/> is true.
+    /// </summary>
+    [Parameter] public string? NameClass { get; set; }
+
+    /// <summary>
+    /// An extra CSS class on the medallion, for example the seat plaque's class. It should only set the
+    /// medallion's <c>--med-*</c> custom properties and not redraw the disc (<c>app.css</c>, "The medallion").
+    /// </summary>
+    [Parameter] public string? Class { get; set; }
+
+    /// <summary>
+    /// The diameter as a CSS length, for an avatar that scales with its container, such as the Profile hero.
+    /// Overrides <see cref="Size"/>, which is in pixels.
+    /// </summary>
+    [Parameter] public string? SizeCss { get; set; }
+
+    private string Diameter => string.IsNullOrEmpty(SizeCss) ? $"{Size}px" : SizeCss;
+
+    /// <summary>
+    /// The frame modifier class, or an empty string when no frame is worn (docs/player.md, "Public identity").
+    /// <para>
+    /// <see cref="IdentityView.FrameToken"/> must be a style token, not a catalogue id. A catalogue id would
+    /// produce a class that matches no CSS rule. <c>WebClient/Meta/CosmeticsPolicy.cs</c> does the conversion
+    /// (docs/cosmetics.md).
+    /// </para>
+    /// </summary>
+    private string FrameClass => string.IsNullOrEmpty(Identity.FrameToken) ? "" : $"m-frame--{Identity.FrameToken}";
+}

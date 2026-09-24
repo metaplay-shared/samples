@@ -1,0 +1,8 @@
+Id #key,Days[].Id,Days[].Day,Days[].MatchesRequired,Days[].Reward
+firstweek.v1,firstweek.v1.day1,1,1,250 Coins
+,firstweek.v1.day2,2,1,300 Coins
+,firstweek.v1.day3,3,2,350 Coins
+,firstweek.v1.day4,4,2,400 Coins
+,firstweek.v1.day5,5,2,450 Coins
+,firstweek.v1.day6,6,3,500 Coins
+,firstweek.v1.day7,7,1,"1500 Coins, 100 Gems, 2 SpinTokens"

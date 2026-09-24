@@ -1,0 +1,5 @@
+Id #key,Milestones[].ScoredMatches,Milestones[].Reward,Placements[].MaxRank,Placements[].Reward,Placements[].Cosmetic
+tournament.v1,1,250 Coins,1,"1500 Coins, 50 Gems",frame.champion
+,3,250 Coins,3,"1000 Coins, 1 SpinTokens",
+,7,500 Coins,5,500 Coins,
+,10,1 SpinTokens,,,

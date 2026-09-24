@@ -1,0 +1,187 @@
+@using WebClient.Meta
+@using WebClient.Meta.Ui
+@inject WalletBurstService WalletBurst
+@implements IDisposable
+
+@* The reward reveal used by every feature that grants a reward (docs/meta-shell.md, "The shared reward flow").
+
+   In the Granting stage the reveal shows only a placeholder, because the server decides whether the grant
+   succeeds. What is on screen depends only on Stage, so after a reconnect the caller can show the reveal again
+   without granting again.
+
+   On a failure, "Not now" leaves without retrying, because a claim refused for a lasting reason is refused on
+   every retry. Claim starts the wallet animation (WalletBurstService.Launch) and closes the reveal, so the sprites
+   fly over the screen, not over the dialog. *@
+
+@if (Stage != RewardRevealStage.Idle)
+{
+    bool failed = Stage == RewardRevealStage.Failed;
+    string cascadeTitle = failed ? FailedTitle : Title;
+
+    <div class="m-reveal @(_exiting ? "m-reveal--exiting" : null) @(failed ? "m-reveal--failed" : null)"
+         data-testid="reward-reveal" role="dialog" aria-modal="true" aria-label="@Title" tabindex="-1">
+        @* The animated title. The m-reveal__source class sets its size and the perspective for the letter
+           animation. *@
+        <CascadeTitle Text="@cascadeTitle" Muted="@failed" Class="m-reveal__source" TestId="@(failed ? null : "reward-title")" />
+
+        @if (Stage == RewardRevealStage.Granting)
+        {
+            @* No button while the grant is in flight. Focus stays on the dialog element. When the stage
+               changes, Blazor updates the dialog in place, so modal-focus.js moves focus to the Claim button
+               when that button appears (wwwroot/modal-focus.js). *@
+            <p class="m-reveal__word">Rewards</p>
+            <div class="m-reveal__pending m-skeleton" style="height: 4.5rem;" data-testid="reward-granting"></div>
+            <p class="m-reveal__holding m-state__note">Confirming with the server…</p>
+        }
+        else if (failed)
+        {
+            <p class="m-reveal__refusal">Nothing was awarded. Your balances are unchanged.</p>
+            <div class="m-reveal__warning">
+                <MetaIcon Name="warning" Size="48" />
+            </div>
+            @* "Not now" is required. Some refusals are permanent, for example a receipt the server rejects or
+               a reward that was already claimed, and with only Retry the player could not leave the dialog. *@
+            <div class="m-reveal__actions">
+                <MetaButton Variant="MetaButtonVariant.Hero" Size="MetaButtonSize.Lg" TestId="reward-retry"
+                            Class="m-reveal__claim" Disabled="@_exiting" OnClick="OnRetry">
+                    @ButtonLabels.Retry
+                </MetaButton>
+                <MetaButton Variant="MetaButtonVariant.Ghost" TestId="reward-dismiss"
+                            Disabled="@_exiting" OnClick="Continue">
+                    Not now
+                </MetaButton>
+            </div>
+        }
+        else
+        {
+            @if (!Bundle.IsEmpty)
+            {
+                <p class="m-reveal__word">Rewards</p>
+
+                @* wallet-burst.js measures this row (data-wallet-source) to find where the sprites start. *@
+                <div class="m-reveal__items" data-wallet-source>
+                    <RewardPreview Bundle="Bundle" Hero="true" />
+                </div>
+            }
+
+            <MetaButton Variant="MetaButtonVariant.Hero" Size="MetaButtonSize.Lg" Block="true"
+                        TestId="reward-continue" Class="m-reveal__claim"
+                        Disabled="@_exiting" OnClick="Continue">
+                @ButtonLabels.Claim
+            </MetaButton>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public RewardRevealStage Stage { get; set; }
+    [Parameter] public RewardView Bundle { get; set; } = RewardView.Empty;
+    [Parameter] public string Title { get; set; } = "You won";
+
+    /// <summary>Raised after the exit animation when the player taps Claim or "Not now". The caller sets Stage back to Idle.</summary>
+    [Parameter] public EventCallback OnContinue { get; set; }
+
+    [Parameter] public EventCallback OnRetry { get; set; }
+
+    /// <summary>The title shown in the Failed stage instead of <see cref="Title"/>.</summary>
+    private const string FailedTitle = "Not awarded";
+
+    /// <summary>
+    /// The exit animation duration in milliseconds. Must match <c>--m-reveal-exit</c> in meta-shell.css.
+    /// </summary>
+    private const int ExitMs = 180;
+
+    /// <summary>The <see cref="RewardView.Describe"/> text of the bundle held back from the HUD, or null when nothing is held.</summary>
+    private string? _heldBundleDescription;
+
+    private bool _exiting;
+    private bool _launched;
+    private bool _isDisposed;
+
+    /// <summary>
+    /// Holds the HUD balances back while the reward is shown. The hold starts as soon as the grant commits,
+    /// because the HUD stays visible behind the scrim, and a later hold would show the balance rise, drop back
+    /// and then count up again. <see cref="Continue"/> then launches the animation to the HUD.
+    /// <para>
+    /// When the reveal ends any other way (a refusal, the screen closing it, a reconnect), the hold is released.
+    /// The component is reused across reveals, so it also resets its own state here.
+    /// </para>
+    /// </summary>
+    protected override void OnParametersSet()
+    {
+        // Hold only in the showing stages. Every other stage releases, so a new way of ending a reveal
+        // releases the hold without being listed here.
+        bool showing = Stage == RewardRevealStage.Granted || Stage == RewardRevealStage.Revealed;
+
+        if (!showing)
+        {
+            ReleaseBalanceHold();
+            return;
+        }
+
+        // Hold again if the bundle changed while the reveal stayed open. Bundles are compared by their
+        // description rather than by reference, because some screens build an equal bundle on every render.
+        if (_launched)
+            return;
+
+        string description = Bundle.Describe();
+        if (_heldBundleDescription != description)
+        {
+            WalletBurst.Hold(Bundle);
+            _heldBundleDescription = description;
+        }
+    }
+
+    /// <summary>Releases the hold on the HUD balances, if this reveal holds one, and resets the exit state.</summary>
+    private void ReleaseBalanceHold()
+    {
+        if (_heldBundleDescription != null && !_launched)
+            WalletBurst.Stop();
+
+        _heldBundleDescription = null;
+        _exiting               = false;
+        _launched              = false;
+    }
+
+    /// <summary>
+    /// Handles Claim and "Not now". It launches the wallet animation immediately, while the reveal is still
+    /// fading out, so the sprites start from the visible reward items.
+    /// <para>
+    /// For a refused reward nothing is held, so <c>WalletBurst.Launch</c> does nothing.
+    /// </para>
+    /// </summary>
+    private async Task Continue()
+    {
+        if (_exiting)
+            return;
+
+        WalletBurst.Launch();
+
+        _exiting  = true;
+        _launched = true;
+        StateHasChanged();
+
+        await Task.Delay(ExitMs);
+
+        if (_isDisposed)
+            return;
+
+        await OnContinue.InvokeAsync();
+    }
+
+    /// <summary>
+    /// Releases a hold that was not launched, so the HUD does not keep showing old balances after the reveal
+    /// is removed.
+    /// <para>
+    /// An animation that is already running is not stopped here, because the HUD is on every meta route.
+    /// MetaLayout ends it on navigation.
+    /// </para>
+    /// </summary>
+    public void Dispose()
+    {
+        _isDisposed = true;
+
+        if (_heldBundleDescription != null && !_launched)
+            WalletBurst.Stop();
+    }
+}

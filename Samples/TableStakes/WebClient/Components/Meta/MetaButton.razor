@@ -1,0 +1,80 @@
+@using WebClient.Meta.Ui
+@inject NavigationManager Navigation
+
+@* The meta layer's button. Every tappable control in the meta layer except whole cards, tabs and switches
+   uses it, so press, hover, focus and disabled styles are defined in one place. The variant selects the
+   meaning, for example Primary for the main action and Claim for collecting a reward. For a label that
+   cannot be tapped, use MetaStatusLabel.
+
+   With Href set it renders an anchor with the button classes. The anchor does not get the press animation
+   that app-base.css applies to every <button>. IconOnly requires AriaLabel, and OnParametersSet throws
+   without it. *@
+
+@if (Href is string href)
+{
+    @* A disabled anchor renders without href, which makes it unfocusable and not navigable. *@
+    <a class="@CssClass" href="@(Disabled ? null : EnvironmentLink.Href(Navigation, href))"
+       data-testid="@TestId" aria-label="@AriaLabel" aria-disabled="@(Disabled ? "true" : null)"
+       @onclick="@(Disabled ? EventCallback<MouseEventArgs>.Empty : OnClick)"
+       @attributes="AdditionalAttributes">@ChildContent</a>
+}
+else
+{
+    <button type="button" class="@CssClass"
+            data-testid="@TestId" aria-label="@AriaLabel" disabled="@Disabled"
+            @onclick="OnClick" @attributes="AdditionalAttributes">@ChildContent</button>
+}
+
+@code {
+    /// <summary>The button style. Defaults to Secondary.</summary>
+    [Parameter] public MetaButtonVariant Variant { get; set; } = MetaButtonVariant.Secondary;
+
+    /// <summary>The button height. Defaults to Md.</summary>
+    [Parameter] public MetaButtonSize Size { get; set; } = MetaButtonSize.Md;
+
+    /// <summary>Whether the button fills its column, up to the button's maximum width.</summary>
+    [Parameter] public bool Block { get; set; }
+
+    /// <summary>
+    /// Whether the button is a square holding one icon. Requires <see cref="AriaLabel"/> so screen readers
+    /// can name it.
+    /// </summary>
+    [Parameter] public bool IconOnly { get; set; }
+
+    /// <summary>The accessible name. Required when the content is not text.</summary>
+    [Parameter] public string? AriaLabel { get; set; }
+
+    /// <summary>The navigation target. When set, the button renders as an anchor.</summary>
+    [Parameter] public string? Href { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public EventCallback<MouseEventArgs> OnClick { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public string? TestId { get; set; }
+
+    /// <summary>Extra CSS classes added after the variant's classes.</summary>
+    [Parameter] public string? Class { get; set; }
+
+    /// <summary>Forces the hover, press or focus style, so the gallery can show it without a pointer.</summary>
+    [Parameter] public MetaButtonForceState ForceState { get; set; } = MetaButtonForceState.None;
+
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private string CssClass
+    {
+        get
+        {
+            string classes = MetaButtonClasses.For(Variant, Size, Block, IconOnly, ForceState);
+            return string.IsNullOrEmpty(Class) ? classes : $"{classes} {Class}";
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (IconOnly && string.IsNullOrEmpty(AriaLabel))
+            throw new InvalidOperationException("An icon-only MetaButton requires AriaLabel: a control with no words has no other name.");
+    }
+}

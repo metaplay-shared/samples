@@ -1,0 +1,182 @@
+@namespace WebClient.Components.TableUI
+@using Game.Logic
+@using Metaplay.Core
+@using WebClient.Components.Meta
+@using WebClient.Meta
+@inject NavigationManager Navigation
+
+@* The results overlay on the finished table, shown after the last trick has moved to its winner
+   (docs/player.md, "Results screen"). It shows the full standings and, only for a tie, the tie-break rule
+   that decided first place.
+
+   The tie-break reason comes from SeatStanding.SeparatedFromNextBy, set by the same sort that ordered the
+   standings, so the reason and the order always agree. ConfettiPlan derives the pieces from the match id, so
+   a match always gets the same confetti. An abandoned match has no standings and uses AbandonedPanel.
+
+   The winner heading is rendered here instead of through Panel's Title because it needs the results-winner
+   test id. *@
+
+@if (ViewerWon)
+{
+    @* The confetti layer sits above the dialog layer, so the pieces fall across the panel. It is hidden from
+       assistive technology because the headline already states the result. *@
+    <div class="ft-confetti" data-testid="confetti" data-pieces="@ConfettiPlan.Count" aria-hidden="true">
+        @foreach ((int colorNdx, string style) in _confetti)
+        {
+            <span class="ft-confetti__piece ft-confetti__piece--@colorNdx" style="@style"></span>
+        }
+    </div>
+}
+
+<ModalPanel Anchor="PanelAnchor.Bottom" TestId="results-overlay" AriaLabel="Results"
+       Eyebrow="@(ViewerWon ? "Victory" : "Game over")"
+       Class="@($"ft-results {(ViewerWon ? "ft-results--won" : "ft-results--lost")}")">
+    <ChildContent>
+        <h2 class="pnl__title ft-results__headline" data-testid="results-winner"
+            data-outcome="@(ViewerWon ? "won" : "lost")">
+            <CascadeTitle Text="@Headline" Muted="@(!ViewerWon)" Class="ft-results__cascade" />
+        </h2>
+        @* Shown only when the winner is not clear from the trick counts in the standings. *@
+        @if (TieBreakReason.Length > 0)
+        {
+            <p class="pnl__body" data-testid="results-reason">@TieBreakReason</p>
+        }
+
+        @* The viewer's place, shown only when the viewer has a seat and did not win. *@
+        @if (!ViewerWon && ViewerStanding is SeatStanding viewer)
+        {
+            <p class="pnl__body" data-testid="results-place">
+                You finished @Ordinal(viewer.Position + 1) with @viewer.TricksWon @(viewer.TricksWon == 1 ? "trick" : "tricks")
+            </p>
+        }
+
+        <ol class="ts-standings" data-testid="standings">
+            @* The test id uses the zero-based Position, and the displayed place is Position + 1, so "standing-0" is
+               the winner's row. *@
+            @foreach (SeatStanding standing in Standings)
+            {
+                <li class="ts-standings__row stand-row @(standing.Position == 0 ? "stand-row--gilt" : null) @(standing.Seat == Match.OwnSeat ? "ts-standings__row--viewer" : null)"
+                    data-testid="@($"standing-{standing.Position}")"
+                    data-seat="@standing.Seat"
+                    data-separation="@standing.SeparatedFromNextBy">
+                    <span class="ts-standings__rank">@(standing.Position + 1)</span>
+                    @* The same avatar as the seat plaque (docs/cosmetics.md). *@
+                    <PlayerAvatar Identity="IdentityOf(standing.Seat)" Size="24"
+                                  TestId="@($"standing-{standing.Position}-avatar")" />
+                    <PlayerName Identity="IdentityOf(standing.Seat)" Class="ts-standings__name" TestId="@((string?)null)" />
+                    <span class="ts-standings__tricks" data-testid="@($"standing-{standing.Position}-tricks")">@standing.TricksWon @(standing.TricksWon == 1 ? "trick" : "tricks")</span>
+                </li>
+            }
+        </ol>
+
+        @* The only action is Back to menu. There is no Play again button, so matchmaking has a single entry
+           point on Home and its error and waiting states are handled in one place. *@
+    </ChildContent>
+    <Actions>
+        <a class="pnl__key btn-glossy" data-testid="results-leave" href="@EnvironmentLink.Href(Navigation, MetaRoutes.Home)">Back to menu</a>
+    </Actions>
+</ModalPanel>
+
+@code {
+    [Parameter, EditorRequired] public MatchModel Match { get; set; } = default!;
+
+    /// <summary>
+    /// The confetti pieces' colour indexes and styles. The table re-renders this overlay many times a second, and
+    /// the pieces depend only on the match id, so they are built once per match.
+    /// </summary>
+    private (int ColorNdx, string Style)[] _confetti = Array.Empty<(int, string)>();
+    private EntityId? _confettiMatchId;
+
+    protected override void OnParametersSet()
+    {
+        if (Match.EntityId == _confettiMatchId)
+            return;
+
+        _confettiMatchId = Match.EntityId;
+        _confetti = ConfettiPlan.For(Match.EntityId.Value)
+            .Select(piece => (piece.ColorNdx,
+                $"--cx:{FormatCssNumber(piece.X)}%; --cd:{piece.DelayMs}ms; --cf:{piece.FallMs}ms; --cdr:{FormatCssNumber(piece.DriftRem)}rem; --cs:{piece.Spin}deg; --csc:{FormatCssNumber(piece.Scale)}"))
+            .ToArray();
+    }
+
+    private IReadOnlyList<SeatStanding> Standings => Match.Board.Standings;
+
+    /// <summary>
+    /// The seat's public identity with cosmetics converted to style tokens. It uses the same
+    /// <see cref="CosmeticsPolicy.ViewOf"/> call and the match's game config as <c>Table.razor</c>, so the
+    /// standings and the seat plaques show the same cosmetics.
+    /// </summary>
+    private IdentityView IdentityOf(int seat) =>
+        CosmeticsPolicy.ViewOf(Match.GameConfig as SharedGameConfig, Match.GetSeat(seat).Identity);
+
+    /// <summary>Whether the viewer's seat took first place. False when the viewer has no seat.</summary>
+    private bool ViewerWon => Standings.Count > 0 && Standings[0].Seat == Match.OwnSeat;
+
+    /// <summary>
+    /// The headline text. The winner's name is plain text without the name effect, because CascadeTitle
+    /// applies its own styling. The standings row shows the name with its effect.
+    /// </summary>
+    private string Headline
+    {
+        get
+        {
+            if (Standings.Count == 0)
+                return "No result";
+            SeatStanding winner = Standings[0];
+            return winner.Seat == Match.OwnSeat ? "You win!" : $"{Match.GetSeat(winner.Seat).DisplayName} wins!";
+        }
+    }
+
+    /// <summary>The viewer's row in the standings, or null when the viewer has no seat.</summary>
+    private SeatStanding? ViewerStanding
+    {
+        get
+        {
+            foreach (SeatStanding standing in Standings)
+            {
+                if (standing.Seat == Match.OwnSeat)
+                    return standing;
+            }
+
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The sentence that explains why the winner won, or empty when the trick counts already show it. A tie on
+    /// tricks goes to the seat that won a trick most recently, which the standings do not show.
+    /// </summary>
+    private string TieBreakReason
+    {
+        get
+        {
+            if (Standings.Count == 0)
+                return string.Empty;
+
+            SeatStanding winner = Standings[0];
+            return winner.SeparatedFromNextBy switch
+            {
+                // A win on trick count is already visible in the standings.
+                StandingSeparation.MoreTricks      => string.Empty,
+                StandingSeparation.MoreRecentTrick => $"Tied on {winner.TricksWon} {(winner.TricksWon == 1 ? "trick" : "tricks")} — won on the more recent trick.",
+                StandingSeparation.NoTricksEither  => "Nobody won a trick.",
+                _                                  => string.Empty,
+            };
+        }
+    }
+
+    /// <summary>The English ordinal for a one-based place, such as 1st or 4th.</summary>
+    private static string Ordinal(int place)
+    {
+        return place switch
+        {
+            1 => "1st",
+            2 => "2nd",
+            3 => "3rd",
+            _ => $"{place}th",
+        };
+    }
+
+    /// <summary>Formats a value for CSS with at most one decimal and the invariant culture.</summary>
+    private static string FormatCssNumber(double value) => value.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+}

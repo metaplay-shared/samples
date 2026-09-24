@@ -1,0 +1,89 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <!-- CS8600 and CS8603: the app sources compiled in below come from projects that disable nullable
+         annotations, so compiling them with nullable enabled reports warnings their own build does not.
+         CA1416: the linked JSHost call sites (MotionPreference, TestQuerySettings.ReadLocationSearch) are reachable on
+         all platforms under net10.0. A JSHost call outside the browser throws, so a render path that reached one
+         would fail its test. The comment on the compile globs below explains why no render path reaches one. -->
+    <NoWarn>$(NoWarn);CS8600;CS8603;CA1416</NoWarn>
+    <!-- A linked component's namespace is the root namespace plus its path. The root must match the app's so that
+         the app's own `@using WebClient.Components.Meta` resolves. -->
+    <RootNamespace>WebClient</RootNamespace>
+    <!-- RZ10012 is Razor's warning for a component it could not find. The app's components are compiled in below,
+         and a missing one would render as an unknown HTML element, so the warning fails the build. -->
+    <WarningsAsErrors>$(WarningsAsErrors);RZ10012</WarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- bunit.web depends on an AngleSharp version affected by advisory GHSA-pgww-w46g-26qg (NuGet audit warning
+         NU1902). This direct reference overrides the transitive one with a version outside the advisory's range. -->
+    <PackageReference Include="AngleSharp" Version="1.5.0" />
+    <PackageReference Include="bunit.web" Version="1.40.0" />
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.0" />
+    <PackageReference Include="Microsoft.Playwright.NUnit" Version="1.62.0" />
+    <PackageReference Include="NUnit" Version="4.3.2" />
+    <PackageReference Include="NUnit.Analyzers" Version="4.7.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="5.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="NUnit.Framework" />
+  </ItemGroup>
+
+  <!-- ===================================================================================================
+       WebClient and WebClientBase target net10.0-browser only, so their sources are compiled into this net10.0
+       project for bUnit. None uses #if BROWSER, and the one browser-only API, JSHost, compiles here and is not
+       called on any render path. The offline server host is left out because it only works in WASM.
+
+       Razor compiles a missing component as an unknown HTML element and only warns with RZ10012, which this
+       project turns into an error (see WarningsAsErrors above). Without ConnectionOverlay, tests of the connection-failure overlay
+       would pass when they should fail. This project's root _Imports.razor replaces the app's.
+       =================================================================================================== -->
+  <ItemGroup>
+    <Compile Include="..\WebClient\Meta\**\*.cs" LinkBase="Meta" />
+    <Compile Include="..\WebClient\Services\**\*.cs" LinkBase="Services" />
+    <Compile Include="..\WebClient\Integration\TestQuerySettings.cs" Link="Integration\TestQuerySettings.cs" />
+    <Compile Include="..\WebClient\Integration\MotionPreference.cs" Link="Integration\MotionPreference.cs" />
+    <Compile Include="..\WebClient\Components\**\*.cs" LinkBase="Components" />
+    <Compile Include="..\WebClient\GameTheme.cs" Link="GameTheme.cs" />
+
+    <Compile Include="..\WebClientBase\Services\*.cs" LinkBase="Services\WebClientBase" />
+    <Compile Include="..\WebClientBase\Utilities\EnvironmentLink.cs" Link="Utilities\EnvironmentLink.cs" />
+    <Compile Include="..\WebClientBase\Configuration\WebClientConfig.cs" Link="Configuration\WebClientConfig.cs" />
+    <Compile Include="..\WebClientBase\Configuration\ThemeColors.cs" Link="Configuration\ThemeColors.cs" />
+    <!-- MetaLayout reads the active environment to keep the meta screens reachable in offline mode. The provider
+         has no browser dependency. -->
+    <Compile Include="..\WebClientBase\Configuration\StaticEnvironmentConfigProvider.cs" Link="Configuration\StaticEnvironmentConfigProvider.cs" />
+
+    <Content Include="..\WebClient\Components\**\*.razor" Exclude="..\WebClient\Components\_Imports.razor" LinkBase="Components" />
+
+    <!-- The ConnectionOverlay that the app's layouts use. See the comment above for why it is required. -->
+    <Content Include="..\WebClientBase\Components\ConnectionOverlay.razor" Link="Components\WebClientBase\ConnectionOverlay.razor" />
+  </ItemGroup>
+
+  <!-- Test doubles from the shared-code unit tests that TestTables also needs: the host shell that runs a table
+       without an entity, and the bot name roster. -->
+  <ItemGroup>
+    <Compile Include="..\Backend\SharedCode.Tests\TestMatchHost.cs" Link="SharedCodeTests\TestMatchHost.cs" />
+    <Compile Include="..\Backend\SharedCode.Tests\TestBotConfig.cs" Link="SharedCodeTests\TestBotConfig.cs" />
+  </ItemGroup>
+
+  <!-- The SDK client's net10.0 build, which the compiled-in app sources above build against. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\MetaplaySDK\Dotnet\Client\Metaplay.Client.csproj" />
+  </ItemGroup>
+
+  <!-- The game's shared logic and config, including the analytics enums (ShellScreen, PromotedEntryPlacement) the
+       shell uses. SharedCode.Client multi-targets, and this project's net10.0 target selects its non-browser build. -->
+  <ItemGroup>
+    <ProjectReference Include="..\SharedCode\SharedCode.Client.csproj" />
+  </ItemGroup>
+
+</Project>

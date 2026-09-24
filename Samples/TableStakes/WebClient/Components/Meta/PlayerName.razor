@@ -1,0 +1,39 @@
+@using WebClient.Meta
+
+@* A player's name with the equipped name effect. Every place that shows a name as identity uses it, so the
+    effect looks the same everywhere (docs/cosmetics.md).
+
+    The name is rendered as text only. The effect class comes from the equipped item's catalogue entry, never
+    from the player-typed name (PlayerPublicIdentity.DisplayName). The name is also written to data-text, which
+    the stylesheet reads with attr() to draw the second layer of animated effects. Blazor escapes both. *@
+
+<span class="m-name @EffectClass @Class" data-testid="@TestId" title="@Title" data-text="@Identity.DisplayName">@Identity.DisplayName</span>
+
+@code {
+    [Parameter, EditorRequired] public IdentityView Identity { get; set; } = default!;
+
+    /// <summary>
+    /// An extra CSS class, for example a size class from <see cref="NamePlate"/>. The caller decides the size,
+    /// and the identity decides the effect.
+    /// </summary>
+    [Parameter] public string? Class { get; set; }
+
+    /// <summary>
+    /// The tooltip text. Set it to the full name where the name may be truncated, such as on a seat plaque.
+    /// When null, no title attribute is rendered.
+    /// </summary>
+    [Parameter] public string? Title { get; set; }
+
+    /// <summary>The test id. Pass null where a page draws many names, such as the cosmetics effect tiles, so
+    /// the page does not contain duplicate <c>avatar-name</c> ids.</summary>
+    [Parameter] public string? TestId { get; set; } = "avatar-name";
+
+    /// <summary>
+    /// The name effect's modifier class, or an empty string when no effect is worn, which draws plain text.
+    /// <para>
+    /// <see cref="IdentityView.NameEffectToken"/> holds a style token, not a catalogue id
+    /// (<c>WebClient/Meta/CosmeticsPolicy.cs</c>).
+    /// </para>
+    /// </summary>
+    private string EffectClass => string.IsNullOrEmpty(Identity.NameEffectToken) ? "" : $"m-name--{Identity.NameEffectToken}";
+}

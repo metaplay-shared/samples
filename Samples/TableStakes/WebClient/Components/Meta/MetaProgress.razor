@@ -1,0 +1,32 @@
+@using WebClient.Meta
+
+@* A progress bar with the current and target values written beside it, so the player can see how much is left.
+   The values are formatted with Currencies.Format so they match every other number in the shell. The bar has
+   the ARIA progressbar role so screen readers announce the same values. *@
+
+<div class="m-progress-row">
+    <span class="m-progress @(Accent == "claim" ? "m-progress--claim" : null)"
+         role="progressbar"
+         aria-valuenow="@Current"
+         aria-valuemin="0"
+         aria-valuemax="@Target"
+         aria-label="@Label"
+         data-testid="progress">
+        <span class="m-progress__fill" style="@($"width: {Percent}%;")"></span>
+    </span>
+
+    @if (ShowNumbers)
+    {
+        <span class="m-progress__label" data-testid="progress-numbers">@Currencies.Format(Current) / @Currencies.Format(Target)</span>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public long Current { get; set; }
+    [Parameter, EditorRequired] public long Target { get; set; }
+    [Parameter] public string Label { get; set; } = "Progress";
+    [Parameter] public string? Accent { get; set; }
+    [Parameter] public bool ShowNumbers { get; set; } = true;
+
+    private int Percent => Target <= 0 ? 0 : (int)Math.Clamp(100.0 * Current / Target, 0, 100);
+}

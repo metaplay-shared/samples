@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <!-- Disable zoom and extend the page under notches and other unsafe areas. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <!-- Hide the browser UI when the page is launched from the home screen. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Table Stakes" />
+    <meta name="theme-color" content="#02060a" />
+    <!-- The PWA manifest lets the app launch from the home screen without the browser UI. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- Home-screen icon on iOS. The paths are absolute because a relative path resolves against the current
+         route, and iOS then gets no icon and generates a letter tile instead. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <base href="/" />
+    <!-- The build ID of this page. tools/ServerImageBuild.cs replaces "dev" with the build ID when it stages the
+         published client. The Blazor start script at the end of the body and client-update.js read it. -->
+    <meta name="ts-build-id" content="dev" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Cinzel is the display font for headings and labels, such as the seat nameplates and the turn banner.
+         Cormorant Garamond is used for card ranks. -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cinzel:wght@500;600;700&family=Cormorant+Garamond:wght@600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="_content/WebClientBase/css/app-base.css" />
+    <link rel="stylesheet" href="app.css" />
+    <!-- The meta-game shell styles. Loaded last so that its rules override app.css at equal specificity. -->
+    <link rel="stylesheet" href="meta-shell.css" />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <!-- The App component renders the document title and theme CSS variables into the head through HeadOutlet. -->
+    <title>Table Stakes</title>
+
+    <!-- ===================================================================
+         The boot screen, shown while the WebAssembly runtime downloads and starts. It sits inside #app, the
+         phone frame. The styles are inline because app.css, meta-shell.css and the fonts may still be loading. Each
+         colour reads a token from app.css or meta-shell.css with the token's value as the fallback, so the colours
+         match before and after the stylesheets load.
+         =================================================================== -->
+    <style>
+        .ts-boot {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1.5rem;
+            /* The same background as the shell, so the colour does not change when the app replaces this screen. */
+            background:
+                radial-gradient(ellipse 120% 60% at 50% 34%, var(--ground-pool, #0e2b22) 0%, transparent 68%),
+                var(--ground, #061711);
+            color: var(--m-ink-2, #b9c2b6);
+            font-family: 'Inter', system-ui, sans-serif;
+            /* The screen fades in after a delay, so a fast boot does not flash it. The `both` fill mode keeps
+               the screen at opacity 0 during the delay. The boot script sets --ts-boot-delay from
+               ?bootDelayMs=, so a test can shorten the delay. */
+            animation: ts-boot-in 0.35s ease both;
+            animation-delay: var(--ts-boot-delay, 0.4s);
+        }
+
+        @keyframes ts-boot-in {
+            from { opacity: 0; }
+            to   { opacity: 1; }
+        }
+
+        .ts-boot__crest {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.55rem;
+        }
+
+        /* The same card icon as the Home screen's hero. */
+        .ts-boot__mark {
+            font-size: clamp(2.4rem, 13cqw, 3.5rem);
+            line-height: 1;
+            filter: drop-shadow(0 0 1.4rem rgba(245, 197, 66, 0.35));
+        }
+
+        /* The title in Cinzel with a gold gradient fill. .m-page-header__title in meta-shell.css uses the same font
+           with a solid fill. */
+        .ts-boot__wordmark {
+            margin: 0;
+            font-family: 'Cinzel', 'Cormorant Garamond', Georgia, serif;
+            font-weight: 700;
+            font-size: clamp(1.3rem, 7.4cqw, 2rem);
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            background: linear-gradient(180deg, var(--m-gold-light, #ffe9a8) 0%, var(--m-gold, #f5c542) 52%, var(--m-gold-deep, #b8801a) 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .ts-boot__suits {
+            display: flex;
+            gap: 0.7rem;
+            font-size: 0.9rem;
+            line-height: 1;
+            color: var(--m-ink-3, #7d89a8);
+        }
+
+        .ts-boot__suits span:nth-child(2),
+        .ts-boot__suits span:nth-child(3) {
+            color: var(--m-danger, #fb7185);
+        }
+
+        .ts-boot__status {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.6rem;
+        }
+
+        /* The same shape as the shell's progress bars (meta-shell.css, .m-progress), sized against the frame. */
+        .ts-boot__track {
+            position: relative;
+            width: min(58cqw, 13rem);
+            height: 0.4rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.09);
+            overflow: hidden;
+        }
+
+        .ts-boot__fill {
+            display: block;
+            height: 100%;
+            border-radius: inherit;
+            /* Set by the boot script from the runtime's load percentage. 0% until the runtime reports one. */
+            width: var(--ts-boot-progress, 0%);
+            background: linear-gradient(90deg, var(--m-gold-deep, #b8801a) 0%, var(--m-gold, #f5c542) 55%, var(--m-gold-light, #ffe9a8) 100%);
+            transition: width 0.2s linear;
+        }
+
+        /* When there is no percentage to show, before the first resource downloads and after all resources
+           have downloaded, a band sweeps across the track instead. It animates only transform, so the browser
+           does not repaint the band on each frame. */
+        .ts-boot__sweep {
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            overflow: hidden;
+            opacity: 0;
+        }
+
+        .ts-boot__track[data-determinate="false"] .ts-boot__sweep {
+            opacity: 1;
+        }
+
+        .ts-boot__sweep::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            width: 42%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, transparent 0%, var(--m-gold, #f5c542) 50%, transparent 100%);
+            opacity: 0.7;
+            animation: ts-boot-sweep 1.25s ease-in-out infinite;
+        }
+
+        @keyframes ts-boot-sweep {
+            from { transform: translateX(-110%); }
+            to   { transform: translateX(275%); }
+        }
+
+        .ts-boot__phase {
+            margin: 0;
+            display: flex;
+            gap: 0.4rem;
+            font-size: 0.78rem;
+            font-weight: 600;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--m-ink-3, #7d89a8);
+        }
+
+        .ts-boot__percent {
+            font-variant-numeric: tabular-nums;
+            color: var(--m-gold, #f5c542);
+        }
+
+        /* Reduced motion. The screen still appears after the delay, so a fast boot does not flash it, but it
+           appears without a fade. The sweep is hidden, which leaves an empty track and the phase text. The
+           percentage fill keeps its width transition. */
+        @media (prefers-reduced-motion: reduce) {
+            .ts-boot {
+                animation-duration: 0.001s;
+            }
+
+            .ts-boot__track[data-determinate="false"] .ts-boot__sweep {
+                opacity: 0;
+            }
+
+            .ts-boot__sweep::after {
+                animation: none;
+            }
+        }
+    </style>
+</head>
+
+<body style="background: var(--bg-primary, #061711);">
+    <!-- data-app-frame marks the phone frame that wallet-burst.js measures the reward burst coordinates against. -->
+    <div id="app" data-app-frame>
+        <!-- The boot screen. Blazor clears the contents of #app when it renders the root component, which
+             removes this screen.
+
+             The phase text is a live region (role="status"), so a screen reader announces when it changes.
+             The card icon, the suits and the percentage text are hidden from assistive technology. The
+             percentage duplicates the progressbar's aria-valuenow, and the rest is decoration. -->
+        <div id="ts-boot" class="ts-boot" data-testid="boot">
+            <div class="ts-boot__crest">
+                <div class="ts-boot__mark" aria-hidden="true">🃏</div>
+                <p class="ts-boot__wordmark">Table Stakes</p>
+                <div class="ts-boot__suits" aria-hidden="true">
+                    <span>&#9824;</span><span>&#9829;</span><span>&#9830;</span><span>&#9827;</span>
+                </div>
+            </div>
+
+            <div class="ts-boot__status">
+                <div id="ts-boot-track" class="ts-boot__track" data-determinate="false"
+                     role="progressbar" aria-label="Loading Table Stakes" aria-valuemin="0" aria-valuemax="100">
+                    <span class="ts-boot__sweep" aria-hidden="true"></span>
+                    <span class="ts-boot__fill"></span>
+                </div>
+                <p class="ts-boot__phase">
+                    <span id="ts-boot-phase" role="status" data-testid="boot-phase">Loading</span>
+                    <span id="ts-boot-percent" class="ts-boot__percent" data-testid="boot-percent" aria-hidden="true"></span>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Updates the boot screen's progress bar from the .NET runtime's download progress, read from the
+         --blazor-load-percentage CSS custom property that blazor.webassembly.js sets on the document element.
+         The script is inline so that it does not wait behind the downloads it reports on.
+
+         The number of requested resources grows during the boot, so the percentage can drop, and the bar shows
+         the highest value seen. At 100% every resource has downloaded, but start-up and the first render follow
+         with no progress reported, so the bar becomes indeterminate and the phase text changes to "Starting". -->
+    <script>
+        (function () {
+            'use strict';
+
+            var screenEl = document.getElementById('ts-boot');
+            var trackEl = document.getElementById('ts-boot-track');
+            var phaseEl = document.getElementById('ts-boot-phase');
+            var percentEl = document.getElementById('ts-boot-percent');
+
+            // ?bootDelayMs= overrides how long the screen stays hidden before it fades in, so a test does not
+            // have to wait for it.
+            var delayMs = parseInt(new URLSearchParams(location.search).get('bootDelayMs'), 10);
+            if (!isNaN(delayMs) && delayMs >= 0)
+                screenEl.style.setProperty('--ts-boot-delay', delayMs + 'ms');
+
+            // The highest percentage the runtime has reported, so the bar never steps backwards.
+            var reported = 0;
+
+            function read() {
+                var raw = getComputedStyle(document.documentElement).getPropertyValue('--blazor-load-percentage');
+                var value = parseFloat(raw);
+                return isNaN(value) ? null : Math.max(0, Math.min(100, value));
+            }
+
+            function paint() {
+                // Blazor's first render cleared #app and removed the boot screen, so stop polling.
+                if (!screenEl.isConnected) {
+                    clearInterval(timer);
+                    return;
+                }
+
+                var value = read();
+                if (value !== null && value > reported)
+                    reported = value;
+
+                var downloading = reported > 0 && reported < 100;
+
+                trackEl.setAttribute('data-determinate', downloading ? 'true' : 'false');
+                trackEl.style.setProperty('--ts-boot-progress', (downloading ? reported : 0) + '%');
+
+                if (downloading)
+                    trackEl.setAttribute('aria-valuenow', String(Math.floor(reported)));
+                else
+                    trackEl.removeAttribute('aria-valuenow');   // A progressbar without a value is indeterminate.
+
+                phaseEl.textContent = reported >= 100 ? 'Starting' : 'Loading';
+                percentEl.textContent = downloading ? Math.floor(reported) + '%' : '';
+            }
+
+            var timer = setInterval(paint, 100);
+            paint();
+        })();
+    </script>
+
+    <div id="blazor-error-ui" data-nosnippet>
+        An unhandled error has occurred.
+        <a href="." class="reload">Reload</a>
+        <span class="dismiss">🗙</span>
+    </div>
+
+    <!-- Suppress the context menu on right-click and Android long-press. CSS cannot block it. -->
+    <script>
+        window.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    </script>
+    <!-- Drag scrolling with the mouse. It must load before Blazor starts, so its capture-phase click listener
+         runs before Blazor's. -->
+    <script src="drag-scroll.js"></script>
+    <!-- Publishes the positions of the HUD balances and the reward items for the reward coin burst, and the
+         reduced-motion preference. -->
+    <script src="wallet-burst.js"></script>
+    <!-- Keyboard focus for every element with aria-modal="true": moved in on open, kept inside while open,
+         and returned to the opener or <main> on close. -->
+    <script src="modal-focus.js"></script>
+    <!-- Scrolls a newly opened screen to its top. -->
+    <script src="screen-scroll.js"></script>
+    <!-- Reloads the page when a newer build is deployed and the player is not in a game, a dialog or active
+         input (docs/web-client.md, "Updating clients after a deploy"). -->
+    <script src="client-update.js"></script>
+    <!-- Starts Blazor from script instead of a static script tag, so that the two framework scripts without a
+         content hash in their names get the build ID in their URLs: blazor.webassembly.js, and dotnet.js, which
+         contains the boot manifest that names every hashed assembly. A new build then has new URLs for both, so
+         a browser that cached an older copy still loads the deployed build. When the build ID is "dev", both
+         load without the query. -->
+    <script>
+        (function () {
+            'use strict';
+
+            var buildId = document.querySelector('meta[name="ts-build-id"]').getAttribute('content');
+            var version = buildId && buildId !== 'dev' ? '?v=' + encodeURIComponent(buildId) : '';
+
+            var blazorScript = document.createElement('script');
+            blazorScript.src = '_framework/blazor.webassembly.js' + version;
+            blazorScript.setAttribute('autostart', 'false');
+            blazorScript.onload = function () {
+                Blazor.start({
+                    // Called for each boot resource. Returning undefined keeps the default URL, which is
+                    // already unique to the content for every hashed file.
+                    loadBootResource: function (type, name, defaultUri) {
+                        return type === 'dotnetjs' && version ? defaultUri + version : undefined;
+                    }
+                });
+            };
+            document.body.appendChild(blazorScript);
+        })();
+    </script>
+</body>
+
+</html>

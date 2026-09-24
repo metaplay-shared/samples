@@ -1,0 +1,40 @@
+<Project>
+
+  <!-- Generates the pre-built WASM serializer, WebClient/Serializer/Metaplay.Generated.Browser.dll, before the
+       importing project resolves its references (docs/web-client.md, "The pre-built serializer"). The
+       GenerateBrowserSerializer target in SerializerGen.csproj decides whether the DLL is out of date.
+
+       SerializerGen is not in the importing project's reference graph, so this target restores it first. The
+       restore passes an extra global property so that MSBuild evaluates the project separately for the restore
+       and the build, and the build sees the files the restore wrote. Both calls pass only Configuration and
+       remove the properties that a browser build or a publish sets, so the tool is built and run the same way
+       in every build. Design-time builds skip the target so that an IDE does not run a code generator. -->
+  <Target Name="EnsureBrowserSerializer"
+          BeforeTargets="ResolveAssemblyReferences"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <MSBuild Projects="$(MSBuildThisFileDirectory)SerializerGen.csproj"
+             Targets="Restore"
+             Properties="Configuration=$(Configuration);_BrowserSerializerRestore=true"
+             RemoveProperties="TargetFramework;RuntimeIdentifier;SelfContained;PublishAot;PublishTrimmed;_IsPublishing" />
+    <MSBuild Projects="$(MSBuildThisFileDirectory)SerializerGen.csproj"
+             Targets="GenerateBrowserSerializer"
+             Properties="Configuration=$(Configuration)"
+             RemoveProperties="TargetFramework;RuntimeIdentifier;SelfContained;PublishAot;PublishTrimmed;_IsPublishing" />
+  </Target>
+
+  <!-- The build that runs EnsureBrowserSerializer does not always resolve the DLL it generated. On Linux,
+       reference resolution reports the DLL missing (warning MSB3245) although the file exists by then, and the
+       build succeeds with a client that fails at startup. A build that starts with the DLL already present
+       resolves it on every platform, so tools/ServerImageBuild.cs and moon's build-client task generate it in a
+       separate process first. This target turns the unresolved case into a build error. -->
+  <Target Name="CheckBrowserSerializerResolved"
+          AfterTargets="ResolveAssemblyReferences"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <ItemGroup>
+      <_BrowserSerializerReference Include="@(ReferencePath)" Condition="'%(Filename)' == 'Metaplay.Generated.Browser'" />
+    </ItemGroup>
+    <Error Condition="'@(_BrowserSerializerReference)' == ''"
+           Text="The pre-built WASM serializer (WebClient/Serializer/Metaplay.Generated.Browser.dll) was not resolved. It is generated during the build but may not be picked up by the build that generated it; build again, or generate it first with: dotnet run --project tools/SerializerGen -- WebClient/Serializer" />
+  </Target>
+
+</Project>

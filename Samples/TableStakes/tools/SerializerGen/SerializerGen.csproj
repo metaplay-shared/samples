@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Build-time tool that writes Metaplay.Generated.Browser.dll for the WebAssembly WebClient
+    (docs/web-client.md, "The pre-built serializer"). It must target net10.0, not net10.0-browser, because the
+    browser build of the SDK leaves out the serializer generation code. It references SharedCode.Client so that
+    the generated serializer binds to the same game-type assembly that the WebAssembly app loads.
+    Usage: run this project with the output directory as its argument, for example WebClient/Serializer.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <LangVersion>Latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <Version>0.1.0.0</Version>
+    <!-- Run in the caller's working directory, not the project directory, so that a relative output directory
+         argument is resolved against the directory the user ran the command from. -->
+    <RunWorkingDirectory>$(MSBuildStartupDirectory)</RunWorkingDirectory>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\MetaplaySDK\Backend\CodeAnalyzers\Metaplay.CodeAnalyzers.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\..\MetaplaySDK\Backend\CodeAnalyzers.Shared\Metaplay.CodeAnalyzers.Shared.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <ProjectReference Include="..\..\SharedCode\SharedCode.Client.csproj" />
+  </ItemGroup>
+
+  <!-- GenerateBrowserSerializer runs the tool from a build. BrowserSerializer.targets calls it from the projects
+       that reference the serializer. Its inputs are the DLLs in $(OutDir), which include every assembly the
+       tool loads (SharedCode.Client, Metaplay.Client and the tool itself), so the serializer DLL is regenerated
+       when it is older than any of them. The tool skips the Roslyn compile when the generated source has the
+       same hash as before and then leaves the DLL unchanged, so the target touches the DLL afterwards to mark
+       it up to date. -->
+  <PropertyGroup>
+    <BrowserSerializerDir>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', '..', 'WebClient', 'Serializer'))</BrowserSerializerDir>
+    <BrowserSerializerDll>$(BrowserSerializerDir)Metaplay.Generated.Browser.dll</BrowserSerializerDll>
+  </PropertyGroup>
+
+  <Target Name="_CollectBrowserSerializerInputs" DependsOnTargets="Build">
+    <ItemGroup>
+      <_BrowserSerializerInput Include="$(OutDir)*.dll" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="GenerateBrowserSerializer"
+          DependsOnTargets="_CollectBrowserSerializerInputs"
+          Inputs="@(_BrowserSerializerInput)"
+          Outputs="$(BrowserSerializerDll)">
+    <PropertyGroup>
+      <_DotnetHost>$(DOTNET_HOST_PATH)</_DotnetHost>
+      <_DotnetHost Condition="'$(_DotnetHost)' == ''">dotnet</_DotnetHost>
+    </PropertyGroup>
+    <Exec Command="&quot;$(_DotnetHost)&quot; &quot;$(TargetPath)&quot; &quot;$(BrowserSerializerDir.TrimEnd('\/'))&quot;" />
+    <Touch Files="$(BrowserSerializerDll)" />
+  </Target>
+
+</Project>

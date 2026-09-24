@@ -1,0 +1,169 @@
+@using Game.Logic
+@using WebClient.Meta
+@using WebClient.Services
+@inject MetaStateService Meta
+@inject NavigationManager Navigation
+
+@* A feature's card on a hub screen: name, status, progress and a button to open it. A feature gets a card
+   even when there is nothing to claim, so players can find it (docs/meta-shell.md, "MetaSnapshot").
+
+   It has two layouts. A normal card is one row: emblem, text, button. The Featured card that leads a hub is
+   stacked, because its countdown, progress bar and full-width button do not fit in one row on a narrow phone.
+
+   Whether a feature needs attention is shown by text, the button and the badge, not by colour alone. *@
+
+<div class="m-card @AccentClass @(Featured ? "m-card--featured m-card--tall" : null)"
+     data-testid="@($"feature-{View.Feature.ToString().ToLowerInvariant()}")">
+
+    @if (Featured)
+    {
+        <div class="m-card__eyebrow-row">
+            <span class="strip m-tag">
+                @Eyebrow
+                @if (Badged)
+                {
+                    <ActionableBadge Label="@($"{Eyebrow} needs your attention")" />
+                }
+            </span>
+
+            @if (View.UntilDeadline is TimeSpan lead && View.State != ActivityState.Completed)
+            {
+                <MetaCountdown Remaining="lead" EndingSoonWithin="View.EndingSoonWithin" ExpiredText="@ExpiredText" />
+            }
+        </div>
+
+        <div class="m-card__head">
+            <MetaEmblem Name="@IconId" Accent="@EmblemAccent" Size="xl" />
+            <div class="m-card__grow">
+                <p class="m-card__headline">@Headline</p>
+                @if (!string.IsNullOrEmpty(Note))
+                {
+                    <p class="m-card__note">@Note</p>
+                }
+                @if (Target > 0)
+                {
+                    <MetaProgress Current="Current" Target="Target" Label="@($"{Headline} progress")"
+                                  Accent="@ProgressAccent" />
+                }
+            </div>
+        </div>
+
+        <div class="m-card__foot">
+            <MetaButton Variant="MetaButtonVariant.Hero" Block="true" Size="MetaButtonSize.Lg"
+                        TestId="@($"feature-{View.Feature.ToString().ToLowerInvariant()}-action")"
+                        OnClick="Open">@CallToAction</MetaButton>
+        </div>
+    }
+    else
+    {
+        <div class="m-card__eyebrow-row">
+            <span class="m-card__eyebrow">
+                @Eyebrow
+                @if (Badged)
+                {
+                    <span class="m-card__badge"><ActionableBadge Label="@($"{Eyebrow} needs your attention")" /></span>
+                }
+            </span>
+
+            @if (View.UntilDeadline is TimeSpan left && View.State != ActivityState.Completed)
+            {
+                <MetaCountdown Remaining="left" EndingSoonWithin="View.EndingSoonWithin" ExpiredText="@ExpiredText" />
+            }
+        </div>
+
+        <div class="m-card__row">
+            <MetaEmblem Name="@IconId" Accent="@EmblemAccent" />
+
+            <div class="m-card__grow">
+                <p class="m-card__title">@Headline</p>
+                @if (!string.IsNullOrEmpty(Note))
+                {
+                    <p class="m-card__note">@Note</p>
+                }
+
+                @if (Target > 0)
+                {
+                    <MetaProgress Current="Current" Target="Target" Label="@($"{Headline} progress")"
+                                  Accent="@ProgressAccent" />
+                }
+            </div>
+
+            <MetaButton Variant="@CallVariant" Size="MetaButtonSize.Sm"
+                        TestId="@($"feature-{View.Feature.ToString().ToLowerInvariant()}-action")"
+                        OnClick="Open">@CallToAction</MetaButton>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IFeatureView View { get; set; } = default!;
+
+    /// <summary>The label above the card, usually the feature name.</summary>
+    [Parameter, EditorRequired] public string Eyebrow { get; set; } = "";
+
+    /// <summary>The main line, which states the feature's current status.</summary>
+    [Parameter, EditorRequired] public string Headline { get; set; } = "";
+
+    [Parameter] public string? Note { get; set; }
+    [Parameter] public string CallToAction { get; set; } = ButtonLabels.View;
+    [Parameter] public string IconId { get; set; } = "star";
+    [Parameter] public string ExpiredText { get; set; } = "Ended";
+
+    /// <summary>Whether this is the larger card that leads its hub. Use at most one per hub.</summary>
+    [Parameter] public bool Featured { get; set; }
+
+    [Parameter] public bool Badged { get; set; }
+    [Parameter] public long Current { get; set; }
+    [Parameter] public long Target { get; set; }
+
+    /// <summary>
+    /// A fixed card accent (for example claim, progress or live) that does not change with the state.
+    /// <para>
+    /// Hubs set it so each card keeps a stable colour for its kind of feature, instead of every claimable card
+    /// turning the same colour. When null, the accent follows <see cref="IFeatureView.State"/>.
+    /// </para>
+    /// </summary>
+    [Parameter] public string? Accent { get; set; }
+
+    /// <summary>
+    /// Whether there is something to claim right now. It is separate from <see cref="ActivityState"/>, because
+    /// a mission list with one finished mission and others running is <see cref="ActivityState.InProgress"/>
+    /// but its button must still use the Claim style.
+    /// </summary>
+    [Parameter] public bool HasClaimable { get; set; }
+
+    private string? AccentClass => Accent != null
+        ? $"m-card--{Accent}"
+        : View.State switch
+        {
+            ActivityState.Actionable => "m-card--claim",
+            ActivityState.InProgress => "m-card--live",
+            _                        => null,
+        };
+
+    private string EmblemAccent => Accent ?? View.State switch
+    {
+        ActivityState.Actionable => "claim",
+        ActivityState.InProgress => "live",
+        _                        => "gold",
+    };
+
+    private string? ProgressAccent => AccentClass == "m-card--claim" ? "claim" : null;
+
+    /// <summary>
+    /// The button style: Claim when something can be claimed, Live when the feature is in progress, otherwise
+    /// Ghost. The button text states the same thing, so the colour is not the only signal.
+    /// </summary>
+    private MetaButtonVariant CallVariant =>
+        HasClaimable || View.State == ActivityState.Actionable ? MetaButtonVariant.Claim
+        : View.State == ActivityState.InProgress        ? MetaButtonVariant.Live
+        :                                                 MetaButtonVariant.Ghost;
+
+    private void Open()
+    {
+        Meta.RecordPromotedEntrySelection(PromotedEntryPlacement.FeatureCard, View.Feature);
+
+        if (MetaRoutes.For(View.Feature) is string route)
+            EnvironmentLink.NavigateTo(Navigation, route);
+    }
+}

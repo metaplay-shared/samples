@@ -1,0 +1,166 @@
+@page "/profile"
+@layout MetaLayout
+@using Game.Logic
+@inherits MetaComponentBase
+@inject MetaplayClientService MetaplayService
+
+@* The Profile screen: name, game record, public identity preview, and the link to Cosmetics.
+
+   The name and the record come from the real player model, not from fixtures. Renaming is validated by the
+   server, and a refusal is shown with its reason (docs/player.md, "Renaming"). *@
+
+<ChildPageHeader Title="Profile" />
+
+<div class="m-card m-card--featured m-profile" data-testid="profile-hero">
+    <div class="m-profile__id">
+        @* The avatar on a medallion (app.css, .medallion). The medallion is this screen's decoration, not a
+           cosmetic. The equipped frame is drawn only by PlayerAvatar itself
+           (docs/player.md, "Public identity"). *@
+        <span class="medallion m-profile__medallion" aria-hidden="true">
+            <span class="m-profile__pips"></span>
+            @* Sized relative to the container width, so on narrow phones the avatar shrinks and leaves room
+               for a long name. *@
+            <PlayerAvatar Identity="Snapshot.Identity" SizeCss="clamp(4.6rem, 24cqw, 6.6rem)" />
+        </span>
+
+        <div class="m-profile__who">
+            <MetaButton Variant="MetaButtonVariant.Ghost" Class="m-name-edit m-profile__name-edit"
+                        TestId="player-name" OnClick="EditName">
+                @* The name has its own test id, separate from the edit button's, because the button always
+                    renders and its text includes the pencil icon's label, so a test on the button cannot tell
+                    whether the name is empty. PlayerName draws the equipped name effect, and it reads the same
+                    snapshot identity as the preview below. *@
+                <PlayerName Identity="Snapshot.Identity"
+                            Class="@($"m-profile__name {NamePlate.ClassFor(Snapshot.Identity.DisplayName)}")"
+                            TestId="player-name-text" />
+                <MetaIcon Name="pencil" Size="20" Label="Change your name" />
+            </MetaButton>
+        </div>
+    </div>
+
+    @* The tournament standing from IdentityView.StandingLine. It names the tournament and rank while the
+       player is in a season, and says there is none otherwise (docs/player.md, "Public identity"). The preview
+       below reads the same IdentityView, so the two always agree. It spans the full card width so the text
+       does not wrap. *@
+    <span class="strip m-tag m-tag--quiet m-profile__standing" data-testid="competition-state">
+        <MetaIcon Name="shield" Size="14" />
+        @Snapshot.Identity.StandingLine
+    </span>
+
+    @* The name editor spans the full card width, because the column beside the avatar is too narrow for the
+       input and two buttons. *@
+    @if (_editingName)
+    {
+        <div class="m-rename m-profile__rename">
+            <input class="m-input" type="text" maxlength="@(DisplayNamePolicy.MaxLength * 2)"
+                   aria-label="Your name" data-testid="name-input"
+                   @bind="_draftName" @bind:event="oninput" />
+            <MetaButton Variant="MetaButtonVariant.Primary" TestId="name-save" OnClick="SaveName">@ButtonLabels.Save</MetaButton>
+            <MetaButton Variant="MetaButtonVariant.Ghost" TestId="name-cancel" OnClick="() => _editingName = false">@ButtonLabels.Cancel</MetaButton>
+        </div>
+    }
+
+    @if (RenameMessage != null)
+    {
+        @* Accepted and refused messages differ in text and icon as well as colour. *@
+        <p class="m-card__note m-profile__message @(RenameAccepted ? "m-profile__message--ok" : "m-profile__message--bad")"
+           role="status" data-testid="name-message">
+            <MetaIcon Name="@(RenameAccepted ? "check" : "warning")" Size="16" />
+            @RenameMessage
+        </p>
+    }
+
+    @* The player's game record. It is informational only and grants no rewards (docs/player.md). *@
+    <dl class="m-stats" data-testid="record">
+        <div><dt>Games</dt><dd data-testid="record-played">@Me.GamesPlayed</dd></div>
+        <div><dt>Wins</dt><dd data-testid="record-won">@Me.GamesWon</dd></div>
+        <div><dt>Tricks</dt><dd data-testid="record-tricks">@Me.TricksWon</dd></div>
+        <div><dt>Win rate</dt><dd data-testid="record-winrate">@Me.WinRateText</dd></div>
+    </dl>
+</div>
+
+@* A preview of how other players see this player at the table and in the standings. It uses the same
+   PlayerAvatar and IdentityView as those screens. *@
+<div class="m-card m-profile__seen">
+    <MetaSectionHeading Label="How others see you" Accent="claim" />
+    <div class="m-profile__seen-panel" data-testid="identity-preview">
+        <PlayerAvatar Identity="Snapshot.Identity" Size="46" WithName="true"
+                      NameClass="@NamePlate.ClassFor(Snapshot.Identity.DisplayName)" />
+        <span class="m-profile__rank">
+            <MetaIcon Name="shield" Size="18" />
+            <span data-testid="preview-standing">@Snapshot.Identity.StandingBadge</span>
+        </span>
+    </div>
+</div>
+
+@* Overview and Cosmetics, drawn as tabs in navigation mode. Cosmetics is a separate route, so selecting it
+   navigates there instead of switching a panel. *@
+<MetaTabs AsNavigation="true" Items="Sections" Selected="tab-overview" Class="m-profile__tabs"
+          AriaLabel="Profile sections" OnSelect="_ => OpenCosmetics()" />
+
+@code {
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    private bool _editingName;
+    private string _draftName = string.Empty;
+
+    /// <summary>The tab items: the current Overview and the Cosmetics route.</summary>
+    private IReadOnlyList<(string Key, string Label)> Sections = new List<(string, string)>
+    {
+        ("tab-overview", "Overview"),
+        ("open-cosmetics", "Cosmetics"),
+    };
+
+    private MetaSnapshot Snapshot => Meta.Snapshot;
+    private ProfileView Me => Snapshot.Profile;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        MetaplayService.OnStateChanged += OnChanged;
+    }
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    private void EditName()
+    {
+        _editingName = true;
+        _draftName = MetaplayService.DisplayName;
+    }
+
+    /// <summary>
+    /// Sends the rename request and closes the editor. The name changes only if the server accepts it.
+    /// <see cref="RenameMessage"/> shows the result.
+    /// </summary>
+    private void SaveName()
+    {
+        _editingName = false;
+        MetaplayService.Rename(_draftName);
+    }
+
+    /// <summary>
+    /// The message for the last rename response, or null when there is none. A refusal states the reason, so
+    /// a rejected name never reverts silently.
+    /// </summary>
+    private string? RenameMessage
+    {
+        get
+        {
+            PlayerRenameResponse? response = MetaplayService.LastRenameResponse;
+            if (response == null)
+                return null;
+            return response.IsAccepted() ? "Name changed." : DisplayNamePolicy.DescribeRefusal(response.Refusal);
+        }
+    }
+
+    /// <summary>Whether the last rename was accepted. False when there is no response.</summary>
+    private bool RenameAccepted => MetaplayService.LastRenameResponse?.IsAccepted() == true;
+
+    private void OpenCosmetics()
+    {
+        Meta.RecordPromotedEntrySelection(PromotedEntryPlacement.FeatureCard, MetaFeature.Cosmetics);
+        EnvironmentLink.NavigateTo(Navigation, MetaRoutes.Cosmetics);
+    }
+
+    protected override void OnDispose() => MetaplayService.OnStateChanged -= OnChanged;
+}

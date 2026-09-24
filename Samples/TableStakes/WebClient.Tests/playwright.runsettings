@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <Playwright>
+    <BrowserName>chromium</BrowserName>
+    <LaunchOptions>
+      <Headless>true</Headless>
+      <!-- To watch the browser while debugging, use these instead:
+      <Headless>false</Headless>
+      <SlowMo>500</SlowMo>
+      -->
+    </LaunchOptions>
+    <!-- Timeout in milliseconds for each Playwright Expect assertion. -->
+    <ExpectTimeout>5000</ExpectTimeout>
+  </Playwright>
+</RunSettings>

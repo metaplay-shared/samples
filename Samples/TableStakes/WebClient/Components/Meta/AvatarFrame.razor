@@ -1,0 +1,125 @@
+@* The inline SVG drawings for the avatar frame cosmetics, with a distinct shape per frame, not only a
+   distinct colour.
+
+   There is one drawing per Frame-slot CosmeticStyle (SharedCode/GameConfigs/Cosmetics.cs), keyed by style
+   token, and a test in WebClient.Tests checks the keys against the enum. An empty or unknown token draws the
+   default gold ring, frame-plain (docs/cosmetics.md, "The starting three").
+
+   The drawing is scaled by 1.2 about the centre to sit outside the avatar face, so it paints outside the svg
+   box, which matches the avatar's box so layout checks do not report overflow. Colours use style attributes
+   because SVG presentation attributes do not accept var(). *@
+
+<svg class="m-avatar__frame" viewBox="0 0 120 120" aria-hidden="true" data-token="@Token">
+    <g transform="translate(60 60) scale(1.2) translate(-60 -60)">@Body</g>
+</svg>
+
+@code {
+    /// <summary>
+    /// The style token of the worn frame, such as <c>frame-gold</c>, or empty for the default. An unknown
+    /// token draws the default ring instead of throwing.
+    /// </summary>
+    [Parameter, EditorRequired] public string Token { get; set; } = "";
+
+    /// <summary>
+    /// A per-instance suffix for defs ids. If two frames on a page shared an id, every <c>url(#…)</c> would
+    /// resolve to the first frame's element.
+    /// </summary>
+    private readonly string _uid = Guid.NewGuid().ToString("N")[..8];
+
+    private string GlowId => $"amethyst-glow-{_uid}";
+
+    private string GlowRef => $"url(#{GlowId})";
+
+    private string SheenId => $"gold-sheen-{_uid}";
+
+    private string SheenRef => $"url(#{SheenId})";
+
+    private RenderFragment Body => Token switch
+    {
+        // Two gold rings with a gradient and a small crown at the top.
+        "frame-gold" => @<g>
+            <defs>
+                <linearGradient id="@SheenId" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" style="stop-color: var(--m-gold-light);" />
+                    <stop offset="0.55" style="stop-color: var(--m-gold);" />
+                    <stop offset="1" style="stop-color: var(--m-gold-deep);" />
+                </linearGradient>
+            </defs>
+            <circle cx="60" cy="60" r="50.5" fill="none" style="stroke: @SheenRef;" stroke-width="1.6" />
+            <circle cx="60" cy="60" r="54.5" fill="none" style="stroke: @SheenRef;" stroke-width="1.6" />
+            <path d="M 53.5 9.5 L 55.6 3.4 L 58 6.4 L 60 1.6 L 62 6.4 L 64.4 3.4 L 66.5 9.5 Z" style="fill: var(--m-gold);" />
+        </g>,
+
+        // Beads on a band, each with a lighter glint. The beads are one circle with a dash pattern and round
+        // caps.
+        "frame-sapphire" => @<g fill="none">
+            <circle cx="60" cy="60" r="53" style="stroke: #60a5fa;" stroke-width="2" />
+            <circle cx="60" cy="60" r="53" style="stroke: #60a5fa;" stroke-width="5.5"
+                    stroke-linecap="round" stroke-dasharray="0.1 27.65" />
+            <circle cx="60" cy="60" r="52.1" style="stroke: #93c5fd;" stroke-width="2"
+                    stroke-linecap="round" stroke-dasharray="0.1 27.18" stroke-dashoffset="1.2" />
+        </g>,
+
+        // Two wavy strands that cross around the rim, over a dark ring that adds depth.
+        "frame-silver" => @<g fill="none" stroke-linecap="round">
+            <circle cx="60" cy="60" r="54" style="stroke: rgba(0, 0, 0, 0.4);" stroke-width="7.5" />
+            <path d="M 114 60 C 114.9 55.3 115.5 50.1 114.9 45.3 C 114.3 40.5 112.7 35.2 110.2 31 C 107.8 26.8 104.1 22.8 100.2 19.8 C 96.3 16.9 91.5 14.8 87 13.2 C 82.5 11.7 77.7 11.1 73.2 10.6 C 68.7 10 64.4 10 60 10 C 55.6 10 51.3 10 46.8 10.6 C 42.3 11.1 37.5 11.7 33 13.2 C 28.5 14.8 23.7 16.9 19.8 19.8 C 15.9 22.8 12.2 26.8 9.8 31 C 7.3 35.2 5.7 40.5 5.1 45.3 C 4.5 50.1 5.1 55.3 6 60 C 6.9 64.7 8.8 69.1 10.6 73.2 C 12.4 77.4 14.5 81.2 16.7 85 C 18.9 88.8 21.1 92.6 23.8 96.2 C 26.5 99.8 29.4 103.6 33 106.8 C 36.6 109.9 40.8 113 45.3 114.9 C 49.8 116.8 55.1 118 60 118 C 64.9 118 70.2 116.8 74.7 114.9 C 79.2 113 83.4 109.9 87 106.8 C 90.6 103.6 93.5 99.8 96.2 96.2 C 98.9 92.6 101.1 88.8 103.3 85 C 105.5 81.2 107.6 77.4 109.4 73.2 C 111.2 69.1 113.1 64.7 114 60 Z"
+                  style="stroke: #e2e8f0;" stroke-width="2.4" />
+            <path d="M 114 60 C 113.1 55.3 111.2 50.9 109.4 46.8 C 107.6 42.6 105.5 38.8 103.3 35 C 101.1 31.2 98.9 27.4 96.2 23.8 C 93.5 20.2 90.6 16.4 87 13.2 C 83.4 10.1 79.2 7 74.7 5.1 C 70.2 3.2 64.9 2 60 2 C 55.1 2 49.8 3.2 45.3 5.1 C 40.8 7 36.6 10.1 33 13.2 C 29.4 16.4 26.5 20.2 23.8 23.8 C 21.1 27.4 18.9 31.2 16.7 35 C 14.5 38.8 12.4 42.6 10.6 46.8 C 8.8 50.9 6.9 55.3 6 60 C 5.1 64.7 4.5 69.9 5.1 74.7 C 5.7 79.5 7.3 84.8 9.8 89 C 12.2 93.2 15.9 97.2 19.8 100.2 C 23.7 103.1 28.5 105.2 33 106.8 C 37.5 108.3 42.3 108.9 46.8 109.4 C 51.3 110 55.6 110 60 110 C 64.4 110 68.7 110 73.2 109.4 C 77.7 108.9 82.5 108.3 87 106.8 C 91.5 105.2 96.3 103.1 100.2 100.2 C 104.1 97.2 107.8 93.2 110.2 89 C 112.7 84.8 114.3 79.5 114.9 74.7 C 115.5 69.9 114.9 64.7 114 60 Z"
+                  style="stroke: #cbd5e1;" stroke-width="2.4" />
+        </g>,
+
+        // A laurel: two rows of leaves up the sides, joined at the bottom and open at the top.
+        "frame-bronze" => @<g style="fill: #d3a06a;">
+            <path d="M 48.5 110.6 Q 42.2 109.7 37.5 114 Q 43.8 114.9 48.5 110.6 Z M 27.5 100.5 Q 22.2 96.9 16.1 98.7 Q 21.4 102.2 27.5 100.5 Z M 13 82.1 Q 9.9 76.6 3.6 75.5 Q 6.8 81 13 82.1 Z M 8.1 59.3 Q 7.7 52.9 2.5 49.2 Q 2.9 55.6 8.1 59.3 Z M 13.7 36.6 Q 16.1 30.7 13.1 25.1 Q 10.7 31 13.7 36.6 Z M 27.2 19.8 Q 31.8 15.4 31.3 9 Q 26.7 13.4 27.2 19.8 Z" />
+            <path d="M 82.5 114 Q 77.8 109.7 71.5 110.6 Q 76.2 114.9 82.5 114 Z M 103.9 98.7 Q 97.8 96.9 92.5 100.5 Q 98.6 102.2 103.9 98.7 Z M 116.4 75.5 Q 110.1 76.6 107 82.1 Q 113.2 81 116.4 75.5 Z M 117.5 49.2 Q 112.3 52.9 111.9 59.3 Q 117.1 55.6 117.5 49.2 Z M 106.9 25.1 Q 103.9 30.7 106.3 36.6 Q 109.3 31 106.9 25.1 Z M 88.7 9 Q 88.2 15.4 92.8 19.8 Q 93.3 13.4 88.7 9 Z" />
+        </g>,
+
+        // A dark hexagonal plate with a circular hole for the face. Both edges have an emerald stroke,
+        // because the dark fill alone would not be visible on the dark background.
+        "frame-emerald" => @<g>
+            <path fill-rule="evenodd"
+                  d="M 60 2 L 110.2 31 L 110.2 89 L 60 118 L 9.8 89 L 9.8 31 Z M 108 60 A 48 48 0 1 0 12 60 A 48 48 0 1 0 108 60 Z"
+                  style="fill: var(--ground);" />
+            <path d="M 60 2 L 110.2 31 L 110.2 89 L 60 118 L 9.8 89 L 9.8 31 Z"
+                  fill="none" style="stroke: #34d399;" stroke-width="1.5" />
+            <circle cx="60" cy="60" r="48" fill="none" style="stroke: #34d399;" stroke-width="2" />
+        </g>,
+
+        // A violet ring drawn twice: a blurred copy underneath as the glow, and a sharp copy on top.
+        "frame-amethyst" => @<g fill="none">
+            <defs>
+                <filter id="@GlowId" x="-30%" y="-30%" width="160%" height="160%">
+                    <feGaussianBlur stdDeviation="3.5" />
+                </filter>
+            </defs>
+            <circle cx="60" cy="60" r="52" style="stroke: #c084fc;" stroke-width="4.5" filter="@GlowRef" />
+            <circle cx="60" cy="60" r="52" style="stroke: var(--m-live-light);" stroke-width="1.8" />
+        </g>,
+
+        // Two thin rings with a tick mark at the top, right, bottom and left.
+        "frame-platinum" => @<g fill="none" style="stroke: #e2e8f0;">
+            <circle cx="60" cy="60" r="51" stroke-width="1.5" />
+            <circle cx="60" cy="60" r="55" stroke-width="1.5" />
+            <path d="M 60 10.5 V 3.5 M 109.5 60 H 116.5 M 60 109.5 V 116.5 M 10.5 60 H 3.5" stroke-width="2.5" />
+        </g>,
+
+        // A ring with triangular points spaced around it.
+        "frame-ruby" => @<g>
+            <circle cx="60" cy="60" r="50.5" fill="none" style="stroke: #fb7185;" stroke-width="2.5" />
+            <path style="fill: #fb7185;"
+                  d="M 107.1 46.5 L 113.6 37.8 L 102.9 36.2 Z M 83.8 17.1 L 82.2 6.4 L 73.5 12.9 Z M 46.5 12.9 L 37.8 6.4 L 36.2 17.1 Z M 17.1 36.2 L 6.4 37.8 L 12.9 46.5 Z M 12.9 73.5 L 6.4 82.2 L 17.1 83.8 Z M 36.2 102.9 L 37.8 113.6 L 46.5 107.1 Z M 73.5 107.1 L 82.2 113.6 L 83.8 102.9 Z M 102.9 83.8 L 113.6 82.2 L 107.1 73.5 Z" />
+        </g>,
+
+        // The plain frame every player owns from the start. It draws the same ring as an empty slot
+        // (docs/cosmetics.md, "The starting three").
+        "frame-plain" => DefaultRing,
+
+        // An empty or unknown token draws the default ring.
+        _ => DefaultRing,
+    };
+
+    /// <summary>The default frame, a single thin gold ring, drawn for frame-plain and for an empty or unknown token.</summary>
+    private static RenderFragment DefaultRing =>
+        @<circle cx="60" cy="60" r="50" fill="none" style="stroke: var(--m-gold);" stroke-width="1.5" />;
+}

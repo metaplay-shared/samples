@@ -1,0 +1,47 @@
+@using WebClient.Meta
+
+@* One row of the tournament's "Taking part" list, using the same m-goal row layout as Missions and the first
+   week event (docs/meta-shell.md).
+
+   The right edge shows one of three things: a Claim button when the milestone is reached and unclaimed, a
+   Claimed status once it is claimed, or the number of matches still needed. That number needs the player's
+   scored match count, which the season holds rather than the milestone, so it is passed in as ScoredSoFar. *@
+
+<div class="m-goal @(Milestone.IsReached ? "m-goal--complete" : null)" data-testid="tournament-milestone">
+    <MetaEmblem Name="@(Milestone.IsReached ? "check" : "target")"
+                Accent="@(Milestone.IsClaimable ? "claim" : Milestone.IsReached ? "locked" : "progress")" />
+
+    <div class="m-goal__body">
+        <span class="m-goal__title">@Milestone.RequiredScoredMatches @(Milestone.RequiredScoredMatches == 1 ? "match" : "matches")</span>
+        <span class="m-goal__meta">
+            <RewardPreview Bundle="Milestone.Reward" Compact="true" />
+        </span>
+    </div>
+
+    @if (Milestone.IsClaimed)
+    {
+        <MetaStatusLabel Size="MetaButtonSize.Sm" TestId="tournament-milestone-claimed">Claimed</MetaStatusLabel>
+    }
+    else if (Milestone.IsClaimable)
+    {
+        <MetaButton Variant="MetaButtonVariant.Claim" Size="MetaButtonSize.Sm" TestId="tournament-milestone-claim"
+                    Disabled="@Busy" OnClick="() => OnClaim.InvokeAsync(Milestone.Index)">@ButtonLabels.Claim</MetaButton>
+    }
+    else
+    {
+        <span class="m-goal__note">@(Milestone.RequiredScoredMatches - ScoredSoFar) to go</span>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public TournamentMilestoneView Milestone { get; set; } = default!;
+
+    /// <summary>Whether the screen has a request in flight. Disables the Claim button.</summary>
+    [Parameter] public bool Busy { get; set; }
+
+    /// <summary>How many of the player's matches this season have been scored. Used to show the matches still needed.</summary>
+    [Parameter] public int ScoredSoFar { get; set; }
+
+    /// <summary>Raised with the milestone's index when the player taps Claim.</summary>
+    [Parameter] public EventCallback<int> OnClaim { get; set; }
+}

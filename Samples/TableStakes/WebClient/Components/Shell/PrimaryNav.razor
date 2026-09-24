@@ -1,0 +1,132 @@
+@using WebClient.Meta
+@using WebClient.Services
+@inherits MetaComponentBase
+@inject MetaplayClientService MetaplayService
+@inject NavigationManager Navigation
+
+@* The primary navigation bar, fixed to the bottom of the screen. Every item shows a text label as well as an
+   icon. The selected item is marked with an underline as well as a colour (meta-shell.css).
+
+   Every item except Play navigates to a route. Play starts matchmaking on the current screen, so it is never
+   marked as selected. It is drawn raised in the centre. *@
+
+@{
+    // Record the badges this render draws, so OnTicked compares a new tick against what is on screen.
+    _badgedDestinationBits = BadgeBits();
+}
+<nav class="m-nav" data-testid="primary-nav" aria-label="Primary">
+    @for (int ndx = 0; ndx < Destinations.Length; ndx++)
+    {
+        NavDestination destination = Destinations[ndx];
+        bool           selected    = destination != NavDestination.Play && destination == Selected;
+        bool           badged      = (_badgedDestinationBits & (1 << ndx)) != 0;
+
+        <button type="button"
+                class="m-nav__item @(selected ? "m-nav__item--selected" : null) @(destination == NavDestination.Play ? "m-nav__item--play" : null)"
+                data-testid="@($"nav-{destination.ToString().ToLowerInvariant()}")"
+                aria-current="@(selected ? "page" : null)"
+                @onclick="() => Go(destination)">
+
+            @if (destination == NavDestination.Play)
+            {
+                <span class="m-nav__play-key"><MetaIcon Name="cards" Size="26" /></span>
+            }
+            else
+            {
+                <MetaIcon Name="@IconFor(destination)" Size="22" />
+            }
+
+            <span>@destination.ToString()</span>
+
+            @if (badged)
+            {
+                <span class="m-nav__badge"><ActionableBadge Label="@($"{destination} needs your attention")" /></span>
+            }
+        </button>
+    }
+</nav>
+
+@code {
+    private static readonly NavDestination[] Destinations =
+    {
+        NavDestination.Home, NavDestination.Events, NavDestination.Play, NavDestination.Compete, NavDestination.Shop,
+    };
+
+    private MetaSnapshot Snapshot => Meta.Snapshot;
+
+    /// <summary>
+    /// The selected destination, derived from the current route so a refresh or a deep link selects the
+    /// right item.
+    /// </summary>
+    private NavDestination? Selected =>
+        MetaRoutes.DestinationOf(Navigation.CurrentRoute());
+
+    /// <summary>The badges the last render drew, one bit per entry of <see cref="Destinations"/>.</summary>
+    private int _badgedDestinationBits;
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        base.OnInitialized();
+        Meta.OnTicked += OnTicked;
+    }
+
+    /// <summary>
+    /// A badge can change with time alone, for example when a deadline enters "ending soon" and the Events
+    /// badge appears, so the bar checks the badges on every MetaStateService tick. It re-renders only when
+    /// the badges differ from the ones on screen.
+    /// </summary>
+    private void OnTicked()
+    {
+        if (BadgeBits() != _badgedDestinationBits)
+            InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Which destinations need a badge now, one bit per entry of <see cref="Destinations"/>. An int, so the check
+    /// runs on every tick without allocating.
+    /// </summary>
+    private int BadgeBits()
+    {
+        SeenState seen = Meta.Seen;
+        int       bits = 0;
+
+        for (int ndx = 0; ndx < Destinations.Length; ndx++)
+        {
+            if (BadgePolicy.ShouldBadge(Destinations[ndx], Snapshot, seen))
+                bits |= 1 << ndx;
+        }
+
+        return bits;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => InvokeAsync(StateHasChanged);
+
+    private static string IconFor(NavDestination destination) => destination switch
+    {
+        NavDestination.Home    => "home",
+        NavDestination.Events  => "calendar",
+        NavDestination.Compete => "trophy",
+        NavDestination.Shop    => "bag",
+        _                      => "cards",
+    };
+
+    private void Go(NavDestination destination)
+    {
+        // Play has no route. It starts matchmaking, and the searching dialog opens over the current screen.
+        if (destination == NavDestination.Play)
+        {
+            MetaplayService.EnterMatchmaking();
+            return;
+        }
+
+        if (MetaRoutes.For(destination) is string route)
+            EnvironmentLink.NavigateTo(Navigation, route);
+    }
+
+    protected override void OnDispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        Meta.OnTicked -= OnTicked;
+    }
+}

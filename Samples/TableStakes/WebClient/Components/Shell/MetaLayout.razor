@@ -1,0 +1,221 @@
+@inherits LayoutComponentBase
+@using WebClient.Meta
+@using WebClient.Services
+@using WebClientBase.Configuration
+@inject MetaStateService Meta
+@inject MetaplayClientService MetaplayService
+@inject WalletBurstService WalletBurst
+@inject NavigationManager Navigation
+@implements IDisposable
+
+@* The layout for meta routes: a fixed HUD, a fixed navigation bar, and one scrolling <main> between them.
+
+   The document itself does not scroll, and <main> is the only scrolling element, so no content can end up
+   unreachable under the navigation bar. The space for the HUD and the bar is padding on <main>, not spacer
+   elements, because spacers would scroll away and let the last card slide under the bar.
+
+   data-drag-scroll hides the scrollbar and lets a mouse drag scroll like a finger. wwwroot/drag-scroll.js
+   listens on the document, so this layout attaches no listeners.
+
+   Game routes use GameLayout instead (docs/meta-shell.md, "Layouts"). *@
+
+<div class="m-shell">
+    <WalletHud />
+
+    <main class="m-shell__main" data-drag-scroll>
+        @* The screen element. data-screen-in holds the navigation direction for the entrance animation in
+           meta-shell.css. The @key changes on every navigation, so Blazor replaces the element instead of updating
+           it, which restarts the animation even when two navigations go the same direction.
+           wwwroot/screen-scroll.js detects the replacement and scrolls back to the top. Read
+           OnParametersSet before changing how the key is set. *@
+        <div class="m-shell__column" data-screen-in="@Entrance" @key="_screenKey">
+            @* A notice that names the fixture slices still shown over the live session. A ?meta= scenario
+               normally stops drawing when the session arrives, but a scenario that has pinned a slice keeps
+               drawing it, so the screen mixes fixture and live state. The notice shows only when a scenario
+               has a claim and a session exists, so it never appears in normal use. It has no controls. *@
+            @if (PinnedSlices.Length > 0 && MetaplayService.PlayerModel != null)
+            {
+                <p class="m-authored" data-testid="authored-notice" data-authored="@PinnedSlices">
+                    Fixture <strong>@Meta.Scenario</strong> is drawing @PinnedSlices.Replace(" ", ", ").
+                    Everything else here is yours.
+                </p>
+            }
+
+            @Body
+        </div>
+    </main>
+
+    <PrimaryNav />
+</div>
+
+@* The matchmaking dialog is in the layout, not in a screen, because Play buttons on many screens start
+   matchmaking and the dialog opens over whichever screen the player is on
+   (docs/meta-shell.md, "Screens and routes"). *@
+<MatchmakingDialog />
+
+@* The wallet animation layer is in the layout, like the HUD it flies to, because the screen that granted the
+   reward may be gone before the animation ends (docs/meta-shell.md, "The shared reward flow"). *@
+<WalletBurstLayer />
+
+@* The connection shell is drawn last so it covers everything else, including reward animations
+   (docs/web-client.md). *@
+<ConnectionOverlay />
+
+@* A hidden marker for browser tests. Meta screens render fixture data while the session connects, and a
+   control tapped then sends no request, so a live test must wait until the session has arrived.
+
+   data-state is "live" once a session exists and "fixture" before. data-authored lists the slices the
+   scenario has pinned and still draws over the session, space separated, and is empty by default
+   (docs/meta-shell.md, "The session marker").
+
+   The attribute is named data-authored, not after the C# PinnedSlices property, because browser tests assert on
+   this exact name. *@
+<span hidden data-testid="session"
+      data-state="@(MetaplayService.PlayerModel == null ? "fixture" : "live")"
+      data-authored="@PinnedSlices"></span>
+
+@code {
+    private string? _lastReportedRoute;
+
+    /// <summary>
+    /// A counter used as the screen element's @key. <see cref="OnParametersSet"/> increments it on each
+    /// navigation, so Blazor replaces the element.
+    /// </summary>
+    private int _screenKey;
+
+    /// <summary>The direction of the last navigation, and the route of the current screen.</summary>
+    private ScreenTransition _transition = ScreenTransition.Arrive;
+    private string?          _screenRoute;
+
+    /// <summary>The slices the current scenario has pinned, or empty when it has pinned none.</summary>
+    private string PinnedSlices => Meta.PinnedSliceNames;
+
+    /// <summary>
+    /// The data-screen-in value. The strings are written out instead of derived from the enum names, because
+    /// meta-shell.css matches these exact strings and renaming an enum member must not change them.
+    /// </summary>
+    private string Entrance => _transition switch
+    {
+        ScreenTransition.Forward => "forward",
+        ScreenTransition.Back    => "back",
+        _                        => "arrive",
+    };
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        Meta.OnStateChanged += OnStateChanged;
+        MetaplayService.OnStateChanged += OnStateChanged;
+        ReportScreen();
+        TakeASeatedPlayerToTheTable();
+    }
+
+    /// <summary>
+    /// Connects the session. The layout connects, not each screen, so every meta route gets a session.
+    /// ConnectAsync is idempotent, so calling it again after a navigation does nothing.
+    /// </summary>
+    protected override async Task OnInitializedAsync() => await MetaplayService.ConnectAsync();
+
+    /// <summary>
+    /// On navigation, settles any running wallet animation, so the HUD shows the real balances. It also sends
+    /// a player who left a running game, for example with browser Back, back to the table.
+    /// </summary>
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        WalletBurst.Stop();
+        ReportScreen();
+        TakeASeatedPlayerToTheTable();
+    }
+
+    /// <summary>
+    /// Navigates a player who is in a running game from any meta route to the table, for example after a
+    /// reload or a browser Back. Otherwise a meta screen could let them start a second game.
+    /// <para>
+    /// A finished match is ignored, because it stays attached until the session ends and the player must be able
+    /// to leave the results. Matchmaking alone does not count, so the table page never shows an empty table
+    /// during the search.
+    /// </para>
+    /// </summary>
+    private void TakeASeatedPlayerToTheTable()
+    {
+        // This runs on every client update, so return before reading the route in the usual case of no running game.
+        if (MetaplayService.Match == null || MetaplayService.Match.IsFinished)
+            return;
+
+        // Offline mode seats the player at a table as soon as the session starts. Redirecting from every route
+        // would make the meta screens unreachable offline, and offline mode exists so they can be used
+        // without a server. So offline, only Home redirects to the table.
+        string route = Navigation.CurrentRoute();
+        if (StaticEnvironmentConfigProvider.IsOffline &&
+            MetaRoutes.Normalise(route) != MetaRoutes.Normalise(MetaRoutes.Home))
+        {
+            return;
+        }
+
+        if (!MetaRoutes.IsGameRoute(route))
+            EnvironmentLink.NavigateTo(Navigation, MetaRoutes.Table);
+    }
+
+    private void OnStateChanged()
+    {
+        TakeASeatedPlayerToTheTable();
+        InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Sets the entrance direction and a new screen key for the navigation
+    /// (<see cref="ScreenTransitions"/>). The layout decides the direction because it depends on both the old
+    /// and the new route.
+    /// <para>
+    /// This must run here, not in <see cref="OnLocationChanged"/>, because the router subscribes to
+    /// <c>LocationChanged</c> first and re-renders this layout synchronously before the layout's handler runs. A
+    /// key changed in the handler would arrive one render late, so every page's <c>OnInitialized</c> would run
+    /// twice per navigation. Setting the key here puts it in the same render as the new <c>Body</c>.
+    /// </para>
+    /// </summary>
+    protected override void OnParametersSet()
+    {
+        string route = Navigation.CurrentRoute();
+
+        ScreenTransition transition = ScreenTransitions.Between(_screenRoute, route);
+
+        // A navigation to the route already shown, such as adding a ?meta= scenario, keeps the element, so
+        // there is no animation and the scroll position is kept.
+        if (transition == ScreenTransition.None)
+            return;
+
+        _transition  = transition;
+        _screenRoute = route;
+        _screenKey++;
+    }
+
+    /// <summary>
+    /// Reports the screen arrival for analytics. The layout reports it, not each page, so no page can miss it.
+    /// It runs from <see cref="OnLocationChanged"/>, not <see cref="OnParametersSet"/>, because the layout
+    /// also sees the navigation to the table, which uses GameLayout and so never renders this layout again.
+    /// <para>
+    /// The route check here only skips a re-render. <see cref="ShellObservationPolicy"/> decides whether the
+    /// arrival is recorded, because after a reconnect the new layout has a null <c>_lastReportedRoute</c> even though
+    /// the route did not change.
+    /// </para>
+    /// </summary>
+    private void ReportScreen()
+    {
+        string route = Navigation.CurrentRoute();
+
+        Meta.RecordArrival(route);
+
+        if (route == _lastReportedRoute)
+            return;
+
+        _lastReportedRoute = route;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        Meta.OnStateChanged -= OnStateChanged;
+        MetaplayService.OnStateChanged -= OnStateChanged;
+    }
+}

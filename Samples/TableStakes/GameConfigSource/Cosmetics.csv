@@ -1,0 +1,25 @@
+Id #key,Kind,DisplayName,Price,IsPurchasable,Style,Flavour,UnlockRequirement
+avatar.spade,Avatar,Spade,,FALSE,AvatarSpade,Where every hand begins.,Yours from the start
+avatar.jack,Avatar,Jack of Clubs,500 Coins,TRUE,AvatarClub,One of the court.,
+avatar.queen,Avatar,Queen of Hearts,600 Coins,TRUE,AvatarHeart,"A favour, worn openly.",
+avatar.diamond,Avatar,Diamond,800 Coins,TRUE,AvatarDiamond,"Cold, clear, priceless.",
+avatar.dice,Avatar,Lucky Dice,1000 Coins,TRUE,AvatarDice,Roll them twice.,
+avatar.chip,Avatar,House Chip,1500 Coins,TRUE,AvatarChip,Bet on yourself.,
+avatar.crown,Avatar,Crown,2500 Coins,TRUE,AvatarCrown,Sit at the head of the table.,
+avatar.ace,Avatar,The Ace,150 Gems,TRUE,AvatarAce,The card you keep.,
+avatar.joker,Avatar,Joker's Cap,250 Gems,TRUE,AvatarJoker,The table's wildcard.,
+avatar.trump,Avatar,Trump Star,1000 Gems,TRUE,AvatarTrump,The trick is yours.,
+frame.plain,Frame,Plain Ring,,FALSE,FramePlain,A thin line of gold.,Yours from the start
+frame.silver,Frame,Silver Frame,500 Coins,TRUE,FrameSilver,Where everybody starts.,
+frame.brass,Frame,Brass Frame,900 Coins,TRUE,FrameBronze,"Warm, worn, and yours.",
+frame.sapphire,Frame,Sapphire Frame,2500 Coins,TRUE,FrameSapphire,"Prestige, elegant, timeless.",
+frame.emerald,Frame,Emerald Frame,150 Gems,TRUE,FrameEmerald,Quiet confidence.,
+name.plain,NameEffect,Plain,,FALSE,NamePlain,Your name as it is.,Yours from the start
+name.emerald,NameEffect,Emerald,500 Coins,TRUE,NameEmerald,Quietly sharp.,
+name.azure,NameEffect,Azure,700 Coins,TRUE,NameAzure,Cool under pressure.,
+name.amber,NameEffect,Amber Glow,1200 Coins,TRUE,NameAmber,Warm and steady.,
+name.violet,NameEffect,Violet,1500 Coins,TRUE,NameViolet,For the bold.,
+name.frost,NameEffect,Frozen,600 Gems,TRUE,NameFrost,Ice in the veins.,
+name.bloom,NameEffect,Gold Bloom,800 Gems,TRUE,NameBloom,Petals of gold.,
+name.shimmer,NameEffect,Shimmer,1000 Gems,TRUE,NamePrism,Every colour at once.,
+frame.champion,Frame,Tournament Champion,,FALSE,FrameGold,Top of the table.,Win a tournament season

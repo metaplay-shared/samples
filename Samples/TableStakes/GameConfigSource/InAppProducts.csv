@@ -1,0 +1,5 @@
+ProductId #key,Name,Tagline,ReferencePriceUsd,HasDynamicContent,Contents
+starter_pack_1,Starter Pack,Available during your first week.,0.99,TRUE,
+starter_pack_2,Starter Pack II,The chain's second step.,2.99,TRUE,
+gem_booster_pack,Gem Booster Pack,Power up your game.,4.99,TRUE,
+coin_vault,Coin Vault,A coin-only vault.,2.99,TRUE,

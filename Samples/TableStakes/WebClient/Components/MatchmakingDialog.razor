@@ -1,0 +1,137 @@
+@namespace WebClient.Components
+@using Game.Logic
+@using Metaplay.Core
+@using WebClient.Services
+@inject MetaplayClientService MetaplayService
+@implements IDisposable
+
+@* The searching dialog shown while matchmaking runs, over the screen where the player tapped Play
+   (docs/meta-shell.md, "Screens and routes"). It counts down to the server's seating deadline, with the text
+   and rounding from MatchmakingWaitText. Once the seat is committed, Cancel stays visible but disabled, and the
+   text does not change, because that state lasts one round trip and a change would flash.
+
+   The headline is rendered here instead of through Panel's Title because it needs the searching-text test id.
+   Panel's tabindex="-1" keeps focus inside the dialog after Cancel is disabled. *@
+
+@if (MetaplayService.IsMatchmaking)
+{
+    @* Read the clock once per render, so the countdown and the detail line use the same value. *@
+    MetaDuration remaining = Remaining;
+
+    <ModalPanel TestId="searching" Width="PanelWidth.Narrow" Eyebrow="Matchmaking" AriaLabel="Finding a table">
+        <h2 class="pnl__title" data-testid="searching-text">@MatchmakingWaitText.Headline</h2>
+
+        @* The spinner turns for the whole wait. The countdown number is shown only when there is a deadline:
+           not before the server's first answer arrives, and not after the deadline has passed. *@
+        <div class="ts-mm__dial">
+            <div class="ts-mm__spinner" aria-hidden="true"></div>
+            @if (MatchmakingWaitText.HasCountdown(remaining))
+            {
+                <span class="ts-mm__seconds"
+                      role="timer"
+                      aria-label="@($"About {MatchmakingWaitText.SecondsShown(remaining)} seconds until you are seated")"
+                      data-testid="searching-countdown">@MatchmakingWaitText.SecondsShown(remaining)</span>
+            }
+        </div>
+
+        <p class="ts-mm__detail" data-testid="searching-detail">@MatchmakingWaitText.Detail(remaining)</p>
+
+        <button type="button" class="strip ts-btn--dark ts-btn--dark--md ts-mm__cancel" data-testid="cancel-search"
+                disabled="@(!MatchmakingWaitText.CanCancel(MetaplayService.MatchmakingStatus))" @onclick="OnCancel">Cancel</button>
+    </ModalPanel>
+}
+
+@code {
+    /// <summary>
+    /// How often the countdown is checked. The deadline is an absolute timestamp and no server update fires
+    /// as it approaches, so a timer drives the repaint.
+    /// </summary>
+    private static readonly TimeSpan TickInterval = TimeSpan.FromMilliseconds(200);
+
+    /// <summary>
+    /// The repaint timer, or null when matchmaking is not running. The component stays mounted for as long as
+    /// its page, so the timer runs only during a wait to avoid waking the client for nothing.
+    /// </summary>
+    private RepaintTicker? _ticker;
+
+    /// <summary>The seconds value last rendered, so a tick with the same value skips the render.</summary>
+    private int _shownSeconds = -1;
+
+    protected override void OnInitialized()
+    {
+        MetaplayService.OnStateChanged += OnStateChanged;
+
+        // Matchmaking can already be running when the component mounts, for example when a session starts
+        // while a match is still forming.
+        SyncTicker();
+    }
+
+    /// <summary>
+    /// Starts the timer when matchmaking starts and stops it when matchmaking ends. Both transitions raise
+    /// MetaplayClientService.OnStateChanged, which calls this.
+    /// </summary>
+    private void SyncTicker()
+    {
+        bool waiting = MetaplayService.IsMatchmaking;
+
+        if (waiting && _ticker == null)
+        {
+            _shownSeconds = -1;
+            _ticker = RepaintTicker.Start(TickInterval, TryAdvanceShownSecond, () => InvokeAsync(StateHasChanged));
+        }
+        else if (!waiting && _ticker != null)
+        {
+            _ticker.Dispose();
+            _ticker = null;
+        }
+    }
+
+    /// <summary>Whether the countdown has reached a different second from the one on screen.</summary>
+    private bool TryAdvanceShownSecond()
+    {
+        int seconds = MatchmakingWaitText.SecondsShown(Remaining);
+        if (seconds == _shownSeconds)
+            return false;
+
+        _shownSeconds = seconds;
+        return true;
+    }
+
+    /// <summary>
+    /// The time left until the seating deadline, or zero when there is no deadline.
+    /// <para>
+    /// It uses authoritative time (the client's estimate of the server clock), because the server wrote the
+    /// deadline in that clock. Presented time belongs to the animated table board, which does not exist yet
+    /// (docs/web-client.md, "The table's two clocks").
+    /// </para>
+    /// </summary>
+    private MetaDuration Remaining
+    {
+        get
+        {
+            MetaTime seatBy = MetaplayService.MatchmakingSeatDeadlineAt;
+            if (seatBy <= MetaTime.Epoch)
+                return MetaDuration.Zero;
+            return AuthoritativeTime.Now.RemainingUntil(seatBy);
+        }
+    }
+
+    private void OnStateChanged()
+    {
+        SyncTicker();
+        InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Asks the server to cancel matchmaking. The dialog closes only when the server confirms, because the
+    /// server refuses a cancel that arrives after the seat is committed, and the player is then seated.
+    /// </summary>
+    private void OnCancel() => MetaplayService.CancelMatchmaking();
+
+    public void Dispose()
+    {
+        MetaplayService.OnStateChanged -= OnStateChanged;
+        _ticker?.Dispose();
+        _ticker = null;
+    }
+}

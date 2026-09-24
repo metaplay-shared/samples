@@ -1,0 +1,457 @@
+@page "/events/spin"
+@using Game.Logic
+@using WebClient.Integration
+@using Metaplay.Core.Model
+@layout MetaLayout
+@inherits MetaComponentBase
+@inject MetaplayClientService Client
+@inject NavigationManager Nav
+
+@* The Spin Wheel screen. The wheel animation belongs to this feature, and the result is shown with the shared
+   RewardReveal (docs/meta-shell.md, "The shared reward flow").
+
+   The wheel and the odds sheet are both drawn from the same game config table, so they always agree. The
+   wheel starts turning only after the server's settlement arrives with the sector and the reward.
+
+   A result that was granted but never shown, for example because the player left, is shown before another
+   spin is allowed. The reward is already in the wallet at that point (docs/spin-wheel.md). *@
+
+<ChildPageHeader Title="Spin Wheel" />
+
+@if (!View.State.IsLive())
+{
+    <ActivityStateBlock State="View.State" SkeletonCardCount="2" />
+}
+else if (View.State == ActivityState.Unavailable)
+{
+    @* The game config has no usable wheel table, so the server would refuse with
+       SpinRefusal.ConfigUnavailable. The wheel, odds and teaser all come from that table, so none are drawn. *@
+    <ActivityStateBlock State="ActivityState.Unavailable" Title="The wheel is closed"
+                Note="No prize table is published right now. Any tokens you hold keep until one is." />
+}
+else
+{
+    <div class="m-card m-card--live m-card--featured m-card--tall">
+        @* No feature label or token count here, because the page title and the HUD already show them. *@
+        <div class="m-card__eyebrow-row m-card__eyebrow-row--end">
+            <MetaButton Variant="MetaButtonVariant.Ghost" TestId="prize-details"
+                        OnClick="() => _isOddsSheetOpen = true">
+                Prize details
+            </MetaButton>
+        </div>
+
+        <PrizeWheel Sectors="View.Sectors" Spinning="_spinning" WinningSectorIndex="_winningSectorIndex" SpinMs="SpinMs"
+                    IsHitPlaying="_isHitPlaying" HitMs="HitMs" />
+
+        <p class="m-card__headline m-card__headline--centred" data-testid="spin-available">
+            @(View.SpinsAvailable == 0 ? "No spin tokens"
+              : View.SpinsAvailable == 1 ? "1 spin available"
+              : $"{View.SpinsAvailable} spins available")
+        </p>
+        <p class="m-card__note m-card__note--centred">@View.PrizeTeaser</p>
+
+        <div class="m-card__foot">
+            @if (ShowsSpinButton)
+            {
+                @* The button says only "Spin", and the cost is a chip beside it. *@
+                <span class="strip m-chip" data-testid="spin-cost">1 token</span>
+                <MetaButton Variant="MetaButtonVariant.Hero" Block="true" Size="MetaButtonSize.Lg"
+                            TestId="spin" Disabled="@(Busy || View.SpinsAvailable == 0)" OnClick="Spin">
+                    @(Busy ? "Spinning…" : ButtonLabels.Spin)
+                </MetaButton>
+            }
+            else
+            {
+                @* With no tokens, instead of a disabled Spin button, link to the features that grant spin
+                   tokens. The wheel itself never sells tokens. *@
+                <div class="m-done m-done--paired" data-testid="spin-none">
+                    <MetaEmblem Name="spin-token" Accent="locked" />
+                    <div class="m-done__body">
+                        <span class="m-done__title">Earn spin tokens</span>
+                        <span class="m-done__note">Every spin costs one token. These give them out.</span>
+                    </div>
+                </div>
+                <div class="m-card__actions" data-testid="spin-earn">
+                    <MetaButton Variant="MetaButtonVariant.Ghost" Href="@MetaRoutes.DailyReward">Daily Reward</MetaButton>
+                    <MetaButton Variant="MetaButtonVariant.Ghost" Href="@MetaRoutes.Missions">Missions</MetaButton>
+                    <MetaButton Variant="MetaButtonVariant.Ghost" Href="@MetaRoutes.Shop">Shop</MetaButton>
+                </div>
+            }
+        </div>
+    </div>
+
+    @if (!View.TopPrize.IsEmpty)
+    {
+        <MetaSectionHeading Label="Top prize" />
+        <div class="m-card">
+            <div class="m-inset">
+                <RewardPreview Bundle="View.TopPrize" Showcase="true" />
+            </div>
+        </div>
+    }
+}
+
+@* The published odds, from the same table as the wheel. The sheet can be opened before spinning and lists
+   every possible result. *@
+<MetaSheet Open="_isOddsSheetOpen" Title="Prize details" TestId="odds-sheet" OnDismiss="() => _isOddsSheetOpen = false">
+    <table class="m-odds" data-testid="odds-table">
+        <thead>
+            <tr><th scope="col">Result</th><th scope="col">Chance</th></tr>
+        </thead>
+        <tbody>
+            @foreach (WheelOddsRow row in View.PublishedOdds)
+            {
+                <tr data-testid="odds-row">
+                    <td>@RowText(row)</td>
+                    <td data-testid="odds-percent">@row.ChancePercent%</td>
+                </tr>
+            }
+        </tbody>
+        <tfoot>
+            <tr><td>Total</td><td data-testid="odds-total">@OddsTotal%</td></tr>
+        </tfoot>
+    </table>
+
+    @* States the cost and that the animation does not decide the result. It does not promise a reward on every
+       spin, because the blank is a possible result (docs/spin-wheel.md). *@
+    <p class="m-state__note">Each spin costs 1 spin token. The result is chosen when you spin; the animation only shows it.</p>
+</MetaSheet>
+
+@* Hidden. It reports whether the SDK's journal consistency checks are enabled, so a browser test that sees no
+   desync error can confirm the checks were actually running. *@
+<span hidden data-testid="journal-checks">@(Client.ConsistencyChecksEnabled ? "on" : "off")</span>
+
+<RewardReveal Stage="_revealStage" Bundle="@(_revealedReward ?? RewardView.Empty)"
+              Title="@RevealTitle" OnContinue="Acknowledge" />
+
+@if (_requestTimedOut && _revealStage == RewardRevealStage.Idle)
+{
+    @* ReenableSpinIfUnansweredAsync timed out without an answer and re-enabled the button. *@
+    <p class="m-note" data-testid="spin-refused">No answer came back for that spin. Nothing was spent — try again.</p>
+}
+else if (_refusal is SpinRefusal refusal && _revealStage == RewardRevealStage.Idle)
+{
+    <p class="m-note" data-testid="spin-refused">@RefusalText(refusal)</p>
+}
+
+@code {
+    private RewardRevealStage _revealStage = RewardRevealStage.Idle;
+    private bool              _spinning;
+    private bool              _isHitPlaying;
+    private bool              _isOddsSheetOpen;
+    private int               _winningSectorIndex = -1;
+    private SpinRefusal?      _refusal;
+
+    /// <summary>
+    /// Whether <see cref="ReenableSpinIfUnansweredAsync"/> timed out on the last request without an answer.
+    /// </summary>
+    private bool _requestTimedOut;
+
+    /// <summary>The id of the running turn, so an older <see cref="RunTurnAsync"/> cannot end a later spin.</summary>
+    private Guid _turnId;
+
+    /// <summary>
+    /// The id of the outstanding request, so an older <see cref="ReenableSpinIfUnansweredAsync"/> cannot unlock the
+    /// button during a later spin.
+    /// </summary>
+    private Guid _requestId;
+
+    /// <summary>
+    /// Whether this screen has already shown the pending receipt and the player dismissed it.
+    /// <para>
+    /// It is needed only without a session (fixture scenarios), where acknowledging cannot clear the receipt,
+    /// so the result would be shown again as soon as the reveal closed. With a session the acknowledgement
+    /// clears the receipt.
+    /// </para>
+    /// </summary>
+    private bool _dismissed;
+
+    /// <summary>
+    /// The reward of the spin being revealed. It is read from the receipt, not from the wheel sectors, so it is
+    /// correct even if a new game config arrives between the spin and the reveal.
+    /// </summary>
+    private RewardView? _revealedReward;
+
+    private SpinWheelView View => Meta.Snapshot.SpinWheel;
+
+    /// <summary>Whether a spin request is in flight or a turn is running. The Spin button is disabled while it is.</summary>
+    private bool Busy => _spinning || _revealStage == RewardRevealStage.Granting;
+
+    /// <summary>
+    /// Whether the Spin button is shown. It stays while a spin is in progress even after the settlement spends the
+    /// last token, so the earn links do not appear where the player just tapped: a second tap of a double tap
+    /// would open one of them and leave the wheel mid-turn.
+    /// </summary>
+    private bool ShowsSpinButton => View.SpinsAvailable > 0 || Busy || _isHitPlaying;
+
+    private int OddsTotal => View.PublishedOdds.Sum(row => row.ChancePercent);
+
+    /// <summary>
+    /// The reveal title: "Nothing this time" for a blank result, otherwise "You won".
+    /// </summary>
+    private string RevealTitle => _revealedReward is { IsEmpty: true } ? "Nothing this time" : "You won";
+
+    /// <summary>
+    /// The result text for an odds row. A blank shows only its label, without an amount.
+    /// </summary>
+    private static string RowText(WheelOddsRow row) =>
+        row.Currency is null ? row.Label : $"{Currencies.Format(row.Amount)} {row.Label}";
+
+    /// <summary>
+    /// How long to wait for the server's answer before re-enabling the Spin button, in milliseconds.
+    /// </summary>
+    private const int RequestTimeoutMs = 10_000;
+
+    /// <summary>
+    /// The turn duration in milliseconds: the <c>spinMs</c> query parameter if set, otherwise
+    /// <see cref="PrizeWheel.DefaultSpinMs"/>. Tests use the parameter to shorten the turn (<c>docs/testing.md</c>,
+    /// "Forcing timers"), like <c>beatMs</c> at the table. It is passed to <see cref="PrizeWheel"/> unchanged
+    /// for the CSS animation duration.
+    /// </summary>
+    private int SpinMs => _spinMsKnob ?? PrizeWheel.DefaultSpinMs;
+
+    /// <summary>
+    /// How long <see cref="RunTurnAsync"/> waits before ending the turn. This timer is the only thing that ends
+    /// a turn.
+    /// <para>
+    /// Reduced motion is handled here as well as in CSS. CSS can shorten the animation but not this C# timer,
+    /// and the turn ends on this timer, not on <c>animationend</c> (<see cref="PrizeWheel"/> explains why).
+    /// </para>
+    /// </summary>
+    private int TurnMs => MotionPreference.ReducedMotion ? 1 : Math.Max(SpinMs, 1);
+
+    /// <summary>
+    /// The hit animation duration in milliseconds: the <c>hitMs</c> query parameter if set, otherwise
+    /// <see cref="WheelHitAnimation.DefaultHitMs"/>. With reduced motion it is 1 ms, so the reveal opens right after the
+    /// turn, for the same reason as <see cref="TurnMs"/>.
+    /// </summary>
+    private int HitMs => MotionPreference.ReducedMotion ? 1 : Math.Max(_hitMsKnob ?? WheelHitAnimation.DefaultHitMs, 1);
+
+    /// <summary>
+    /// The <c>spinMs</c> and <c>hitMs</c> query parameters, parsed in <c>OnParametersSet</c> instead of on every
+    /// render. Blazor keeps this component when a navigation changes only the query, and calls
+    /// <c>OnParametersSet</c> again for it, so a new value takes effect.
+    /// <para>
+    /// Only the query values are cached. Reduced motion is checked on every read, because the player can change
+    /// it while the page is open.
+    /// </para>
+    /// </summary>
+    private int? _spinMsKnob;
+    private int? _hitMsKnob;
+
+    protected override void OnParametersSet()
+    {
+        string query = new Uri(Nav.Uri).Query;
+        _spinMsKnob  = TestQuerySettings.TryGetInt(query, "spinMs");
+        _hitMsKnob   = TestQuerySettings.TryGetInt(query, "hitMs");
+    }
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Client.WheelSpinResolved += OnResolved;
+        Client.WheelSpinRefused += OnRefused;
+
+        // Show a granted but unseen result on arrival, before another spin is allowed. The reward is already
+        // in the wallet, so only the reveal is shown.
+        PresentPendingReceipt();
+    }
+
+    /// <summary>
+    /// Re-checks for a pending receipt on every state change, not only at initialization, because <b>the
+    /// screen renders before the session arrives</b>. The first render uses fixture data, so a receipt on the
+    /// server is not visible yet when the component is created (docs/spin-wheel.md).
+    /// </summary>
+    protected override void OnMetaStateChanged()
+    {
+        PresentPendingReceipt();
+        InvokeAsync(StateHasChanged);
+    }
+
+    protected override void OnDispose()
+    {
+        Client.WheelSpinResolved -= OnResolved;
+        Client.WheelSpinRefused -= OnRefused;
+    }
+
+    /// <summary>
+    /// Shows the unacknowledged receipt, if there is one. The wheel is placed on the winning sector without
+    /// turning, because the spin already happened.
+    /// </summary>
+    private void PresentPendingReceipt()
+    {
+        // Skip while a request, a turn or a hit animation is running. Those open the same reveal when they
+        // finish, and opening it now would cut the animation short.
+        if (_spinning || _isHitPlaying || _dismissed || _revealStage != RewardRevealStage.Idle)
+            return;
+
+        if (View.PendingReceipt is not SpinReceiptView pending)
+            return;
+
+        _winningSectorIndex = pending.SectorIndex;
+        _revealedReward     = pending.Reward;
+        _revealStage        = RewardRevealStage.Granted;
+    }
+
+    /// <summary>
+    /// Sends the spin request. The wheel does not start turning yet, because the sector is not known until the
+    /// server answers (docs/spin-wheel.md).
+    /// </summary>
+    private void Spin()
+    {
+        _refusal            = null;
+        _revealedReward     = null;
+        _winningSectorIndex = -1;
+        _turnId             = Guid.Empty;
+        _isHitPlaying       = false;
+        _dismissed          = false;
+        _requestTimedOut    = false;
+        _revealStage        = RewardRevealStage.Granting;
+
+        if (!Meta.SpinWheel())
+        {
+            // No session, so the shell is running on fixtures. Nothing can be granted, so re-enable the button.
+            _revealStage = RewardRevealStage.Idle;
+            _spinning    = false;
+            return;
+        }
+
+        _requestId = Guid.NewGuid();
+        _ = ReenableSpinIfUnansweredAsync(_requestId);
+    }
+
+    /// <summary>
+    /// Re-enables the Spin button if no answer arrives within <see cref="RequestTimeoutMs"/>.
+    /// <para>
+    /// Without it, a lost message would leave the button showing "Spinning…" until a reload. A settlement or
+    /// refusal clears <c>_requestId</c>, so this never interrupts an answered spin. It shows a message instead of
+    /// retrying, because a resubmitted spin would be a second request for the same ordinal
+    /// (<c>docs/spin-wheel.md</c>).
+    /// </para>
+    /// </summary>
+    private async Task ReenableSpinIfUnansweredAsync(Guid requestId)
+    {
+        await Task.Delay(RequestTimeoutMs);
+
+        if (_requestId != requestId || _spinning || _revealStage != RewardRevealStage.Granting)
+            return;
+
+        _requestId       = Guid.Empty;
+        _revealStage     = RewardRevealStage.Idle;
+        _requestTimedOut = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Called when the spin settlement has committed on the client's player model: the token is spent, the
+    /// reward is granted, and the receipt names the sector. Starts the turn.
+    /// </summary>
+    private void OnResolved()
+    {
+        if (Meta.Snapshot.SpinWheel.PendingReceipt is not SpinReceiptView pending)
+            return;
+
+        _revealedReward     = pending.Reward;
+        _winningSectorIndex = pending.SectorIndex;
+        _revealStage        = RewardRevealStage.Idle;
+        _spinning           = true;
+        _requestTimedOut    = false;
+        _requestId          = Guid.Empty;
+        _turnId             = Guid.NewGuid();
+
+        InvokeAsync(StateHasChanged);
+        _ = RunTurnAsync(_turnId);
+    }
+
+    /// <summary>
+    /// Waits for the turn, plays the hit animation, then opens the reveal. The turn ends on a timer, not on the
+    /// CSS animation's end event (see <c>PrizeWheel.razor</c>).
+    /// <para>
+    /// It is safe to call without awaiting because it checks <c>_turnId</c> after each wait, and does nothing once
+    /// a newer spin has started. A spin started during the hit resets <c>_isHitPlaying</c>, which stops the old hit.
+    /// </para>
+    /// </summary>
+    private async Task RunTurnAsync(Guid turnId)
+    {
+        await Task.Delay(TurnMs);
+
+        if (_turnId != turnId || !_spinning)
+            return;
+
+        _spinning     = false;
+        _isHitPlaying = true;
+        await InvokeAsync(StateHasChanged);
+
+        await Task.Delay(HitMs);
+
+        if (_turnId != turnId)
+            return;
+
+        _isHitPlaying = false;
+        _revealStage  = RewardRevealStage.Granted;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void OnRefused(SpinRefusal refusal)
+    {
+        _spinning        = false;
+        _isHitPlaying    = false;
+        _revealStage     = RewardRevealStage.Idle;
+        _requestTimedOut = false;
+        _requestId       = Guid.Empty;
+        _refusal         = refusal;
+
+        // A refused spin never plays the reveal. ResultPending usually means there is an unseen result, which
+        // is shown instead of the refusal message.
+        //
+        // The server also returns ResultPending while an enqueued spin has not run yet. Then there is no
+        // receipt to show, so the refusal message is kept. Otherwise the button would re-enable with no
+        // explanation.
+        if (refusal == SpinRefusal.ResultPending)
+        {
+            PresentPendingReceipt();
+            if (_revealStage != RewardRevealStage.Idle)
+                _refusal = null;
+        }
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Acknowledges the result after the reveal is dismissed. It does not change any balance, because the
+    /// settlement already granted the reward. It only stops the result from being shown again.
+    /// </summary>
+    private void Acknowledge()
+    {
+        MetaActionResult? result = Meta.AcknowledgeSpin();
+
+        _revealStage        = RewardRevealStage.Idle;
+        _revealedReward     = null;
+        _winningSectorIndex = -1;
+        _isHitPlaying       = false;
+        _dismissed          = true;
+
+        // A refused acknowledgement leaves the receipt pending on the server, so the next spin would be refused
+        // with ResultPending. Show that message now. A null result means fixture mode, where nothing ran.
+        _refusal = result != null && !result.IsSuccess ? SpinRefusal.ResultPending : null;
+    }
+
+    /// <summary>
+    /// The message for a refusal. For WalletFull it names the full balance from <c>View.BlockedBy</c>, so the
+    /// player knows what to spend (<c>docs/spin-wheel.md</c>).
+    /// </summary>
+    private string RefusalText(SpinRefusal refusal) => refusal switch
+    {
+        SpinRefusal.NoTokens          => "You have no spin tokens. Daily rewards, missions and the shop give them out.",
+        SpinRefusal.WalletFull        => WalletFullText,
+        SpinRefusal.ConfigUnavailable => "The wheel is temporarily unavailable. Your token is untouched.",
+        SpinRefusal.StaleOrdinal      => "That spin was already handled. Nothing was spent twice.",
+        SpinRefusal.TooFast           => "That was one tap too quick. Try again in a moment — nothing was spent.",
+        SpinRefusal.ResultPending     => "Your last spin is still being settled. Give it a moment and try again.",
+        _                             => "That spin did not go through. Nothing was spent.",
+    };
+
+    private string WalletFullText => View.BlockedBy is CurrencyKind blocked
+        ? $"Your {Currencies.NameOf(blocked)} balance is full, so one of the prizes would not fit. Spend some and come back — your token is untouched."
+        : "One of the prizes would not fit in your wallet. Spend some of it and come back — your token is untouched.";
+}

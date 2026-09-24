@@ -1,0 +1,170 @@
+@using Metaplay.Core.Model
+@page "/events/missions"
+@layout MetaLayout
+@inherits MetaComponentBase
+@inject MetaplayClientService MetaplayService
+@inject NavigationManager Navigation
+
+@* The Missions screen. It reuses the goal row, emblems and section headings of the first-week event screen. *@
+
+<ChildPageHeader Title="Missions" Subtitle="Play to finish them" />
+
+@if (!View.State.IsLive())
+{
+    <ActivityStateBlock State="View.State" SkeletonCardCount="4" />
+}
+else if (View.DailyMissionsTotal == 0)
+{
+    <ActivityStateBlock State="ActivityState.Unavailable" Title="No missions yet"
+                Note="Play a game and your first missions will open up." />
+}
+else
+{
+    <div class="m-card m-card--progress m-card--featured m-card--tall">
+        <div class="m-card__eyebrow-row m-card__eyebrow-row--end">
+            <MetaCountdown Remaining="View.UntilDailyReset" EndingSoonWithin="View.EndingSoonWithin" ExpiredText="Resetting" />
+        </div>
+
+        <div class="m-card__head">
+            <MetaEmblem Name="shield" Accent="progress" Size="xl" />
+            <div class="m-card__grow">
+                @* The headline is the feature name, and the progress goes in the smaller title line below it. *@
+                <p class="m-card__headline">Daily missions</p>
+                <p class="m-card__title">@View.DailyMissionsComplete of @View.DailyMissionsTotal complete</p>
+                <p class="m-card__note">
+                    @if (View.ClaimableCount > 0)
+                    {
+                        @(View.ClaimableCount == 1 ? "1 reward is waiting to be collected." : $"{View.ClaimableCount} rewards are waiting to be collected.")
+                    }
+                    else
+                    {
+                        @("They refresh when the clock runs out.")
+                    }
+                </p>
+                <MetaProgress Current="View.DailyMissionsComplete" Target="View.DailyMissionsTotal" Label="Missions complete"
+                              Accent="@(View.ClaimableCount > 0 ? "claim" : null)" />
+            </div>
+        </div>
+    </div>
+
+    @* Missions completed before the last reset stay claimable for a late-claim window. This section comes before
+       today's list because its deadline is the nearest. *@
+    @if (View.LateClaimMissions.Count > 0)
+    {
+        <MetaSectionHeading Label="Claim before they expire" Accent="claim" />
+
+        <div class="m-card__eyebrow-row m-card__eyebrow-row--end">
+            <MetaCountdown Remaining="View.UntilLateClaimEnds" ExpiredText="Expired" />
+        </div>
+
+        @foreach (GoalView mission in View.LateClaimMissions)
+        {
+            @Row(mission, "late-claim-mission")
+        }
+    }
+
+    <MetaSectionHeading Label="Today's missions" />
+
+    @foreach (GoalView mission in View.DailyMissions)
+    {
+        @Row(mission, "mission")
+    }
+
+    @if (View.WeeklyMissions.Count > 0)
+    {
+        <MetaSectionHeading Label="This week" />
+
+        <div class="m-card__eyebrow-row m-card__eyebrow-row--end">
+            <MetaCountdown Remaining="View.UntilWeeklyReset" ExpiredText="Resetting" />
+        </div>
+
+        @foreach (GoalView mission in View.WeeklyMissions)
+        {
+            @Row(mission, "weekly-mission")
+        }
+    }
+
+}
+
+<RewardReveal Stage="_revealStage" Bundle="_claimedReward" Title="Mission complete"
+              OnContinue="() => _revealStage = RewardRevealStage.Idle"
+              OnRetry="Retry" />
+
+@code {
+    private RewardRevealStage _revealStage   = RewardRevealStage.Idle;
+    private RewardView        _claimedReward = RewardView.Empty;
+    private GoalView?         _lastClaimedMission;
+
+    private MissionsView View => Meta.Snapshot.Missions;
+
+    /// <summary>Starts matchmaking, because missions progress by playing. The searching dialog opens over
+    /// this screen.</summary>
+    private void OpenPlay() => MetaplayService.EnterMatchmaking();
+
+    /// <summary>
+    /// One mission row, used by the daily, weekly and late-claim lists. <paramref name="testId"/> identifies the list
+    /// for tests.
+    /// </summary>
+    private RenderFragment Row(GoalView mission, string testId) => __builder =>
+    {
+        bool claimable = mission.IsClaimable;
+
+        <div class="m-card @(claimable ? "m-card--claim" : null)" data-testid="@testId">
+            <div class="m-goal @(mission.IsComplete ? "m-goal--complete" : null)">
+                <MetaEmblem Name="@(mission.IsComplete ? "check" : "target")"
+                            Accent="@(claimable ? "claim" : mission.IsComplete ? "locked" : "progress")" />
+
+                <div class="m-goal__body">
+                    <span class="m-goal__title">@mission.Title</span>
+                    <span class="m-goal__meta">
+                        <span class="m-goal__count">@mission.Progress / @mission.Target</span>
+                        <RewardPreview Bundle="mission.Reward" Compact="true" />
+                    </span>
+                    @if (!mission.IsComplete)
+                    {
+                        <MetaProgress Current="mission.Progress" Target="mission.Target" Label="@mission.Title"
+                                      ShowNumbers="false" />
+                    }
+                </div>
+
+                @if (claimable)
+                {
+                    <MetaButton Variant="MetaButtonVariant.Claim" Size="MetaButtonSize.Sm" TestId="@($"{testId}-claim")"
+                                OnClick="() => Claim(mission)">@ButtonLabels.Claim</MetaButton>
+                }
+                else if (mission.IsClaimed)
+                {
+                    <MetaStatusLabel Size="MetaButtonSize.Sm" TestId="@($"{testId}-claimed")">Claimed</MetaStatusLabel>
+                }
+                else
+                {
+                    <MetaButton Variant="MetaButtonVariant.Ghost" Size="MetaButtonSize.Sm" TestId="@($"{testId}-play")"
+                                OnClick="OpenPlay">@ButtonLabels.Play</MetaButton>
+                }
+            </div>
+        </div>
+    };
+
+    /// <summary>
+    /// Claims one mission's reward and shows the reward reveal.
+    /// <para>
+    /// There is no <c>Granting</c> wait, because the player action runs on the client's copy of the player model
+    /// before it returns, and the server runs the same action on the same state with the same outcome. Without a
+    /// session the result is null and the reveal runs without changing any state.
+    /// </para>
+    /// </summary>
+    private void Claim(GoalView mission)
+    {
+        _lastClaimedMission = mission;
+        _claimedReward      = mission.Reward;
+
+        MetaActionResult? result = Meta.ClaimMission(mission.Id);
+        _revealStage = RewardRevealStages.AfterClaim(result);
+    }
+
+    private void Retry()
+    {
+        if (_lastClaimedMission != null)
+            Claim(_lastClaimedMission);
+    }
+}

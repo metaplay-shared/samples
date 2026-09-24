@@ -1,0 +1,90 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <!-- The browser TFM selects the SDK's browser build in every referenced project. It defines BROWSER, which
+         makes Metaplay.Client use the WebSocket transport and the browser blob store, and removes the runtime
+         code generation that mono-wasm cannot run. -->
+    <TargetFramework>net10.0-browser</TargetFramework>
+    <Nullable>disable</Nullable>
+    <!-- CS8632: Nullable annotation used outside #nullable context -->
+    <!-- CS8669: Nullable annotation in auto-generated code requires explicit #nullable directive -->
+    <NoWarn>$(NoWarn);CS8632;CS8669</NoWarn>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>Latest</LangVersion>
+    <!-- Interpreted, single-threaded WASM. Do not set RunAOTCompilation, not even to false: the workload's default
+         is empty, and any explicit value relinks the Mono runtime without optimization, which makes it several
+         times larger than the prebuilt runtime. -->
+    <WasmEnableThreads>false</WasmEnableThreads>
+
+    <!-- =========================================================================================
+         Published payload size. The settings below apply to `dotnet publish` only. `dotnet build` and the
+         dev server use the untrimmed build. The trimmed mode of `tools/run-e2e.sh` tests the published build.
+         ========================================================================================= -->
+
+    <!-- Ship no ICU data, so the client downloads no icudt_*.dat file. Culture-sensitive APIs then use the
+         invariant culture instead of the browser's locale, so dates and numbers are formatted the same for every
+         player. That suits this English-only UI. A game that formats for the player's locale must keep ICU. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- Trim the published client. The Blazor default, partial mode, trims only assemblies marked
+         [IsTrimmable]. Full mode also trims unused framework code. Full mode also removes members that are only
+         reached through reflection, which Blazor, the Metaplay integration and the serializer all rely on, so
+         the assemblies that contain such members are rooted in the TrimmerRootAssembly list below. -->
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>full</TrimMode>
+
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.*" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.*" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The Metaplay source generators. This entry assembly needs the generated integration metadata that
+         IntegrationAssembly.FindRoots() reads at startup. -->
+    <ProjectReference Include="..\..\..\MetaplaySDK\Backend\CodeAnalyzers\Metaplay.CodeAnalyzers.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\MetaplaySDK\Backend\CodeAnalyzers.Shared\Metaplay.CodeAnalyzers.Shared.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <!-- The shared game logic. It is referenced as a project instead of included as source, so that its assembly
+         identity matches the one the prebuilt serializer expects. The net10.0-browser TFM selects its browser
+         build. -->
+    <ProjectReference Include="..\SharedCode\SharedCode.Client.csproj" />
+    <ProjectReference Include="..\WebClientBase\WebClientBase.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The prebuilt serializer assembly, because mono-wasm cannot generate one at runtime. It is not committed.
+         The import below generates it with tools/SerializerGen before references are resolved. -->
+    <Reference Include="Metaplay.Generated.Browser">
+      <HintPath>Serializer\Metaplay.Generated.Browser.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Import Project="..\tools\SerializerGen\BrowserSerializer.targets" />
+
+  <!-- Assemblies whose members are reached through reflection, which the trimmer cannot see: this app and
+       WebClientBase (Blazor creates components by type), the SDK client runtime, the shared game logic, the
+       prebuilt serializer, and Metaplay.Attributes, which the integration's type scan passes to
+       Assembly.GetTypes(). Rooting keeps all of an assembly's members. Other assemblies, including the framework,
+       are still trimmed.
+
+       The SDK has no trim annotations, so a missing entry produces no build warning. It fails only at run time,
+       in the published client, when a screen first needs a removed type. The dev server runs an untrimmed build,
+       so only the trimmed mode of tools/run-e2e.sh detects it. -->
+  <ItemGroup>
+    <TrimmerRootAssembly Include="WebClient" />
+    <TrimmerRootAssembly Include="WebClientBase" />
+    <TrimmerRootAssembly Include="Metaplay.Client" />
+    <TrimmerRootAssembly Include="Metaplay.Generated.Browser" />
+    <TrimmerRootAssembly Include="SharedCode.Client" />
+    <TrimmerRootAssembly Include="Metaplay.Attributes" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,4 @@
+Id #key,DisplayName,MistakeChancePercent,LongThinkChancePercent
+sharp,Sharp,0,15
+steady,Steady,10,20
+casual,Casual,25,25

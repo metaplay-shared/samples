@@ -1,0 +1,11 @@
+Id #key,Sectors[].Id,Sectors[].Sector,Sectors[].Reward,Sectors[].Tier
+wheel.v1,coins.100.a,1,100 Coins,Common
+,coins.500.a,2,500 Coins,Uncommon
+,coins.250.a,3,250 Coins,Common
+,gems.30,4,30 Gems,Premium
+,token.a,5,1 SpinTokens,SpinAgain
+,coins.1000,6,1000 Coins,Rare
+,coins.250.b,7,250 Coins,Common
+,token.b,8,1 SpinTokens,SpinAgain
+,nothing,9,none,Nothing
+,coins.500.b,10,500 Coins,Uncommon

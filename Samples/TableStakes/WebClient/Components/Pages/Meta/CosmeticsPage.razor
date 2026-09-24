@@ -1,0 +1,371 @@
+@page "/profile/cosmetics"
+@layout MetaLayout
+@inherits MetaComponentBase
+
+@* The Cosmetics screen: a preview of the player wearing the selected item, as the standings will show it,
+   then tabs for the cosmetic slots, then the selected slot's item grid.
+
+   Every CosmeticOwnership state has its own text. A locked item states its unlock requirement, and an
+   unaffordable item shows its price and the shortfall. *@
+
+<ChildPageHeader Title="Cosmetics" />
+
+@* Previewed runs several list scans, so it is read once per render. *@
+@{ CosmeticItem? previewed = Previewed; }
+
+@if (!View.State.IsLive())
+{
+    <ActivityStateBlock State="View.State" />
+}
+else if (previewed == null)
+{
+    <ActivityStateBlock State="ActivityState.Unavailable" Title="Nothing here yet"
+                Note="This slot has no cosmetics in it." />
+}
+else
+{
+    @* The preview card: the player wearing the item, its state, and its action. It comes before the tabs
+        and is not sticky. *@
+    <div class="m-card m-card--featured m-cosmetic-preview" data-testid="cosmetic-preview">
+        @* The row adds the gap between the avatar and the name, which PlayerAvatar renders as inline
+           siblings. *@
+        <div class="m-card__row">
+            <PlayerAvatar Identity="PreviewIdentityOf(previewed)" Size="96" WithName="true" />
+        </div>
+
+        @* The item's state, using the same chips as the grid tiles. These chips have no per-state test ids.
+            The tiles have them, so a test locator always refers to one tile. *@
+        @switch (previewed.Ownership)
+        {
+            case CosmeticOwnership.Equipped:
+                @* A chip, not a button, because there is nothing to do with an equipped item. *@
+                <span class="strip m-chip m-chip--claim">Equipped</span>
+                break;
+            case CosmeticOwnership.Owned:
+                <span class="strip m-chip">Owned</span>
+                break;
+            case CosmeticOwnership.Affordable:
+                @* The price shows its currency icon, as on the tiles and in the shop. *@
+                <span class="strip m-chip m-chip--gold" data-testid="cosmetic-price">
+                    <MetaIcon Name="@RewardViewItem.IconIdFor(previewed.PriceCurrency)" Size="14" />
+                    @Currencies.Format(previewed.PriceAmount)
+                </span>
+                break;
+            case CosmeticOwnership.Unaffordable:
+                @* The price with the amount struck through. The shortfall below says how much is missing. *@
+                <span class="strip m-chip">
+                    <MetaIcon Name="@RewardViewItem.IconIdFor(previewed.PriceCurrency)" Size="14" />
+                    <s>@Currencies.Format(previewed.PriceAmount)</s>
+                </span>
+                break;
+            case CosmeticOwnership.Locked:
+                <MetaStatusLabel>
+                    <MetaIcon Name="lock" Size="16" /> @previewed.UnlockRequirement
+                </MetaStatusLabel>
+                break;
+            default:
+                <MetaStatusLabel>Not available</MetaStatusLabel>
+                break;
+        }
+
+        <p class="m-card__title">@previewed.Name</p>
+        <p class="m-card__note">@previewed.Flavour</p>
+
+        @* The action for the item's state. An equipped item has no action, because cosmetics cannot be
+            unequipped (docs/cosmetics.md, "No unequip"). *@
+        @switch (previewed.Ownership)
+        {
+            case CosmeticOwnership.Owned:
+                <div class="m-card__actions">
+                    <MetaButton Variant="MetaButtonVariant.Primary"
+                                OnClick="() => Equip(previewed)">@ButtonLabels.Equip</MetaButton>
+                </div>
+                break;
+            case CosmeticOwnership.Affordable:
+                @* The price is in the chip above, so the button says only "Buy", as in the shop. *@
+                <div class="m-card__actions">
+                    <MetaButton Variant="MetaButtonVariant.Primary"
+                                OnClick="() => _pendingPurchase = previewed">@ButtonLabels.Buy</MetaButton>
+                </div>
+                break;
+            case CosmeticOwnership.Unaffordable:
+                @* The shortfall comes from the wallet, and the Unaffordable state comes from the view. A
+                    fixture can set Unaffordable without a matching wallet, so the text is shown only when the
+                    shortfall is above zero. *@
+                @if (previewed.ShortfallAgainst(Meta.Snapshot.Wallet) is long missing && missing > 0)
+                {
+                    <p class="m-card__note" data-testid="cosmetic-shortfall">
+                        You need @Currencies.Format(missing) more @Currencies.NameOf(previewed.PriceCurrency, missing).
+                    </p>
+                }
+                <div class="m-card__actions" data-testid="cosmetic-earn">
+                    <MetaButton Variant="MetaButtonVariant.Ghost" Href="@MetaRoutes.Events">@ButtonLabels.Earn</MetaButton>
+                </div>
+                break;
+        }
+
+        @if (_refusalMessage != null)
+        {
+            <p class="m-card__note" data-testid="cosmetic-refusal">@_refusalMessage</p>
+        }
+    </div>
+
+    @* One tab per slot that has items. The config build also rejects an empty slot (docs/cosmetics.md). *@
+    <MetaTabs Items="Slots" Selected="@_slot.ToString().ToLowerInvariant()" TestId="cosmetic-slots"
+              TestIdPrefix="slot" OnSelect="SelectSlot" />
+
+    <div class="@GridClass">
+        @foreach (CosmeticItem item in View.InSlot(_slot))
+        {
+            @* The tile is a div, not a button, because it contains a separate action button. Its body is a
+                button that shows the item on the preview card. Every tile has the same parts in the same
+                order: preview, name, state chip, action. The test id with the catalogue id is on the whole
+                tile, so a test can find the tile's chip and action inside it. *@
+            <div class="@TileClass(item)" data-testid="@($"cosmetic-{item.Id}")">
+                <button type="button" class="m-cosmetic__body"
+                        aria-pressed="@(item.Id == _previewedItemId ? "true" : "false")"
+                        @onclick="() => Preview(item)">
+                    <span class="m-cosmetic__figure">
+                        @if (item.Slot == CosmeticSlot.Avatar)
+                        {
+                            <AvatarIcon Token="@item.StyleToken" Size="40" />
+                        }
+                        else if (item.Slot == CosmeticSlot.Frame)
+                        {
+                            @* The player's own avatar wearing the frame, as on the preview card. *@
+                            <PlayerAvatar Identity="@TileIdentity(item)" Size="56" TestId="@null" />
+                        }
+                        else
+                        {
+                            @* The player's name drawn with the effect. Name effect tiles are full-width rows. *@
+                            <PlayerName Identity="@TileIdentity(item)" TestId="@null" Class="m-cosmetic__effect" />
+                        }
+                    </span>
+                    <span class="m-cosmetic__name">@item.Name</span>
+                </button>
+
+                @* The state chip. Each state has text or an icon, not only a colour, and Unaffordable differs
+                    from Affordable by the struck-through price. A locked tile says only "Locked", and the
+                    preview card states the requirement. data-state holds the state name, and StateBadgeId
+                    adds a test id for some states. *@
+                <span class="@BadgeClass(item)" data-testid="cosmetic-state"
+                      data-state="@item.Ownership.ToString().ToLowerInvariant()">
+                    <span class="m-cosmetic__badge-state" data-testid="@StateBadgeId(item)">
+                        @switch (item.Ownership)
+                        {
+                            case CosmeticOwnership.Equipped:
+                                <text>Equipped</text>
+                                break;
+                            case CosmeticOwnership.Owned:
+                                <text>Owned</text>
+                                break;
+                            case CosmeticOwnership.Affordable:
+                                <MetaIcon Name="@RewardViewItem.IconIdFor(item.PriceCurrency)" Size="14" />
+                                @Currencies.Format(item.PriceAmount)
+                                break;
+                            case CosmeticOwnership.Unaffordable:
+                                <MetaIcon Name="@RewardViewItem.IconIdFor(item.PriceCurrency)" Size="14" />
+                                <s>@Currencies.Format(item.PriceAmount)</s>
+                                break;
+                            case CosmeticOwnership.Locked:
+                                <MetaIcon Name="lock" Size="14" />
+                                <text>Locked</text>
+                                break;
+                            default:
+                                <s>Unavailable</s>
+                                break;
+                        }
+                    </span>
+                </span>
+
+                @* Each tile has its own action, so the player does not have to scroll up to the preview card.
+                    Only Owned and Affordable items have an action. *@
+                @switch (item.Ownership)
+                {
+                    case CosmeticOwnership.Owned:
+                        <MetaButton Variant="MetaButtonVariant.Secondary" Size="MetaButtonSize.Sm"
+                                    TestId="cosmetic-equip" OnClick="() => Equip(item)">@ButtonLabels.Equip</MetaButton>
+                        break;
+                    case CosmeticOwnership.Affordable:
+                        @* The tile is too small for a separate price chip and button, so the price is on the
+                            button. *@
+                        <MetaButton Variant="MetaButtonVariant.Primary" Size="MetaButtonSize.Sm"
+                                    TestId="cosmetic-buy" OnClick="() => _pendingPurchase = item">
+                            @ButtonLabels.Buy <MetaIcon Name="@RewardViewItem.IconIdFor(item.PriceCurrency)" Size="14" /> @Currencies.Format(item.PriceAmount)
+                        </MetaButton>
+                        break;
+                }
+            </div>
+        }
+    </div>
+}
+
+@* As in the Shop, the confirmation states the price and the current balance before anything is spent
+   (docs/economy.md). There is no reward reveal afterwards, because the reveal animates currency into the HUD,
+   a purchase spends currency, and the bought item is already on the preview card. *@
+<ConfirmDialog Open="_pendingPurchase != null"
+               Title="Confirm purchase"
+               Question="@ConfirmQuestion"
+               ConfirmText="@ButtonLabels.Buy"
+               OnConfirm="ConfirmBuy"
+               OnCancel="() => _pendingPurchase = null" />
+
+@code {
+    /// <summary>
+    /// The slot tab to open on, as a CosmeticSlot name. The route does not set it. Gallery stories set it so
+    /// each tab has its own story URL (docs/cosmetics.md).
+    /// </summary>
+    [Parameter] public string? InitialSlot { get; set; }
+
+    private CosmeticSlot _slot = CosmeticSlot.Frame;
+    private string? _previewedItemId;
+    private CosmeticItem? _pendingPurchase;
+    private string? _refusalMessage;
+
+    private CosmeticsView View => Meta.Snapshot.Cosmetics;
+
+    /// <summary>
+    /// The item on the preview card: the tapped tile, else the item equipped in this slot, else the slot's
+    /// first item. Null for an empty slot. The config build rejects empty slots, but the screen still handles
+    /// one with an empty state instead of throwing.
+    /// </summary>
+    private CosmeticItem? Previewed =>
+        View.InSlot(_slot).FirstOrDefault(i => i.Id == _previewedItemId)
+        ?? View.EquippedIn(_slot)
+        ?? View.InSlot(_slot).FirstOrDefault();
+
+    /// <summary>
+    /// The player's current identity with <paramref name="previewed"/> swapped in, so the preview shows what the
+    /// standings would show. <see cref="CosmeticsPolicy.Preview"/> is unit-tested.
+    /// </summary>
+    private IdentityView PreviewIdentityOf(CosmeticItem previewed) => CosmeticsPolicy.Preview(Meta.Snapshot.Identity, previewed);
+
+    /// <summary>
+    /// The grid class for the current slot. Each slot has a fixed column count in the stylesheet instead of
+    /// <c>auto-fit</c>, so the layout does not depend on how many items the catalogue has.
+    /// </summary>
+    private string GridClass => $"m-cosmetics-grid m-cosmetics-grid--{_slot.ToString().ToLowerInvariant()}";
+
+    /// <summary>
+    /// The player's current identity with <paramref name="item"/> swapped in, for the tile's preview.
+    /// </summary>
+    private IdentityView TileIdentity(CosmeticItem item) => CosmeticsPolicy.Preview(Meta.Snapshot.Identity, item);
+
+    /// <summary>
+    /// The tile's classes: the base class, the full-width row layout for name effects, and the highlight for
+    /// the previewed item.
+    /// </summary>
+    private string TileClass(CosmeticItem item)
+    {
+        string classes = "m-cosmetic";
+        if (item.Slot == CosmeticSlot.NameEffect)
+            classes += " m-cosmetic--row";
+        if (item.Id == _previewedItemId)
+            classes += " m-cosmetic--previewed";
+        return classes;
+    }
+
+    /// <summary>
+    /// The state chip's classes: the claim style for Equipped, the quiet style for Owned, Locked and
+    /// Unavailable, and the base gold style for the two price states, which differ only by the strikethrough.
+    /// </summary>
+    private static string BadgeClass(CosmeticItem item) => item.Ownership switch
+    {
+        CosmeticOwnership.Equipped     => "strip m-tag m-tag--claim m-cosmetic__badge",
+        CosmeticOwnership.Owned        => "strip m-tag m-tag--quiet m-cosmetic__badge",
+        CosmeticOwnership.Locked       => "strip m-tag m-tag--quiet m-cosmetic__badge",
+        CosmeticOwnership.Unavailable  => "strip m-tag m-tag--quiet m-cosmetic__badge",
+        _                              => "strip m-tag m-cosmetic__badge",
+    };
+
+    /// <summary>
+    /// The test id inside the chip for Equipped, Unaffordable, Locked and Unavailable. Null for Owned and
+    /// Affordable, which tests read through the <c>data-state</c> of <c>cosmetic-state</c>.
+    /// </summary>
+    private static string? StateBadgeId(CosmeticItem item) => item.Ownership switch
+    {
+        CosmeticOwnership.Equipped     => "cosmetic-equipped",
+        CosmeticOwnership.Unaffordable => "cosmetic-unaffordable",
+        CosmeticOwnership.Locked       => "cosmetic-locked",
+        CosmeticOwnership.Unavailable  => "cosmetic-unavailable",
+        _                              => null,
+    };
+
+    private string ConfirmQuestion => _pendingPurchase == null
+        ? ""
+        : $"Buy {_pendingPurchase.Name} for {Currencies.Format(_pendingPurchase.PriceAmount)} {Currencies.NameOf(_pendingPurchase.PriceCurrency)}? "
+          + $"You have {Currencies.Format(BalanceOf(_pendingPurchase.PriceCurrency))}.";
+
+    /// <summary>
+    /// The wallet balance for a price currency. Only coins and gems are handled, because the config build
+    /// rejects cosmetics priced in spin tokens (docs/cosmetics.md).
+    /// </summary>
+    private long BalanceOf(CurrencyKind currency) =>
+        currency == CurrencyKind.Gems ? Meta.Snapshot.Wallet.Gems : Meta.Snapshot.Wallet.Coins;
+
+    protected override void OnInitialized()
+    {
+        if (InitialSlot != null)
+            _slot = Enum.Parse<CosmeticSlot>(InitialSlot, ignoreCase: true);
+
+        base.OnInitialized();
+        Meta.AcknowledgeCosmetic();
+    }
+
+    /// <summary>
+    /// Re-renders and acknowledges the cosmetics badge again. On a cold boot this screen renders before the
+    /// session exists, so the acknowledgement in <c>OnInitialized</c> cannot reach the player model. After the
+    /// first successful acknowledgement, later calls do nothing.
+    /// </summary>
+    protected override void OnMetaStateChanged()
+    {
+        Meta.AcknowledgeCosmetic();
+        InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>The slot tabs, one per slot that has items.</summary>
+    private IReadOnlyList<(string Key, string Label)> Slots =>
+        View.Slots.Select(slot => (slot.ToString().ToLowerInvariant(), SlotTabLabel(slot))).ToList();
+
+    private void SelectSlot(string key)
+    {
+        _slot = Enum.Parse<CosmeticSlot>(key, ignoreCase: true);
+        _previewedItemId = null;
+        _refusalMessage = null;
+    }
+
+    /// <summary>
+    /// Shows the item on the preview card. It clears any refusal message, which belongs to the previous item.
+    /// </summary>
+    private void Preview(CosmeticItem item)
+    {
+        _previewedItemId = item.Id;
+        _refusalMessage  = null;
+    }
+
+    /// <summary>
+    /// Runs the confirmed purchase and shows a refusal message if the action failed, for example because the
+    /// balance changed between the tap and the confirmation.
+    /// </summary>
+    private void ConfirmBuy()
+    {
+        CosmeticItem? item = _pendingPurchase;
+        _pendingPurchase = null;
+        if (item == null)
+            return;
+
+        _refusalMessage = CosmeticsPolicy.RefusalMessage(Meta.BuyCosmetic(item.Id), item, Meta.Snapshot.Wallet);
+    }
+
+    private void Equip(CosmeticItem item)
+    {
+        _refusalMessage = CosmeticsPolicy.RefusalMessage(Meta.EquipCosmetic(item.Id), item, Meta.Snapshot.Wallet);
+    }
+
+    private static string SlotTabLabel(CosmeticSlot slot) => slot switch
+    {
+        CosmeticSlot.Avatar     => "Avatars",
+        CosmeticSlot.Frame      => "Frames",
+        _                       => "Name effects",
+    };
+}

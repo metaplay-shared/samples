@@ -1,0 +1,1 @@
+import{a as e,c as t,i as n,l as r,s as i}from"./src-d8I-ch48.js";function a(){return{permission:`api.scan_jobs.view`,pollingPolicy:e(5e3),fetcherPolicy:r(`/databaseScanJobs?jobHistoryLimit=20`),cacheRetentionPolicy:t(1e4)}}function o(){return{permission:`api.scan_jobs.manage`,pollingPolicy:n(),fetcherPolicy:r(`/maintenanceJobs`),cacheRetentionPolicy:i()}}export{a as n,o as t};

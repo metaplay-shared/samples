@@ -1,0 +1,352 @@
+@* The spin wheel, drawn from the sectors in game config: a rim with lamps, the sectors, a hub, and a fixed
+   pointer. The caller passes the sectors from the same config as the published odds, so the drawing and the
+   odds always match (docs/spin-wheel.md).
+
+   A spin turns the face with one CSS transform and stops on WinningSectorIndex, the sector the server already drew and
+   granted, so the animation never decides the result. The next spin starts from the resting angle.
+
+   The caller ends the turn with its own timer (SpinWheelPage.TurnMs), which tests can force, because Blazor in
+   this framework version does not register onanimationend as an event attribute. The hit animation plays on
+   the container, not the face, so it never changes the resting angle. *@
+
+<div class="m-wheel @HitClass" data-testid="prize-wheel" data-hit="@HitKindName" style="@HitClock">
+    @if (HitKind == WheelHitKind.Reward)
+    {
+        @* Sparks from the pointer tip. They are rendered only while the hit animation plays. *@
+        @for (int i = 0; i < SparkCount; i++)
+        {
+            <span class="m-wheel__spark" style="@SparkAngle(i)" aria-hidden="true"></span>
+        }
+    }
+
+    <svg class="m-wheel__face @Motion" viewBox="0 0 200 200" role="img" aria-label="@Description"
+         style="@FaceStyle" data-testid="wheel-face" data-winner="@WinningSectorIndex">
+        <defs>
+            <linearGradient id="ftw-rim" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#ffe9a8" />
+                <stop offset="0.5" stop-color="#f5c542" />
+                <stop offset="1" stop-color="#a86f13" />
+            </linearGradient>
+            <radialGradient id="ftw-hub" cx="0.5" cy="0.3" r="0.7">
+                <stop offset="0" stop-color="#ffe9a8" />
+                <stop offset="1" stop-color="#a86f13" />
+            </radialGradient>
+            @* The jackpot sector's gold gradient, centred on the hub. It uses userSpaceOnUse so it works for
+               whichever sector is the jackpot and rotates with the face. *@
+            <radialGradient id="ftw-jackpot" gradientUnits="userSpaceOnUse" cx="100" cy="100" r="88">
+                <stop offset="0" stop-color="#ffe9a8" />
+                <stop offset="0.5" stop-color="#f5c542" />
+                <stop offset="1" stop-color="#a86f13" />
+            </radialGradient>
+        </defs>
+
+        <circle cx="100" cy="100" r="96" fill="url(#ftw-rim)" />
+        <circle cx="100" cy="100" r="89" fill="#0a0619" />
+
+        @* Each sector is a group with the wedge, the reward icon and the amount. The group is needed because
+           Razor treats a bare <text> element at the start of a code block as its own escape syntax. The
+           winning sector also gets a highlight class. data-tier lets tests and CSS read the result type
+           without parsing the amount. *@
+        @for (int i = 0; i < SectorCount; i++)
+        {
+            <g class="@(i == WinningSectorIndex && !Spinning ? "m-wheel__sector m-wheel__sector--won" : "m-wheel__sector")"
+               data-testid="wheel-sector" data-tier="@TierOf(i)">
+                <path d="@SectorPath(i)" fill="@SectorFill(i)" stroke="#f5c542" stroke-opacity="0.35" stroke-width="0.8" />
+                @if (IconIdOf(i) is string iconId)
+                {
+                    <g transform="@IconTransform(i)">
+                        <MetaIcon Name="@iconId" Size="15" Class="m-wheel__icon" />
+                    </g>
+                }
+                <text class="m-wheel__amount" text-anchor="middle"
+                      x="@AmountPosition(i).X.ToString("0.##", Invariant)" y="@AmountPosition(i).Y.ToString("0.##", Invariant)"
+                      transform="@AmountRotation(i)">@AmountText(i)</text>
+            </g>
+        }
+
+        @* The lamps around the rim. *@
+        @for (int i = 0; i < LampCount; i++)
+        {
+            <circle cx="@LampPosition(i).X.ToString("0.##", Invariant)" cy="@LampPosition(i).Y.ToString("0.##", Invariant)"
+                    r="3" fill="#fff6d8" opacity="0.9" />
+        }
+
+        <circle cx="100" cy="100" r="20" fill="url(#ftw-hub)" />
+        <circle cx="100" cy="100" r="13" fill="#1a1038" />
+        <path d="M100 92l-6.4 6.8a4.3 4.3 0 0 0 4.7 6.9l-1.5 4.1h6.4l-1.5-4.1a4.3 4.3 0 0 0 4.8-6.9z" fill="#f5c542" />
+    </svg>
+
+    <span class="m-wheel__pointer" aria-hidden="true">
+        <svg width="26" height="24" viewBox="0 0 26 24" fill="currentColor">
+            <path d="M13 24 2 3a2 2 0 0 1 1.8-3h18.4A2 2 0 0 1 24 3z" />
+        </svg>
+    </span>
+</div>
+
+@code {
+    /// <summary>
+    /// The sectors, clockwise from the pointer, in game config order. All sectors are drawn the same size,
+    /// because every sector has the same probability.
+    /// </summary>
+    [Parameter] public IReadOnlyList<WheelSectorView> Sectors { get; set; } = Array.Empty<WheelSectorView>();
+
+    /// <summary>
+    /// Whether the face is turning. The caller sets it back to false after <see cref="SpinMs"/> has passed.
+    /// </summary>
+    [Parameter] public bool Spinning { get; set; }
+
+    /// <summary>
+    /// The index of the sector the pointer stops on, or -1 for none. It is the result the server drew and
+    /// already granted.
+    /// </summary>
+    [Parameter] public int WinningSectorIndex { get; set; } = -1;
+
+    /// <summary>The turn duration in milliseconds. Tests can force it (<c>docs/testing.md</c>, "Forcing timers").</summary>
+    [Parameter] public int SpinMs { get; set; } = DefaultSpinMs;
+
+    /// <summary>
+    /// Whether the hit animation plays. The caller sets it between the end of the turn and the opening of the
+    /// reveal. It stays false for a result shown on arrival, because that spin already happened.
+    /// </summary>
+    [Parameter] public bool IsHitPlaying { get; set; }
+
+    /// <summary>The hit animation duration in milliseconds. Tests can force it (<c>docs/testing.md</c>, "Forcing timers").</summary>
+    [Parameter] public int HitMs { get; set; } = WheelHitAnimation.DefaultHitMs;
+
+    /// <summary>
+    /// The default turn duration in milliseconds. The duration is the same for every result, and the wheel
+    /// never overshoots or slows near a better sector.
+    /// </summary>
+    public const int DefaultSpinMs = 2_800;
+
+    /// <summary>
+    /// The number of full rotations before the face continues to the winning sector. The remaining partial
+    /// rotation is measured from the resting angle.
+    /// </summary>
+    private const int SpinTurns = 3;
+
+    private const int LampCount = 16;
+
+    /// <summary>The number of sparks in the reward hit animation. <see cref="SparkAngle"/> spaces them 45 degrees apart, so this must stay 8.</summary>
+    private const int SparkCount = 8;
+
+    /// <summary>The number of sectors to draw. Without sectors it draws 8 empty ones.</summary>
+    private int SectorCount => Sectors.Count == 0 ? 8 : Sectors.Count;
+
+    /// <summary>The face's resting angle in degrees.</summary>
+    private double _restAngleDegrees;
+
+    /// <summary>The angle the current turn ends at. It becomes the resting angle when the turn ends.</summary>
+    private double _turnEndAngleDegrees;
+
+    /// <summary>Whether a turn was running at the last parameter update, used to detect when a turn starts and ends.</summary>
+    private bool _wasSpinning;
+
+    /// <summary>
+    /// Updates the angles. When a turn starts, the target is the winning sector plus full rotations from the
+    /// resting angle. When it ends, the target becomes the resting angle. A winner set without a turn, such as
+    /// a result shown on arrival, is placed under the pointer directly.
+    /// </summary>
+    protected override void OnParametersSet()
+    {
+        if (Spinning && !_wasSpinning)
+            _turnEndAngleDegrees = _restAngleDegrees + SpinTurns * 360.0 + Normalize(RestAngle(WinningSectorIndex) - _restAngleDegrees);
+        else if (!Spinning && _wasSpinning)
+            _restAngleDegrees = Normalize(_turnEndAngleDegrees);
+        else if (!Spinning)
+            _restAngleDegrees = RestAngle(WinningSectorIndex);
+
+        _wasSpinning = Spinning;
+    }
+
+    private string Motion => Spinning ? "m-wheel__face--spinning" : null;
+
+    /// <summary>
+    /// The hit animation for the winning sector's tier (<see cref="WheelHitAnimation.Of"/>), or null when
+    /// <see cref="IsHitPlaying"/> is false, the face is turning, or <see cref="WinningSectorIndex"/> is not a valid
+    /// sector index.
+    /// </summary>
+    private WheelHitKind? HitKind =>
+        IsHitPlaying && !Spinning && WinningSectorIndex >= 0 && WinningSectorIndex < Sectors.Count
+            ? WheelHitAnimation.Of(Sectors[WinningSectorIndex].Tier)
+            : null;
+
+    /// <summary>The container classes for the hit animation: the base hit class and the kind class.</summary>
+    private string HitClass =>
+        HitKind is WheelHitKind kind ? $"m-wheel--hit m-wheel--hit-{HitKindSlug(kind)}" : null;
+
+    /// <summary>The hit kind for the data-hit attribute, which tests read.</summary>
+    private string HitKindName => HitKind is WheelHitKind kind ? HitKindSlug(kind) : null;
+
+    private static string HitKindSlug(WheelHitKind kind) => kind switch
+    {
+        WheelHitKind.SpinAgain => "respin",
+        WheelHitKind.Nothing   => "blank",
+        _                      => "reward",
+    };
+
+    /// <summary>
+    /// The hit duration as a CSS custom property. It is at least 1 ms, because a zero duration may make the
+    /// browser skip the animation instead of running it to its end state.
+    /// </summary>
+    private string HitClock => string.Create(Invariant, $"--m-wheel-hit-ms: {Math.Max(HitMs, 1)}ms;");
+
+    /// <summary>The direction of one spark, 45 degrees from the previous one.</summary>
+    private string SparkAngle(int index) => string.Create(Invariant, $"--spark-a: {index * 45}deg;");
+
+    private static readonly System.Globalization.CultureInfo Invariant =
+        System.Globalization.CultureInfo.InvariantCulture;
+
+    /// <summary>
+    /// The accessible name of the wheel. It lists the sectors and says they are equal, which states the odds.
+    /// </summary>
+    private string Description =>
+        Sectors.Count == 0
+            ? "Prize wheel"
+            : $"Prize wheel, {Sectors.Count} equal sectors: {string.Join(", ", Sectors.Select(SectorSpokenName))}";
+
+    /// <summary>A sector's name for screen readers: "nothing" for a blank, "spin again" for a respin, and
+    /// "jackpot" before the prize for the rare tier.</summary>
+    private static string SectorSpokenName(WheelSectorView sector)
+    {
+        if (sector.Currency is null)
+            return "nothing";
+
+        if (sector.Tier == WheelTier.SpinAgain)
+            return "spin again";
+
+        string prize = Currencies.NameOf(sector.Currency.Value, sector.Amount);
+        return sector.Tier == WheelTier.Rare ? $"jackpot {prize}" : prize;
+    }
+
+    /// <summary>
+    /// The face's CSS custom properties: the resting angle, the turn's end angle and the turn duration. The
+    /// stylesheet uses the resting angle both at rest and as the first frame of the turn, so the face never
+    /// jumps when a turn starts.
+    /// </summary>
+    private string FaceStyle
+    {
+        get
+        {
+            // At least 1 ms, so a forced zero duration still runs the animation to its end state.
+            double duration = Math.Max(SpinMs, 1);
+            return string.Create(Invariant,
+                $"--m-wheel-rest: {_restAngleDegrees:0.##}deg; --m-wheel-to: {_turnEndAngleDegrees:0.##}deg; --m-wheel-ms: {duration:0}ms;");
+        }
+    }
+
+    /// <summary>
+    /// The face angle that puts the centre of <paramref name="sectorIndex"/> under the pointer. Returns the current
+    /// resting angle when there is no valid sector.
+    /// </summary>
+    private double RestAngle(int sectorIndex)
+    {
+        if (sectorIndex < 0 || Sectors.Count == 0)
+            return _restAngleDegrees;
+
+        double step = 360.0 / Sectors.Count;
+        return Normalize(-(sectorIndex * step + step / 2.0));
+    }
+
+    /// <summary>The angle normalized to [0, 360), so full rotations do not accumulate across spins.</summary>
+    private static double Normalize(double degrees) => (degrees % 360.0 + 360.0) % 360.0;
+
+    /// <summary>
+    /// The sector's tier for the data-tier attribute, or null for an empty placeholder sector.
+    /// </summary>
+    private string TierOf(int index) =>
+        index < Sectors.Count ? Sectors[index].Tier.ToString().ToLowerInvariant() : null;
+
+    /// <summary>
+    /// The text on a sector: empty for a blank or a placeholder sector, "AGAIN" for a respin, and otherwise the
+    /// amount. A respin shows "AGAIN" instead of its spin token amount, because the token pays for the next
+    /// spin and is not a prize.
+    /// </summary>
+    private string AmountText(int index)
+    {
+        if (index >= Sectors.Count || Sectors[index].Currency is null)
+            return "";
+
+        return Sectors[index].Tier == WheelTier.SpinAgain
+            ? "AGAIN"
+            : Sectors[index].Amount.ToString(Invariant);
+    }
+
+    /// <summary>
+    /// The icon for a sector, from <see cref="WheelSectorArt"/>, or null for a placeholder sector.
+    /// </summary>
+    private string? IconIdOf(int index) =>
+        index < Sectors.Count ? WheelSectorArt.IconIdFor(Sectors[index]) : null;
+
+    /// <summary>
+    /// The icon's transform: centred on the sector's middle line, further from the hub than the amount, and
+    /// rotated with the sector. The translate subtracts half the icon size to centre it, and the rotation is
+    /// about the icon's own centre.
+    /// </summary>
+    private string IconTransform(int index)
+    {
+        double step        = 360.0 / SectorCount;
+        double centreAngle = index * step - 90 + step / 2;
+        (double x, double y) = Polar(centreAngle, 66);
+        double angle = index * step + step / 2;
+
+        return string.Create(Invariant,
+            $"translate({(x - 7.5):0.##} {(y - 7.5):0.##}) rotate({angle:0.##} 7.5 7.5)");
+    }
+
+    /// <summary>
+    /// The fill of a sector by tier: near-black for a blank, plum for a respin, the gold gradient for the rare
+    /// tier, and teal for the premium tier. Other sectors alternate between two purples so neighbours are
+    /// distinguishable.
+    /// </summary>
+    private string SectorFill(int index)
+    {
+        if (index >= Sectors.Count)
+            return index % 2 == 0 ? "#4a1c68" : "#1a1038";
+
+        return Sectors[index].Tier switch
+        {
+            WheelTier.Nothing   => "#050308",
+            WheelTier.SpinAgain => "#5a2340",
+            WheelTier.Rare      => "url(#ftw-jackpot)",
+            WheelTier.Premium   => "#1b4d5a",
+            _                   => index % 2 == 0 ? "#4a1c68" : "#1a1038",
+        };
+    }
+
+    /// <summary>The SVG path of one sector, from the hub to the inner edge of the rim.</summary>
+    private string SectorPath(int index)
+    {
+        double step  = 360.0 / SectorCount;
+        double start = index * step - 90;
+        double end   = start + step;
+
+        (double x1, double y1) = Polar(start, 88);
+        (double x2, double y2) = Polar(end, 88);
+
+        return string.Create(Invariant, $"M100 100 L{x1:0.##} {y1:0.##} A88 88 0 0 1 {x2:0.##} {y2:0.##} Z");
+    }
+
+    /// <summary>
+    /// The position of a sector's amount on its middle line, closer to the hub than the icon so they do not
+    /// overlap.
+    /// </summary>
+    private (double X, double Y) AmountPosition(int index) => Polar(index * (360.0 / SectorCount) - 90 + (360.0 / SectorCount) / 2, 48);
+
+    /// <summary>The rotation that aligns the amount with its sector.</summary>
+    private string AmountRotation(int index)
+    {
+        double step  = 360.0 / SectorCount;
+        double angle = index * step + step / 2;
+        (double x, double y) = AmountPosition(index);
+        return string.Create(Invariant, $"rotate({angle:0.##} {x:0.##} {y:0.##})");
+    }
+
+    private static (double X, double Y) LampPosition(int index) => Polar(index * (360.0 / LampCount), 92.5);
+
+    private static (double X, double Y) Polar(double degrees, double radius)
+    {
+        double radians = degrees * Math.PI / 180.0;
+        return (100 + radius * Math.Cos(radians), 100 + radius * Math.Sin(radians));
+    }
+}

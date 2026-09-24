@@ -1,0 +1,155 @@
+@using Metaplay.Core.Model
+@page "/events/weekly"
+@layout MetaLayout
+@inherits MetaComponentBase
+@inject MetaplayClientService MetaplayService
+@inject NavigationManager Navigation
+
+@* The Weekly Event screen: phase, countdown, points target and reward tier.
+
+   Points are earned only by playing, so the screen has a Play button that starts matchmaking.
+
+   The reward becomes claimable when the points reach the target, and stays claimable through the review
+   period after scoring closes. It is granted only when the player claims it (docs/weekly-event.md). *@
+
+<ChildPageHeader Title="Weekly Event" Subtitle="Every finished game scores" />
+
+@if (!View.State.IsLive())
+{
+    <ActivityStateBlock State="View.State" SkeletonCardCount="2" />
+}
+else if (View.State == ActivityState.Unavailable)
+{
+    @* No event is scheduled. Show an empty state without a countdown, not an error
+       (docs/meta-shell.md, "MetaSnapshot"). *@
+    <ActivityStateBlock State="ActivityState.Unavailable" Title="No event scheduled"
+                Note="@View.Tagline" />
+}
+else
+{
+    <div class="m-card m-card--live m-card--featured m-card--tall">
+        <div class="m-card__eyebrow-row">
+            <span class="strip m-tag">@View.PhaseLabel</span>
+            @if (View.UntilStart is TimeSpan untilStart)
+            {
+                <MetaCountdown Remaining="untilStart" EndingSoonWithin="View.EndingSoonWithin"
+                               ExpiredText="Starting" />
+            }
+            else
+            {
+                <MetaCountdown Remaining="View.UntilEnd" EndingSoonWithin="View.EndingSoonWithin"
+                               ExpiredText="Event ended" />
+            }
+        </div>
+
+        <div class="m-card__head">
+            <MetaEmblem Name="shield" Accent="live" Size="xl" />
+            <div class="m-card__grow">
+                <p class="m-card__headline" data-testid="weekly-theme">@View.Theme</p>
+                <p class="m-card__note">@View.Tagline</p>
+            </div>
+        </div>
+
+        @if (View.UntilStart == null)
+        {
+            <div class="m-inset">
+                <div class="m-card__eyebrow-row">
+                    <span class="m-card__eyebrow">Your score</span>
+                    <span class="m-live__points" data-testid="weekly-points">
+                        @Currencies.Format(View.Points) / @Currencies.Format(View.TargetPoints) points
+                    </span>
+                </div>
+                <MetaProgress Current="View.Points" Target="View.TargetPoints" Label="Event points" ShowNumbers="false" />
+            </div>
+        }
+
+        <div class="m-card__foot">
+            @if (View.HasClaimableReward)
+            {
+                <MetaButton Variant="MetaButtonVariant.Claim" Class="m-btn--key" Block="true" Size="MetaButtonSize.Lg"
+                            TestId="weekly-claim" OnClick="Claim">@ButtonLabels.Claim</MetaButton>
+            }
+            else if (View.RewardClaimed)
+            {
+                <MetaStatusLabel Block="true" Size="MetaButtonSize.Lg" TestId="weekly-claimed">Reward collected</MetaStatusLabel>
+            }
+            else if (View.IsScoring)
+            {
+                <MetaButton Variant="MetaButtonVariant.Hero" Block="true" Size="MetaButtonSize.Lg"
+                            TestId="weekly-play" OnClick="Play">@ButtonLabels.Play</MetaButton>
+            }
+            else if (View.UntilStart != null)
+            {
+                <MetaStatusLabel Block="true" Size="MetaButtonSize.Lg" TestId="weekly-preview">Opens soon</MetaStatusLabel>
+            }
+            else
+            {
+                <MetaStatusLabel Block="true" Size="MetaButtonSize.Lg" TestId="weekly-over">Scoring has closed</MetaStatusLabel>
+            }
+        </div>
+    </div>
+
+    <MetaSectionHeading Label="Reward tier" Accent="live" />
+    <div class="m-card">
+        <div class="m-inset">
+            <RewardPreview Bundle="View.Reward" Showcase="true" />
+        </div>
+        <p class="m-card__note m-card__note--centred" data-testid="weekly-reward-note">
+            @RewardNote
+        </p>
+    </div>
+
+}
+
+<RewardReveal Stage="_revealStage" Bundle="_claimedReward" Title="Event complete"
+              OnContinue="() => _revealStage = RewardRevealStage.Idle"
+              OnRetry="Retry" />
+
+@code {
+    private RewardRevealStage _revealStage   = RewardRevealStage.Idle;
+    private RewardView        _claimedReward = RewardView.Empty;
+
+    private WeeklyEventView View => Meta.Snapshot.WeeklyEvent;
+
+    /// <summary>
+    /// The text under the reward tier for the event's current phase. It says that the reward is claimed on
+    /// reaching the target, and while the reward is unclaimed it warns that the reward is lost when the event
+    /// closes.
+    /// </summary>
+    private string RewardNote =>
+        View.RewardClaimed  ? "Collected."
+        : View.HasClaimableReward ? "Yours to collect. It goes when the event closes."
+        : View.UntilStart != null ? $"Claimable as soon as you reach {Currencies.Format(View.TargetPoints)} points."
+        : View.IsScoring ? $"Claimable the moment you reach {Currencies.Format(View.TargetPoints)} points."
+        : "Scoring has closed for this event.";
+
+    private void Play() => MetaplayService.EnterMatchmaking();
+
+    /// <summary>
+    /// Claims the event reward and shows the reward reveal.
+    /// <para>
+    /// The reveal shows Granted only when the claim action succeeded, and Failed otherwise. Without a session
+    /// (offline mode and fixture scenarios) the result is null and the reveal runs without changing any state.
+    /// </para>
+    /// </summary>
+    private void Claim()
+    {
+        _claimedReward = View.Reward;
+
+        MetaActionResult? result = Meta.ClaimWeeklyEvent(View.EventId);
+        _revealStage = RewardRevealStages.AfterClaim(result);
+    }
+
+    /// <summary>
+    /// Retries the claim only if the reward is still claimable. After a refusal the snapshot is rebuilt from
+    /// the committed state. The most common refusal is that the reward was already claimed, on this client or
+    /// another, and retrying would fail again, so the reveal is closed instead.
+    /// </summary>
+    private void Retry()
+    {
+        if (View.HasClaimableReward)
+            Claim();
+        else
+            _revealStage = RewardRevealStage.Idle;
+    }
+}

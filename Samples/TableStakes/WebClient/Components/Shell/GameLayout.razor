@@ -1,0 +1,13 @@
+@inherits LayoutComponentBase
+
+@* The layout for game routes: no HUD and no navigation. Each route declares its layout (meta routes use
+   MetaLayout, game routes use GameLayout), so no screen decides at runtime whether the shell is shown
+   (docs/meta-shell.md, "Layouts").
+
+   The phone frame is drawn by #app on every route (app.css, "The phone frame"), not by this layout. *@
+
+<main>
+    @Body
+</main>
+
+<ConnectionOverlay />

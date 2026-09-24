@@ -1,0 +1,53 @@
+@namespace WebClient.Components.TableUI
+@using WebClient.Integration
+@using WebClient.Meta
+
+@* A short label, such as "+1 point!" or "TRUMP CARD!", that appears over the element it is rendered inside,
+   rises and fades. It is positioned by CSS relative to its parent, with no coordinates or script. It is
+   aria-hidden because the fact it shows, such as the score or the played card, is already on screen.
+
+   It removes itself from the DOM when its lifetime ends, so an invisible label never covers the table and
+   blocks input. With reduced motion the lifetime is shorter and the stylesheet shows the label without
+   animation. *@
+
+@if (!_lifetimeEnded)
+{
+    <span class="ts-float ts-float--@VariantCssName" data-testid="@TestId" data-variant="@Variant" aria-hidden="true" style="@FloatStyle"><span class="ts-float__text">@Text</span></span>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Text { get; set; } = default!;
+
+    /// <summary>The label's visual style.</summary>
+    [Parameter] public FloatingTextVariant Variant { get; set; } = FloatingTextVariant.Point;
+
+    /// <summary>How long the label animates, in milliseconds. The table sets it to the length of the animation
+    /// beat it belongs to, so a <c>beatMs</c> override keeps the label visible for the whole beat.</summary>
+    [Parameter] public int DurationMs { get; set; } = FloatingTextTiming.FullMotionLifetimeMs;
+
+    /// <summary>The delay before the animation starts, in milliseconds. Used to stagger stacked labels.</summary>
+    [Parameter] public int DelayMs { get; set; }
+
+    /// <summary>The label's index in a stack of labels on the same element. Each index raises the label by one step.</summary>
+    [Parameter] public int StackIndex { get; set; }
+
+    [Parameter] public string TestId { get; set; } = "floating-text";
+
+    private bool _lifetimeEnded;
+
+    /// <summary>The variant name in lower case, as used in the ts-float modifier class.</summary>
+    private string VariantCssName => Variant.ToString().ToLowerInvariant();
+
+    private string FloatStyle =>
+        FormattableString.Invariant($"--ts-float-ms:{DurationMs}ms; --ts-float-delay:{DelayMs}ms; --ts-float-stack:{FloatingTextTiming.StackOffsetRem(StackIndex)}rem");
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _lifetimeEnded)
+            return;
+
+        await Task.Delay(FloatingTextTiming.LifetimeMs(DelayMs, DurationMs, MotionPreference.ReducedMotion));
+        _lifetimeEnded = true;
+        await InvokeAsync(StateHasChanged);
+    }
+}

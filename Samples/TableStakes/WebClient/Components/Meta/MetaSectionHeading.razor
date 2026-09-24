@@ -1,0 +1,28 @@
+@* A section heading with a decorative line and lozenge on each side of the label. It separates sections of a
+   screen without adding another card. The lines and lozenges are hidden from assistive technology. It
+   renders as a span so it is valid inside a card that is a button, such as NextUpCard. *@
+
+<span class="m-rule @AccentClass @AlignClass" data-testid="rule">
+    <span class="m-rule__line" aria-hidden="true"></span>
+    <span class="m-rule__gem" aria-hidden="true"></span>
+    <span class="m-rule__label">@Label</span>
+    <span class="m-rule__gem" aria-hidden="true"></span>
+    <span class="m-rule__line" aria-hidden="true"></span>
+</span>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    /// <summary>claim or live. Null uses the shell's default gold.</summary>
+    [Parameter] public string? Accent { get; set; }
+
+    /// <summary>
+    /// "start" aligns the label to the leading edge with one line to its right, for a card's eyebrow. Any other
+    /// value centres the label, for a section heading.
+    /// </summary>
+    [Parameter] public string? Align { get; set; }
+
+    private string? AccentClass => Accent == null ? null : $"m-rule--{Accent}";
+
+    private string? AlignClass => Align == "start" ? "m-rule--start" : null;
+}

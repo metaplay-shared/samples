@@ -1,0 +1,10 @@
+# Example Helm values for a cloud server deployment.
+#
+# One file per environment, named "<environment>-server.yaml" (see Backend/Server/Config/README.md).
+#
+# The WebSocket gateway (port 9380, exposed as wss by the load balancer) is what lets the browser-based
+# Blazor WASM WebClient — served from the PublicWebApi "-public" host — open its game connection. It
+# needs no configuration: the server listens on it by default, and the metaplay-gameserver chart always
+# serves it. See docs/architecture.md, "Project configuration".
+#
+# Add per-environment overrides below as the deployment needs them.

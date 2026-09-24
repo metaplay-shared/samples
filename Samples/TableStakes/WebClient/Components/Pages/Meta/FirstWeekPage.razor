@@ -1,0 +1,216 @@
+@using Metaplay.Core.Model
+@page "/events/first-week"
+@layout MetaLayout
+@inherits MetaComponentBase
+@inject MetaplayClientService MetaplayService
+@inject NavigationManager Navigation
+
+@* The first-week event screen. It is a personal multi-day event. Each day's goal is completed by playing
+   matches, and a day that is not completed in time is missed (docs/first-week-event.md).
+
+   The day's deadline is shown twice: as a countdown in the header card and as a Play button on the unfinished
+   goal, so the player does not assume that logging in completes the day.
+
+   Every day is listed from the first visit. A missed day is labelled as missed without suggesting the event
+   is over, and an earned reward stays claimable with no deadline. *@
+
+<ChildPageHeader Title="@View.Title" Subtitle="Play to finish each day" />
+
+@if (!View.State.IsLive())
+{
+    <ActivityStateBlock State="View.State" SkeletonCardCount="3" />
+}
+else if (View.State == ActivityState.Expired)
+{
+    @* The text says that only the day expired, not the event. The live feature never reports Expired (it
+       marks the day as missed instead), but fixtures can still produce this state. *@
+    <ActivityStateBlock State="ActivityState.Expired" Title="Today's goal expired"
+                Note="Its window closed unfinished. A new day opens tomorrow — the event itself is still running." />
+}
+else if (View.Days.Count == 0)
+{
+    <ActivityStateBlock State="ActivityState.Unavailable" Title="No event right now"
+                Note="Your first week has not started yet. Play a game and it opens up." />
+}
+else
+{
+    <div class="m-card m-card--live m-card--featured m-card--tall">
+        <div class="m-card__head">
+            <MetaEmblem Name="trophy" Accent="gold" Size="xl" />
+            <div class="m-card__grow">
+                @if (View.HasEnded)
+                {
+                    <p class="m-card__headline">First week complete</p>
+                    <p class="m-card__title" data-testid="first-week-summary">
+                        @View.ClaimedDays claimed · @View.MissedDays missed · @View.ClaimableDays ready
+                    </p>
+                    <p class="m-card__note">The week is over. Anything you earned is still yours to collect.</p>
+                }
+                else
+                {
+                    <p class="m-card__headline">Day @View.CurrentDay of @View.TotalDays</p>
+                    <MetaCountdown Remaining="View.UntilDeadline" EndingSoonWithin="View.EndingSoonWithin"
+                                   ExpiredText="Today's goal expired" />
+                    <p class="m-card__title" data-testid="first-week-summary">@View.GoalLine</p>
+                    <p class="m-card__note" data-testid="first-week-instruction">@View.Instruction</p>
+                }
+            </div>
+        </div>
+
+        <div class="m-inset m-inset--gold">
+            <MetaRail Steps="Rail" Label="Event days" />
+        </div>
+    </div>
+
+    @if (!View.HasEnded)
+    {
+        <MetaSectionHeading Label="Today" />
+
+        @foreach (FirstWeekDayView day in View.Days.Where(d => d.Day == View.CurrentDay))
+        {
+            @Tile(day, "first-week-today")
+        }
+    }
+
+    <MetaSectionHeading Label="All seven days" />
+
+    @foreach (FirstWeekDayView day in View.Days)
+    {
+        @Tile(day, "first-week-day")
+    }
+
+    @* A preview of the last day's reward, shown from the first visit to encourage the player to return. The
+       last day's goal is a single match, so missing earlier days does not prevent it. *@
+    <div class="m-card m-card--live">
+        <span class="m-card__eyebrow">Day @View.TotalDays</span>
+        <div class="m-card__row">
+            <div class="m-card__grow">
+                <span class="m-card__title">Come back for the finale</span>
+                <span class="m-card__note">One match on day @View.TotalDays, whatever happened on the days before it.</span>
+            </div>
+            <div class="m-prize">
+                <span class="m-prize__cap">Day @View.TotalDays reward</span>
+                <MetaEmblem Name="chest" Accent="gold" Size="lg" />
+                <RewardPreview Bundle="View.GrandPrize" Compact="true" />
+            </div>
+        </div>
+    </div>
+
+}
+
+<RewardReveal Stage="_revealStage" Bundle="_claimedReward" Title="Day complete"
+              OnContinue="() => _revealStage = RewardRevealStage.Idle"
+              OnRetry="Retry" />
+
+@code {
+    private RewardRevealStage  _revealStage   = RewardRevealStage.Idle;
+    private RewardView         _claimedReward = RewardView.Empty;
+    private FirstWeekDayView?  _lastClaimedDay;
+
+    private FirstWeekView View => Meta.Snapshot.FirstWeek;
+
+    /// <summary>The event days as rail steps, built by <see cref="StepRailBuilder.ForFirstWeekDays"/>, which is unit-tested.</summary>
+    private IReadOnlyList<RailStep> Rail => StepRailBuilder.ForFirstWeekDays(View);
+
+    /// <summary>
+    /// One day's tile. Each <see cref="FirstWeekDayState"/> has its own status text (<see cref="Status"/>), so
+    /// the state is not shown by colour alone.
+    /// </summary>
+    private RenderFragment Tile(FirstWeekDayView day, string testId) => __builder =>
+    {
+        <div class="m-card @(day.IsClaimable ? "m-card--claim" : day.State == FirstWeekDayState.InProgress ? "m-card--live" : null)"
+             data-testid="@testId">
+            <div class="m-goal @(day.State == FirstWeekDayState.Claimed || day.IsClaimable ? "m-goal--complete" : null)">
+                <MetaEmblem Name="@Emblem(day)" Accent="@Accent(day)" />
+
+                <div class="m-goal__body">
+                    <span class="m-goal__title">Day @day.Day · @day.Title</span>
+                    <span class="m-goal__meta">
+                        <span class="m-goal__count">@day.Progress / @day.Target</span>
+                        <RewardPreview Bundle="day.Reward" Compact="true" />
+                    </span>
+                    <span class="m-goal__note" data-testid="@($"{testId}-state")">@Status(day)</span>
+                    @if (day.State == FirstWeekDayState.InProgress)
+                    {
+                        <MetaProgress Current="day.Progress" Target="day.Target" Label="@day.Title" ShowNumbers="false" />
+                    }
+                </div>
+
+                @if (day.IsClaimable)
+                {
+                    <MetaButton Variant="MetaButtonVariant.Claim" Size="MetaButtonSize.Sm" TestId="@($"{testId}-claim")"
+                                OnClick="() => Claim(day)">@ButtonLabels.Claim</MetaButton>
+                }
+                else if (day.State == FirstWeekDayState.Claimed)
+                {
+                    <MetaStatusLabel Size="MetaButtonSize.Sm" TestId="@($"{testId}-claimed")">Claimed</MetaStatusLabel>
+                }
+                else if (day.State == FirstWeekDayState.InProgress)
+                {
+                    <MetaButton Variant="MetaButtonVariant.Live" Size="MetaButtonSize.Sm" TestId="@($"{testId}-play")"
+                                OnClick="OpenPlay">@ButtonLabels.Play</MetaButton>
+                }
+                else
+                {
+                    <MetaEmblem Name="lock" Accent="locked" />
+                }
+            </div>
+        </div>
+    };
+
+    private static string Emblem(FirstWeekDayView day) => day.State switch
+    {
+        FirstWeekDayState.Claimed     => "check",
+        FirstWeekDayState.RewardReady => "chest",
+        FirstWeekDayState.InProgress  => "target",
+        FirstWeekDayState.Missed      => "lock",
+        _                             => "lock",
+    };
+
+    private static string Accent(FirstWeekDayView day) => day.State switch
+    {
+        FirstWeekDayState.Claimed     => "claim",
+        FirstWeekDayState.RewardReady => "claim",
+        FirstWeekDayState.InProgress  => "live",
+        _                             => "locked",
+    };
+
+    /// <summary>
+    /// The status text for a day. "Reward ready" has no deadline, because an earned reward never expires.
+    /// </summary>
+    private static string Status(FirstWeekDayView day) => day.State switch
+    {
+        FirstWeekDayState.Claimed     => "Claimed",
+        FirstWeekDayState.RewardReady => "Reward ready",
+        FirstWeekDayState.InProgress  => "In progress",
+        FirstWeekDayState.Missed      => "Missed · This day has ended",
+        _                             => $"Opens on day {day.Day}",
+    };
+
+    /// <summary>
+    /// Starts matchmaking, because day goals progress by playing. The searching dialog opens over this screen.
+    /// </summary>
+    private void OpenPlay() => MetaplayService.EnterMatchmaking();
+
+    /// <summary>
+    /// Claims one day's reward and shows the reward reveal.
+    /// <para>
+    /// The reveal shows Granted only when the claim action succeeded, and Failed otherwise. Without a session
+    /// (offline mode and fixture scenarios) the result is null and the reveal runs without changing any state.
+    /// </para>
+    /// </summary>
+    private void Claim(FirstWeekDayView day)
+    {
+        _lastClaimedDay = day;
+        _claimedReward  = day.Reward;
+
+        MetaActionResult? result = Meta.ClaimFirstWeekDay(day.Id);
+        _revealStage = RewardRevealStages.AfterClaim(result);
+    }
+
+    private void Retry()
+    {
+        if (_lastClaimedDay != null)
+            Claim(_lastClaimedDay);
+    }
+}

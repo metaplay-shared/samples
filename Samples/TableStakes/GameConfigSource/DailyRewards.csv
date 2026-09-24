@@ -1,0 +1,8 @@
+Id #key,Steps[].Id,Steps[].Step,Steps[].Reward
+daily.v1,daily.v1.step1,1,150 Coins
+,daily.v1.step2,2,170 Coins
+,daily.v1.step3,3,190 Coins
+,daily.v1.step4,4,210 Coins
+,daily.v1.step5,5,240 Coins
+,daily.v1.step6,6,270 Coins
+,daily.v1.step7,7,"330 Coins, 1 SpinTokens"

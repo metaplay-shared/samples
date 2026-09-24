@@ -1,0 +1,11 @@
+@* A transient status message that says what happened. It never asks a question. It disappears after a few
+   seconds, so it must never be the only place that shows information the player needs. *@
+
+@if (!string.IsNullOrEmpty(Message))
+{
+    <div class="m-toast" role="status" aria-live="polite" data-testid="toast">@Message</div>
+}
+
+@code {
+    [Parameter] public string? Message { get; set; }
+}

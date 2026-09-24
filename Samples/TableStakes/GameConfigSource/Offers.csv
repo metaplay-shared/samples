@@ -1,0 +1,7 @@
+OfferId #key,DisplayName,WhyThisOffer,IconId,Contents,InAppProduct,PriceCurrency,PriceAmount,MaxPurchasesPerPlayer,MaxPurchasesPerActivation,Segments[0],PrecursorOffer
+starter-pack-1,Starter Pack,Available during your first week.,chest-plum,"2000 Coins, 300 Gems, 1 SpinTokens",starter_pack_1,,,1,,first_week_non_purchaser,
+starter-pack-2,Starter Pack II,Unlocked once your Starter Pack has run its course.,chest-gold,"5000 Coins, 700 Gems, 2 SpinTokens",starter_pack_2,,,1,,,starter-pack-1
+gem-booster-pack,Gem Booster Pack,For players who keep coming back to the table.,card-pack,"10000 Coins, 1250 Gems, 3 SpinTokens",gem_booster_pack,,,1,,engaged_non_purchaser,
+coin-vault,Coin Vault,A coin-only vault for anyone building toward a big purchase.,vault,25000 Coins,coin_vault,,,1,,,
+lucky-spin-bundle,Lucky Spin Bundle,"Five spins and a pile of coins, paid for in gems.",wheel,"2000 Coins, 5 SpinTokens",,Gems,500,1,,,
+daily-spin-deal,Daily Spin Deal,A coin deal for everyone.,spin,1 SpinTokens,,Coins,750,,1,,

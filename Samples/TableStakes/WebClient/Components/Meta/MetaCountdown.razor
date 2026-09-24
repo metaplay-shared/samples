@@ -1,0 +1,76 @@
+@using WebClient.Meta
+@using WebClient.Services
+@inject MetaStateService Meta
+@implements IDisposable
+
+@* A countdown in the shell's standard format (Countdown.Format) and phases (Countdown.PhaseOf).
+
+   The "ending soon" phase adds a word and a style, not only a colour. An expired countdown shows ExpiredText
+   instead of negative time or a frozen 00:00.
+
+   It re-renders only when the displayed text changes, not on every MetaStateService tick. *@
+
+@if (Phase == CountdownPhase.None)
+{
+    @* No deadline: render nothing, not even the expired state, because "no deadline" is not "expired". *@
+}
+else if (Phase == CountdownPhase.Expired)
+{
+    <span class="m-clock m-clock--expired" data-testid="countdown-expired">
+        <MetaIcon Name="clock" Size="16" />
+        <span>@ExpiredText</span>
+    </span>
+}
+else
+{
+    <span class="m-clock @(Phase == CountdownPhase.EndingSoon ? "m-clock--soon" : null)"
+          data-testid="countdown"
+          role="timer"
+          aria-label="@AccessibleText">
+        <MetaIcon Name="clock" Size="16" />
+        <span aria-hidden="true">@Text</span>
+        @if (Phase == CountdownPhase.EndingSoon)
+        {
+            <span class="m-clock__soon-word" aria-hidden="true">left</span>
+        }
+    </span>
+}
+
+@code {
+    /// <summary>The time left. Null means there is no deadline and renders nothing.</summary>
+    [Parameter, EditorRequired] public TimeSpan? Remaining { get; set; }
+
+    /// <summary>The remaining time at which the countdown switches to "ending soon". Defaults to Countdown.EndingSoonThreshold.</summary>
+    [Parameter] public TimeSpan? EndingSoonWithin { get; set; }
+
+    /// <summary>The text shown once the time is up. Callers should pass text that says what ended.</summary>
+    [Parameter] public string ExpiredText { get; set; } = "Expired";
+
+    private string _shown = "";
+
+    private TimeSpan Left => Remaining ?? TimeSpan.Zero;
+
+    private CountdownPhase Phase =>
+        Countdown.PhaseOf(Remaining, EndingSoonWithin ?? Countdown.EndingSoonThreshold);
+
+    private string Text => Countdown.Format(Left);
+
+    private string AccessibleText => Phase == CountdownPhase.EndingSoon
+        ? $"Ending soon: {Text} left"
+        : $"{Text} left";
+
+    protected override void OnInitialized() => Meta.OnTicked += OnTicked;
+
+    /// <summary>Re-renders only when the displayed text has changed since the last tick.</summary>
+    private void OnTicked()
+    {
+        string next = Text;
+        if (next == _shown)
+            return;
+
+        _shown = next;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => Meta.OnTicked -= OnTicked;
+}

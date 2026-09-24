@@ -1,0 +1,133 @@
+@inherits LayoutComponentBase
+@using WebClientBase.Configuration
+@using WebClientBase.Services
+@inject IMetaplayConnectionService MetaplayService
+@inject NavigationManager NavigationManager
+@inject WebClientConfig Config
+@implements IDisposable
+
+@* A transparent debug bar over the page. The header has pointer-events: none so taps reach the page below it,
+   and the controls cluster turns pointer events back on for itself. *@
+<header class="mp-debugbar" style="pointer-events: none;">
+    <div class="mp-column">
+        <div class="mp-debugbar__row" style="padding-top: env(safe-area-inset-top);">
+            <div class="mp-debugbar__cluster" style="pointer-events: auto;">
+                @if (HeaderBranding != null)
+                {
+                    @HeaderBranding
+                }
+
+                @if (!string.IsNullOrEmpty(GetPlayerIdText()))
+                {
+                    <span class="mp-debugbar__chip" style="color: var(--text-muted); background: rgba(0,0,0,0.35); backdrop-filter: blur(4px);">
+                        @GetPlayerIdText()
+                    </span>
+                }
+
+                <div class="mp-debugbar__chip" style="background: rgba(0,0,0,0.35); backdrop-filter: blur(4px);">
+                    <div class="mp-debugbar__dot @GetConnectionDotClass()"></div>
+                    <span style="color: var(--text-secondary);">@GetConnectionText()</span>
+                </div>
+
+                @if (MetaplayService.ConnectionStatus == ConnectionStatus.Error ||
+                     MetaplayService.ConnectionStatus == ConnectionStatus.Disconnected)
+                {
+                    <button class="mp-debugbar__button"
+                            style="background: var(--progress, #60a5fa); color: white;"
+                            @onclick="OnReconnect">
+                        Reconnect
+                    </button>
+                }
+                @if (MetaplayService.ConnectionStatus == ConnectionStatus.Connected)
+                {
+                    <button type="button"
+                            class="mp-debugbar__button"
+                            style="background: rgba(251, 113, 133, 0.15); color: var(--danger, #fb7185);"
+                            @onclick="OnReset">
+                        Reset
+                    </button>
+                }
+
+                @HeaderActions
+            </div>
+        </div>
+    </div>
+</header>
+
+<main class="mp-column mp-page">
+    @Body
+</main>
+
+@* The connection shell covers every screen and this header, so while the connection is not working, the whole
+   app stops taking input and no screen has to check the connection state itself (docs/web-client.md,
+   "Connection trouble"). *@
+<ConnectionOverlay />
+
+@code {
+    /// <summary>
+    /// Branding content for the header. Nothing is rendered in its place when it is null.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? HeaderBranding { get; set; }
+
+    /// <summary>
+    /// Additional controls rendered in the header after the connection status and the Reconnect or Reset button.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? HeaderActions { get; set; }
+
+    protected override void OnInitialized()
+    {
+        MetaplayService.OnStateChanged += OnStateChanged;
+    }
+
+    private void OnStateChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private string GetConnectionDotClass()
+    {
+        return MetaplayService.ConnectionStatus switch
+        {
+            ConnectionStatus.Connected => "mp-debugbar__dot--connected",
+            ConnectionStatus.Connecting => "mp-debugbar__dot--connecting",
+            ConnectionStatus.Error => "mp-debugbar__dot--error",
+            _ => ""
+        };
+    }
+
+    private string GetConnectionText()
+    {
+        return MetaplayService.ConnectionStatus switch
+        {
+            ConnectionStatus.Connected => "Connected",
+            ConnectionStatus.Connecting => "Connecting...",
+            ConnectionStatus.Error => "Error",
+            _ => "Offline"
+        };
+    }
+
+    private string GetPlayerIdText()
+    {
+        return MetaplayService.PlayerId?.ToString() ?? "";
+    }
+
+    private async Task OnReconnect()
+    {
+        await MetaplayService.ConnectAsync();
+    }
+
+    private void OnReset()
+    {
+        if (MetaplayService.Reset())
+        {
+            EnvironmentLink.NavigateTo(NavigationManager, "/", forceLoad: true);
+        }
+    }
+
+    public void Dispose()
+    {
+        MetaplayService.OnStateChanged -= OnStateChanged;
+    }
+}

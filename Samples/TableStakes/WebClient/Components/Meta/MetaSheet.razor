@@ -1,0 +1,22 @@
+@* The modal sheet for the meta layer. Confirmations, offer details and rules panels all use it so they behave
+   the same way. It is a Panel anchored to the bottom of the screen at the content-column width, with a close
+   button, and it closes on a scrim tap when DismissOnScrim is true.
+
+   Open it only in response to a player action, never on app start (docs/meta-shell.md). *@
+
+<ModalPanel Open="Open" Anchor="PanelAnchor.Bottom" Width="PanelWidth.Wide"
+       TestId="@TestId" Title="@Title" ShowClose="true"
+       DismissOnScrim="DismissOnScrim" OnDismiss="OnDismiss">
+    @ChildContent
+</ModalPanel>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string TestId { get; set; } = "sheet";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public EventCallback OnDismiss { get; set; }
+
+    /// <summary>Whether tapping the scrim closes the sheet. Set it to false for confirmations.</summary>
+    [Parameter] public bool DismissOnScrim { get; set; } = true;
+}

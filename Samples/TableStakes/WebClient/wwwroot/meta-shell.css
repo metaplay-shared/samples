@@ -1,0 +1,3657 @@
+/* ===========================================================================
+   The meta-game shell: the screens around the table
+   Loaded after app-base.css and app.css (see index.html). The design tokens are declared in app.css
+   (docs/meta-shell.md, "Styles and design tokens"). Every --m-* name below is an alias of a token, so each
+   value has one definition.
+   =========================================================================== */
+
+:root {
+    /* --- Gold. Only for primary actions, rewards, rarity and selection, not for ordinary borders. --- */
+    --m-gold:        var(--gold);
+    --m-gold-light:  var(--gold-light);
+    --m-gold-deep:   var(--gold-deep);
+
+    /* --- Accent colours, one per meaning. --- */
+    --m-claim:       var(--claim);       /* ready, claimable, completed */
+    --m-live:        var(--live);        /* live now, time-limited, ending soon */
+    --m-danger:      var(--danger);
+
+    /* Light variants for flashes, the same way --m-gold-light relates to --m-gold. */
+    --m-live-light:     var(--live-light);
+    --m-progress-light: var(--progress-light);
+
+    /* --- Text colours. --- */
+    --m-ink:         var(--ink);
+    --m-ink-2:       var(--ink-2);
+    --m-ink-3:       var(--ink-3);
+    --m-on-gold:     var(--on-gold);
+
+    /* --- Lines. --- */
+    --m-hairline-2:  var(--hairline-strong);
+    --m-gold-line:   var(--line-gilt);
+
+    /* --- Radii and spacing. --m-r-sm and --m-r-lg have their own values because the tokens have no matching
+       radius. --- */
+    --m-r-sm:  0.5rem;
+    --m-r:     var(--r-card);
+    --m-r-lg:  1.25rem;
+    --m-r-pill: var(--r-pill);
+
+    --m-gap:      var(--gap);
+    --m-pad:      var(--pad);
+
+    /* --- Chrome heights. The safe-area calculations below read them. --- */
+    --m-hud-h:    var(--hud-h);
+    --m-nav-h:    var(--nav-h);
+    /* The bottom safe area, capped in app.css (--safe-b). The top inset is used in full, from env(). */
+    --m-safe-b:   var(--safe-b);
+
+    /* --- The maximum content column width. --- */
+    --m-col:      var(--col);
+
+    /* --- Motion durations. Use these instead of new values. --- */
+    --m-t-fast:  var(--t-fast);
+    --m-t:       var(--t);
+    --m-t-slow:  var(--t-slow);
+    /* The reward reveal's exit duration. RewardReveal.ExitMs in C# must match it. */
+    --m-reveal-exit: var(--reveal-exit);
+    --m-ease:    var(--ease);
+
+    /* --- Feedback: hover lift, press scale, hover glow, and the opacity of a disabled control. --- */
+    --m-press-scale:      var(--press-scale);
+    --m-hover-lift:       var(--hover-lift);
+    --m-hover-glow:       var(--hover-glow);
+    --m-disabled-opacity: var(--disabled-opacity);
+}
+
+/* The shell's z-index layers, taken from the layer scale in app-base.css. Meta layer rules use only these
+   and never set their own z-index values.
+
+   All of them are below --layer-conn-pill, so the connection shell is always above a reward reveal. */
+:root {
+    --layer-meta-chrome: var(--layer-chrome);
+    --layer-meta-toast:  var(--layer-toast);
+    --layer-meta-reward: var(--layer-reward);
+    --layer-meta-fx:     var(--layer-fx);
+}
+
+/* ---------------------------------------------------------------------------
+   The shell frame: a fixed HUD, a fixed navigation bar, and one scroll surface between them
+   --------------------------------------------------------------------------- */
+.m-shell {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    background:
+        radial-gradient(ellipse 120% 55% at 50% 0%, var(--ground-pool) 0%, transparent 62%),
+        radial-gradient(ellipse 90% 45% at 50% 100%, var(--ground-pool) 0%, transparent 70%),
+        var(--ground);
+    color: var(--m-ink);
+}
+
+/* The only scroll surface. Its padding keeps the content clear of the two bars. A spacer element would scroll
+   away and let the last card slide under the navigation bar. */
+.m-shell__main {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    /* An incoming screen is offset sideways during its entrance (see "Turning the page"). Hiding the horizontal
+       overflow keeps that offset from being scrollable. `clip` would compute to `hidden` anyway, because the
+       other axis is `auto` (CSS Overflow 3). */
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    /* No -webkit-overflow-scrolling: on iOS it makes this surface a stacking context, and the navigation bar
+       then covers every sheet a screen opens. */
+    padding:
+        calc(var(--m-hud-h) + env(safe-area-inset-top) + 0.5rem)
+        calc(var(--m-pad) + env(safe-area-inset-right))
+        calc(var(--m-nav-h) + var(--m-safe-b) + var(--m-pad))
+        calc(var(--m-pad) + env(safe-area-inset-left));
+}
+
+/* ---------------------------------------------------------------------------
+   Drag scrolling
+   Surfaces marked `data-drag-scroll` can be scrolled by dragging with the mouse (drag-scroll.js). The script
+   sets `is-drag-scrollable` on the surface under the pointer only when a drag there would scroll it, and the
+   grab cursor below uses that class instead of the attribute.
+
+   The media query limits the cursor rules to devices with a mouse, the only pointer type the script handles.
+   --------------------------------------------------------------------------- */
+@media (hover: hover) and (pointer: fine) {
+    [data-drag-scroll].is-drag-scrollable {
+        cursor: grab;
+    }
+
+    body.is-drag-scrolling,
+    body.is-drag-scrolling * {
+        cursor: grabbing;
+    }
+}
+
+/* Prevent text selection during a mouse drag, which would otherwise select text and interfere with the
+   scroll. The rule applies only while the drag runs. */
+body.is-drag-scrolling,
+body.is-drag-scrolling * {
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+/* The column is at least as tall as the scroll surface, so a short screen can centre its content with
+   `flex: 1` and `justify-content`. Taller content is not affected. */
+.m-shell__column {
+    width: 100%;
+    max-width: var(--m-col);
+    margin: 0 auto;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--m-gap);
+}
+
+/* ---------------------------------------------------------------------------
+   Screen transitions
+   A new screen slides in, or rises when it has no direction, and the HUD and navigation stay still.
+   ScreenTransitions.cs picks the direction from the routes and passes it as `data-screen-in`. Only the
+   incoming screen is animated, because the router removes the outgoing screen at once.
+   The fill mode must be `backwards`, not `forwards`. A translated element is the containing block for its
+   `position: fixed` descendants, including every sheet the shell opens, and a kept final translate would
+   position those sheets against the screen instead of the app. The individual `translate` property is used
+   instead of `transform`, so a screen's own transform is kept.
+   --------------------------------------------------------------------------- */
+.m-shell__column[data-screen-in] {
+    /* The entrance offset, as a share of the column width so it looks the same at any width, and its
+       duration. They are not the shared motion tokens, because with the shared short duration and easing the
+       movement ended before the player could see its direction and looked like a flicker. */
+    --m-screen-shift: 28%;
+    --m-screen-t: 0.34s;
+    animation-name: var(--m-screen-in);
+    animation-duration: var(--m-screen-t);
+    /* An ease-out that keeps moving through the middle of the entrance. The shared --m-ease covers most of the
+       distance in the first frames, which suits a control but is too fast for a screen. */
+    animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+    animation-fill-mode: backwards;
+}
+
+/* Each direction only sets the animation name, and the rule above plays it. The reduced-motion rule below
+   then needs to override only that one rule, however many directions are added. */
+.m-shell__column[data-screen-in="forward"] { --m-screen-in: m-screen-from-right; }
+.m-shell__column[data-screen-in="back"]    { --m-screen-in: m-screen-from-left; }
+.m-shell__column[data-screen-in="arrive"]  { --m-screen-in: m-screen-arrive; }
+
+/* The fade ends early and the slide continues, so most of the movement is visible at full opacity. */
+@keyframes m-screen-from-right {
+    0%   { opacity: 0; translate: var(--m-screen-shift) 0; }
+    45%  { opacity: 1; }
+    100% { opacity: 1; translate: none; }
+}
+
+@keyframes m-screen-from-left {
+    0%   { opacity: 0; translate: calc(-1 * var(--m-screen-shift)) 0; }
+    45%  { opacity: 1; }
+    100% { opacity: 1; translate: none; }
+}
+
+@keyframes m-screen-arrive {
+    from { opacity: 0; translate: 0 0.4rem; }
+    to   { opacity: 1; translate: none; }
+}
+
+/* Reduced motion: the screen appears without animation. The header, the title and the navigation show where
+   the player is. */
+@media (prefers-reduced-motion: reduce) {
+    .m-shell__column[data-screen-in] {
+        animation: none;
+    }
+}
+
+/* A note shown when a `?meta=` scenario is replacing part of this screen's state while a real player is
+   connected. It is deliberately unstyled, because it is a development label, not part of the game UI. */
+.m-authored {
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    border: 1px dashed var(--m-gold-line);
+    border-radius: 0.5rem;
+    background: rgba(245, 197, 66, 0.08);
+    color: var(--m-ink-2);
+    font-size: 0.7rem;
+    line-height: 1.4;
+}
+
+.m-authored strong {
+    color: var(--m-gold);
+}
+
+/* ---------------------------------------------------------------------------
+   The HUD: the player's balances
+   Only the wallet. The player's name and avatar are on Home's identity row, which also links to Profile.
+   One row of equal-width chips at every width.
+   --------------------------------------------------------------------------- */
+.m-hud {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: var(--layer-meta-chrome);
+    display: flex;
+    align-items: center;
+    height: calc(var(--m-hud-h) + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) calc(var(--m-pad) + env(safe-area-inset-right)) 0 calc(var(--m-pad) + env(safe-area-inset-left));
+    background: linear-gradient(180deg, rgba(6, 23, 17, 0.96) 0%, rgba(6, 23, 17, 0.72) 70%, transparent 100%);
+    backdrop-filter: blur(10px);
+}
+
+.m-hud__wallet {
+    flex: 1 1 auto;
+    display: flex;
+    gap: 0.35rem;
+}
+
+/* A balance: grouped digits and a label, never abbreviated. The chips have equal widths. */
+.m-balance {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2rem;
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0.24rem 0.3rem;
+    border: 1px solid var(--hairline);
+    border-radius: var(--m-r-sm);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, transparent 55%),
+        rgba(14, 27, 22, 0.9);
+    line-height: 1.05;
+}
+
+.m-balance__amount {
+    font-weight: 700;
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.m-balance__label {
+    display: block;
+    white-space: nowrap;
+    font-size: 0.55rem;
+    letter-spacing: 0.02em;
+    color: var(--m-gold);
+}
+
+/* The bump when a balance changes. Only transform is animated, so it is composited. */
+.m-balance--bumped .m-balance__amount {
+    animation: m-bump var(--m-t-slow) var(--m-ease);
+}
+
+@keyframes m-bump {
+    0%   { transform: scale(1); }
+    35%  { transform: scale(1.22); }
+    100% { transform: scale(1); }
+}
+
+/* The balance that a reward's coin sprites are flying to. It is highlighted while the sprites are in the air,
+   so the player can see their target before they arrive. */
+.m-balance--catching {
+    border-color: var(--m-gold-line);
+    background:
+        linear-gradient(180deg, rgba(245, 197, 66, 0.2) 0%, transparent 62%),
+        rgba(14, 27, 22, 0.9);
+}
+
+/* The rim that brightens as the sprites land. `--fx-progress` is the fraction of the sprites that have
+   arrived, so the rim brightens with the rolling digits instead of flashing once at the end. It starts at a
+   quarter, so the chip is visible as the target before the first sprites land. */
+.m-balance--catching::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border: 2px solid var(--m-land, var(--m-gold-light));
+    border-radius: inherit;
+    box-shadow: inset 0 0 0.7rem -0.15rem var(--m-land, var(--m-gold-light));
+    opacity: calc(0.25 + 0.75 * var(--fx-progress, 1));
+    pointer-events: none;
+}
+
+/* The landing flash colour: the light variant of the arriving currency's colour, so each currency's flash
+   matches its own chip. */
+.m-balance--coins      { --m-land: var(--m-gold-light); }
+.m-balance--gems       { --m-land: var(--m-progress-light); }
+.m-balance--spintokens { --m-land: var(--m-live-light); }
+
+/* The landing: the last sprite has arrived and the number has finished rolling. This is the end of the shared
+   reward flow (docs/meta-shell.md).
+
+   Four effects run together: the chip wobbles, its rim lights up, a ring snaps onto it, and the digits
+   flash. The wobble is a transform, so it does not move other elements, and it briefly overlaps the gap to
+   the neighbouring chip. Everything else stays inside the chip's box.
+
+   Everything is transform and opacity except the digits' colour flash, which animates colour on at most a
+   few spans for a short time. */
+.m-balance--landed {
+    animation: m-land-pop 0.45s var(--m-ease);
+}
+
+.m-balance--landed .m-balance__amount {
+    animation: m-land var(--m-t-slow) var(--m-ease);
+}
+
+/* The rim flash: an inset border and glow, so it lights up around the digits without covering them or
+   spilling onto the neighbouring chip. */
+.m-balance--landed::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border: 2px solid var(--m-land, var(--m-gold-light));
+    border-radius: inherit;
+    box-shadow: inset 0 0 0.7rem -0.15rem var(--m-land, var(--m-gold-light));
+    animation: m-land-rim 0.42s var(--m-ease) forwards;
+    pointer-events: none;
+}
+
+/* The impact ring: it starts slightly larger than the chip and shrinks onto it. The inset and the start
+   scale are chosen so that, at its largest, the ring reaches the border of the widest chip in the wallet
+   row and stays inside every narrower chip, so it never reaches the neighbouring chip. */
+.m-balance--landed::after {
+    content: "";
+    position: absolute;
+    inset: 3px;
+    border: 2px solid var(--m-land, var(--m-gold-light));
+    border-radius: calc(var(--m-r-sm) - 3px);
+    animation: m-land-ring 0.42s var(--m-ease) forwards;
+    pointer-events: none;
+}
+
+/* The wobble: wide, narrow, then still, each swing smaller than the last. Both axes change, because a
+   change on one axis alone looks like the chip resizing. */
+@keyframes m-land-pop {
+    0%   { transform: scale(1, 1); }
+    25%  { transform: scale(1.18, 0.82); }
+    50%  { transform: scale(0.9, 1.1); }
+    75%  { transform: scale(1.05, 0.96); }
+    100% { transform: scale(1, 1); }
+}
+
+@keyframes m-land {
+    0%   { transform: scale(1);   color: var(--m-land, var(--m-gold-light)); }
+    30%  { transform: scale(1.2); color: var(--m-land, var(--m-gold-light)); }
+    100% { transform: scale(1);   color: inherit; }
+}
+
+/* The rim goes to full, holds, then fades. A flash that starts fading from its first frame is barely
+   visible. */
+@keyframes m-land-rim {
+    0%   { opacity: 0.25; }
+    14%  { opacity: 1; }
+    48%  { opacity: 0.85; }
+    100% { opacity: 0; }
+}
+
+@keyframes m-land-ring {
+    0%   { transform: scale(1.05); opacity: 0; }
+    18%  { transform: scale(1);    opacity: 1; }
+    48%  { transform: scale(0.99); opacity: 0.8; }
+    100% { transform: scale(0.9);  opacity: 0; }
+}
+
+/* ---------------------------------------------------------------------------
+   Primary navigation: a bottom bar
+   --------------------------------------------------------------------------- */
+.m-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: var(--layer-meta-chrome);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-around;
+    gap: 0.25rem;
+    height: calc(var(--m-nav-h) + var(--m-safe-b));
+    padding: 0.4rem calc(0.5rem + env(safe-area-inset-right)) var(--m-safe-b) calc(0.5rem + env(safe-area-inset-left));
+    background: linear-gradient(0deg, rgba(6, 23, 17, 0.98) 55%, rgba(6, 23, 17, 0.86) 100%);
+    border-top: 1px solid var(--hairline);
+    backdrop-filter: blur(10px);
+}
+
+.m-nav__item {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+    /* 48x48px minimum touch target, and every item always has a text label. */
+    min-height: 3rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.15rem;
+    padding: 0.2rem 0.1rem;
+    border: 0;
+    border-radius: var(--m-r-sm);
+    background: transparent;
+    color: var(--m-ink-3);
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.m-nav__item--selected {
+    color: var(--m-gold);
+}
+
+/* The selected tab has an underline as well as a colour, so the state does not depend on colour alone. */
+.m-nav__item--selected::after {
+    content: "";
+    position: absolute;
+    bottom: -0.4rem;
+    left: 50%;
+    width: 1.6rem;
+    height: 2px;
+    transform: translateX(-50%);
+    border-radius: 2px;
+    background: var(--m-gold);
+}
+
+/* The Play item is raised above the bar. */
+.m-nav__item--play {
+    flex: 0 0 auto;
+    width: 4.4rem;
+}
+
+.m-nav__play-key {
+    display: grid;
+    place-items: center;
+    width: 3.4rem;
+    height: 3.4rem;
+    margin-top: -1.5rem;
+    border-radius: var(--m-r-pill);
+    border: 2px solid var(--m-gold-line);
+    background: radial-gradient(circle at 50% 30%, var(--surface-lift) 0%, var(--surface) 70%);
+    box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.9);
+}
+
+.m-nav__badge {
+    position: absolute;
+    top: 0.15rem;
+    right: 50%;
+    transform: translateX(1.35rem);
+}
+
+/* ---------------------------------------------------------------------------
+   The child page header: title, back button and one optional action
+   --------------------------------------------------------------------------- */
+.m-page-header {
+    display: flex;
+    align-items: center;
+    gap: var(--m-gap);
+    padding: 0.25rem 0 0.15rem;
+}
+
+/* The back control is a MetaButton with this class. The selector includes .m-btn to outrank the button's own
+   rules, so this rule can stay in the header section instead of after the button rules. */
+.m-btn.m-page-header__back {
+    display: grid;
+    place-items: center;
+    width: 3rem;
+    height: 3rem;
+    flex: 0 0 auto;
+    border: 1px solid var(--m-gold-line);
+    border-radius: var(--m-r-sm);
+    background: linear-gradient(180deg, rgba(19, 41, 31, 0.85), rgba(6, 15, 12, 0.85));
+    color: var(--m-gold);
+}
+
+/* The engraved title plate. The title uses Cinzel in solid gilt-light with the .ts-engraved text shadow.
+   The spade pips beside it are decorative, hidden from assistive technology, and hidden first when the
+   title is long. */
+.m-page-header__plate {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* This gap appears four times in the title row, so a larger value makes a two-word child page title
+       wrap. */
+    gap: 0.4rem;
+}
+
+/* The pips and the lines use the gilt line token (--line-gilt), the same as the ring on .strip. The token
+   includes its own transparency. */
+.m-page-header__pip {
+    flex: 0 0 auto;
+    color: var(--line-gilt);
+}
+
+.m-page-header__title {
+    min-width: 0;
+    margin: 0;
+    text-align: center;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(1.1rem, 6.2cqw, 1.7rem);
+    line-height: 1.15;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--gold-light);
+    /* The .ts-engraved text shadow from app.css. */
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.85), 0 -1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* The back button and the space that balances it take part of a child page's header row, so the title is
+   smaller than on a hub page, where a two-word title would wrap. */
+.m-page-header--child .m-page-header__title {
+    font-size: clamp(1rem, 5cqw, 1.4rem);
+}
+
+/* The decorative line from each pip to the title text. */
+.m-page-header__line {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--line-gilt));
+}
+
+.m-page-header__line:last-of-type { background: linear-gradient(270deg, transparent, var(--line-gilt)); }
+
+/* On a narrow screen the pips are hidden so the title stays on one line. The container query measures the
+   app's width, not the browser window, which differs on a desktop (app.css, "The phone frame"). */
+@container (max-width: 23rem) {
+    .m-page-header__pip { display: none; }
+}
+
+.m-page-header__spacer { width: 3rem; flex: 0 0 auto; }
+
+.m-page-header__sub {
+    margin: -0.55rem 0 0.1rem;
+    text-align: center;
+    color: var(--m-ink-3);
+    font-size: 0.85rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Cards
+   One card style with accent variants. A feature chooses an accent instead of defining its own card.
+   --------------------------------------------------------------------------- */
+.m-card {
+    position: relative;
+    display: block;
+    width: 100%;
+    padding: var(--m-pad);
+    border: 1px solid var(--hairline);
+    border-radius: var(--m-r);
+    background: var(--grad-panel);
+    color: inherit;
+    text-align: left;
+    overflow: hidden;
+}
+
+.m-card--claim {
+    border-color: rgba(46, 230, 197, 0.42);
+}
+
+.m-card--live {
+    border-color: rgba(232, 121, 249, 0.42);
+}
+
+.m-card--progress {
+    border-color: rgba(96, 165, 250, 0.38);
+}
+
+/* The featured card: a gold border. */
+.m-card--featured {
+    border-color: var(--m-gold-line);
+    box-shadow: 0 0 0 1px rgba(245, 197, 66, 0.14), 0 14px 40px -20px rgba(0, 0, 0, 0.95);
+}
+
+/* The eyebrow style, the same as .pnl__eyebrow in app.css: a small, widely spaced gilt word. The accent
+   variants below change only its colour. */
+.m-card__eyebrow {
+    display: block;
+    margin-bottom: 0.3rem;
+    font-family: var(--font-display);
+    font-size: 0.58rem;
+    letter-spacing: 0.24em;
+    text-indent: 0.24em;
+    text-transform: uppercase;
+    color: var(--gilt);
+}
+
+.m-card--claim    .m-card__eyebrow { color: var(--m-claim); }
+.m-card--live     .m-card__eyebrow { color: var(--m-live); }
+.m-card--progress .m-card__eyebrow { color: var(--progress); }
+
+.m-card__title {
+    display: block;
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.m-card__note {
+    display: block;
+    margin: 0.15rem 0 0;
+    font-size: 0.85rem;
+    color: var(--m-ink-2);
+}
+
+.m-card__row {
+    display: flex;
+    align-items: center;
+    gap: var(--m-gap);
+    margin-top: 0.35rem;
+}
+
+.m-card__row .m-btn { flex: 0 0 auto; }
+
+/* The last button in a row sits at the right edge, whether or not the row has a growing column. */
+.m-card__row > .m-btn:last-child { margin-left: auto; }
+
+.m-card__grow { flex: 1; min-width: 0; }
+
+/* ---------------------------------------------------------------------------
+   Home's identity row: the player's avatar and name, and the button to Profile
+   The HUD shows only the wallet, so this row is where the player finds their own identity
+   (docs/meta-shell.md, "Screens and routes"). It comes after the card rules so its `display` overrides the
+   card's by source order.
+   --------------------------------------------------------------------------- */
+.m-idrow {
+    display: flex;
+    align-items: center;
+    gap: var(--m-gap);
+}
+
+/* Can shrink, so a long name is truncated with an ellipsis instead of pushing the button off the card. */
+.m-idrow__who {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* The name plate here has the least room, between the avatar and the Profile button, so it uses smaller
+   sizes than the profile hero. The selector includes .m-name because PlayerAvatar always renders a size
+   modifier with it, and the extra class makes this rule win regardless of file order. */
+.m-idrow .m-name {
+    display: block;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.95rem;
+}
+
+.m-idrow .m-name.m-nameplate--tight   { font-size: 0.85rem; }
+.m-idrow .m-name.m-nameplate--cramped { font-size: 0.78rem; }
+
+/* The new-cosmetic dot on the button that leads to where the cosmetic is acknowledged. */
+.m-idrow__badge { margin-left: 0.1rem; }
+
+/* ---------------------------------------------------------------------------
+   Buttons
+   --------------------------------------------------------------------------- */
+.m-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    min-height: 2.75rem;
+    padding: 0 1.1rem;
+    border: 1px solid var(--m-hairline-2);
+    border-radius: var(--m-r-sm);
+    background: var(--surface-lift);
+    color: var(--m-ink);
+    font-weight: 700;
+    font-size: 0.95rem;
+}
+
+/* The gold primary button. Use at most one per screen. */
+.m-btn--primary {
+    border-color: var(--m-gold-deep);
+    background: linear-gradient(180deg, var(--m-gold-light) 0%, var(--m-gold) 48%, var(--m-gold-deep) 100%);
+    color: var(--m-on-gold);
+    text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+/* The filled variants set their labels in capitals with the same tracking. The source strings stay in
+   sentence case, and the Secondary and Ghost variants keep it. */
+.m-btn--primary,
+.m-btn--claim,
+.m-btn--live,
+.m-btn--danger {
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+/* Claim, Live and Danger share one glass button style in different accent colours. The colour shows the
+   action's category, and the style marks it as secondary to the primary key. Each variant sets only its
+   accent as an RGB triplet (--m-accent) and its text colour, so the variants differ only in colour. */
+.m-btn--claim  { --m-accent: 46, 230, 197; --m-accent-ink: var(--m-claim); }
+.m-btn--live   { --m-accent: 232, 121, 249; --m-accent-ink: #f8d4ff; }
+.m-btn--danger { --m-accent: 251, 113, 133; --m-accent-ink: #ffd6dd; }
+
+.m-btn--claim,
+.m-btn--live,
+.m-btn--danger {
+    border-color: rgba(var(--m-accent), 0.6);
+    background: linear-gradient(180deg, rgba(var(--m-accent), 0.28) 0%, rgba(var(--m-accent), 0.12) 100%);
+    color: var(--m-accent-ink);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.m-btn--quiet {
+    background: transparent;
+    color: var(--m-ink-2);
+}
+
+/* A status, such as "Purchased" or "Sold out", has the button's box but is not clickable, so it gets the
+   default cursor. Inside a control that is clickable as a whole, the status keeps that control's cursor.
+   Every selector includes .m-btn, because a status also has the button's classes and the shared control
+   rule sets the pointer cursor on them. */
+.m-btn.m-status { cursor: default; }
+
+button .m-btn.m-status,
+a .m-btn.m-status { cursor: inherit; }
+
+/* An icon-only button is a square large enough for the 44px minimum touch target. */
+.m-btn--icon {
+    width: 3rem;
+    height: 3rem;
+    padding: 0;
+}
+
+/* The on/off switch. A switch instead of a checkbox, because the setting applies as soon as it is flipped.
+   The track is the whole control, and the knob moves with a transform, so the animation is composited. */
+.m-toggle {
+    box-sizing: border-box;
+    position: relative;
+    flex: 0 0 auto;
+    width: 2.75rem;
+    height: 1.5rem;
+    min-height: 1.5rem;
+    padding: 0;
+    border: 1px solid var(--m-hairline-2);
+    border-radius: var(--m-r-pill);
+    background: rgba(0, 0, 0, 0.35);
+}
+
+/* The switch keeps its own height instead of the shell's button minimum height, which would turn the
+   track into a large pill. It keeps the minimum width. */
+.m-shell .m-toggle { min-height: 1.5rem; }
+
+.m-toggle__knob {
+    position: absolute;
+    top: 50%;
+    left: 0.125rem;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: var(--m-r-pill);
+    background: var(--m-ink-3);
+    transform: translateY(-50%);
+    transition: transform var(--m-t) var(--m-ease), background var(--m-t) var(--m-ease);
+}
+
+/* The on state uses the claim accent, the colour the shell uses for "active" and "ready". */
+.m-toggle[aria-checked="true"] {
+    border-color: rgba(46, 230, 197, 0.6);
+    background: linear-gradient(180deg, rgba(46, 230, 197, 0.28) 0%, rgba(46, 230, 197, 0.12) 100%);
+}
+
+.m-toggle[aria-checked="true"] .m-toggle__knob {
+    background: var(--m-claim);
+    transform: translate(1.125rem, -50%);
+}
+
+/* ---------------------------------------------------------------------------
+   Control feedback: hover, press, focus and disabled
+   Every control in the shell uses the same press depth, one hover style per variant, one disabled style,
+   and durations from the motion tokens. Hover and press use --m-t-fast. The disabled opacity change uses
+   --m-t, and its desaturation uses the fast filter transition from the rule below.
+
+   The base rule lists every control class. The cursor and the transition are set only in that rule, so a
+   class that is a control must be added to the list. A menu card is not a control, because it has its own
+   button. .m-hero is not a control either, but its buttons are.
+   --------------------------------------------------------------------------- */
+.m-btn,
+.m-tab,
+.m-toggle,
+.m-nav__item,
+.m-shortcut,
+.m-cosmetic__body,
+.m-name-edit,
+.m-page-header__back {
+    cursor: pointer;
+    transition:
+        transform var(--m-t-fast) var(--m-ease),
+        box-shadow var(--m-t-fast) var(--m-ease),
+        filter var(--m-t-fast) var(--m-ease),
+        opacity var(--m-t) var(--m-ease);
+}
+
+/* The switch's checked state changes the track's fill and border colour, so those properties also get a
+   transition, at the state speed (--m-t). The full transition list is repeated because `transition` does not
+   merge across rules, and this rule must come after the base rule to override it. */
+.m-toggle {
+    transition:
+        transform var(--m-t-fast) var(--m-ease),
+        box-shadow var(--m-t-fast) var(--m-ease),
+        filter var(--m-t-fast) var(--m-ease),
+        opacity var(--m-t) var(--m-ease),
+        background var(--m-t) var(--m-ease),
+        border-color var(--m-t) var(--m-ease);
+}
+
+/* Hover styles are inside (hover: hover), so a tap on a touch screen does not leave a control highlighted.
+   Each variant brightens without changing hue. The button rules exclude both :disabled and
+   aria-disabled="true", because an anchor never matches :disabled. */
+@media (hover: hover) {
+    /* The neutral button lights its border, not its fill, so it does not look like another variant while
+       hovered. */
+    .m-btn:hover:not(:disabled):not([aria-disabled="true"]):not(.m-btn--primary):not(.m-btn--claim):not(.m-btn--live):not(.m-btn--danger):not(.m-btn--quiet):not(.m-page-header__back) {
+        background: var(--surface-lift);
+        border-color: rgba(255, 255, 255, 0.24);
+        box-shadow: var(--m-hover-glow);
+    }
+
+    .m-btn--primary:hover:not(:disabled):not([aria-disabled="true"]) {
+        filter: brightness(1.06);
+    }
+
+    /* The key rises and brightens on hover, the only control that moves before it is pressed. The light sweep
+       keeps running under the filter. */
+    .m-btn--key:hover:not(:disabled):not([aria-disabled="true"]) {
+        filter: brightness(1.06);
+        transform: translateY(var(--m-hover-lift));
+    }
+
+    .m-btn--claim:hover:not(:disabled):not([aria-disabled="true"]),
+    .m-btn--live:hover:not(:disabled):not([aria-disabled="true"]),
+    .m-btn--danger:hover:not(:disabled):not([aria-disabled="true"]) {
+        border-color: rgba(var(--m-accent), 0.8);
+        background: linear-gradient(180deg, rgba(var(--m-accent), 0.36) 0%, rgba(var(--m-accent), 0.12) 100%);
+    }
+
+    .m-btn--quiet:hover:not(:disabled):not([aria-disabled="true"]) {
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--m-ink);
+    }
+
+    .m-tab:not(.m-tab--selected):hover:not(:disabled) {
+        color: var(--m-ink-2);
+        background: rgba(255, 255, 255, 0.04);
+    }
+
+    .m-toggle:hover:not(:disabled) {
+        border-color: rgba(255, 255, 255, 0.24);
+    }
+
+    /* The cosmetic tile's preview control lightens its own background instead of drawing a border, because
+       the tile around it does not change. */
+    .m-cosmetic__body:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.04);
+    }
+
+    .m-nav__item:hover:not(:disabled),
+    .m-shortcut:hover:not(:disabled),
+    .m-page-header__back:hover:not(:disabled),
+    .m-name-edit:hover:not(:disabled) {
+        filter: brightness(1.12);
+    }
+}
+
+/* Forced states for the component gallery. The force classes repeat the hover styles above outside the
+   hover media query, so they also render in a screenshot or on a touch device. */
+.m-btn--force-hover:not(.m-btn--primary):not(.m-btn--claim):not(.m-btn--live):not(.m-btn--danger):not(.m-btn--quiet):not(.m-page-header__back) {
+    background: var(--surface-lift);
+    border-color: rgba(255, 255, 255, 0.24);
+    box-shadow: var(--m-hover-glow);
+}
+
+.m-btn--force-hover.m-btn--primary {
+    filter: brightness(1.06);
+}
+
+.m-btn--force-hover.m-btn--key {
+    filter: brightness(1.06);
+    transform: translateY(var(--m-hover-lift));
+}
+
+.m-btn--force-hover.m-btn--claim,
+.m-btn--force-hover.m-btn--live,
+.m-btn--force-hover.m-btn--danger {
+    border-color: rgba(var(--m-accent), 0.8);
+    background: linear-gradient(180deg, rgba(var(--m-accent), 0.36) 0%, rgba(var(--m-accent), 0.12) 100%);
+}
+
+.m-btn--force-hover.m-btn--quiet {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--m-ink);
+}
+
+/* Press: the same depth for every control, including anchors, because app-base.css only styles <button>. The
+   tab rule is limited to button.m-tab, because in navigation mode the current tab is rendered as a span
+   (aria-current, cursor: default), and a span matches :active in Chromium. */
+.m-btn:active:not(:disabled),
+button.m-tab:active:not(:disabled),
+.m-toggle:active:not(:disabled),
+.m-nav__item:active:not(:disabled),
+.m-shortcut:active:not(:disabled),
+.m-cosmetic__body:active:not(:disabled),
+.m-name-edit:active:not(:disabled),
+.m-page-header__back:active:not(:disabled),
+.m-btn--force-active {
+    transform: scale(var(--m-press-scale));
+}
+
+/* app-base.css sets its own press scale on every button. Inside the shell, every button uses
+   --m-press-scale instead. */
+.m-shell button:active:not(:disabled) {
+    transform: scale(var(--m-press-scale));
+}
+
+/* The gold buttons move down as well as shrink, and their top highlight fades, so the press looks like
+   the button being pushed in. */
+.m-btn--primary:active:not(:disabled),
+.m-btn--force-active.m-btn--primary {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.m-btn--key:active:not(:disabled),
+.m-btn--force-active.m-btn--key {
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.35),
+        inset 0 -0.35rem 0.5rem -0.3rem rgba(120, 70, 0, 0.65),
+        0 0.4rem 1rem -0.4rem rgba(0, 0, 0, 0.9);
+}
+
+/* The forced focus state draws the same gold ring as the global :focus-visible rule later in this file. The
+   gold buttons get a text-coloured ring, further out, because a gold ring is not visible on a gold button. */
+.m-btn--force-focus {
+    outline: 2px solid var(--m-gold);
+    outline-offset: 2px;
+}
+
+.m-shell .m-btn.m-btn--primary:focus-visible,
+.m-btn--force-focus.m-btn--primary {
+    outline-color: var(--m-ink);
+    outline-offset: 3px;
+}
+
+/* One disabled style for every control: faded, desaturated and without hover movement. A control that is
+   disabled while its request is in progress uses the same style.
+
+   The selectors for this stylesheet's own classes are not limited to .m-shell, so the disabled style also
+   shows in the component gallery. The selectors for plain elements are limited to .m-shell, so meta-shell.css
+   does not restyle the game's own buttons. */
+.m-shell :is(button, a, [role="switch"])[disabled],
+:is(.m-btn, .m-toggle)[disabled],
+.m-btn[aria-disabled="true"] {
+    opacity: var(--m-disabled-opacity);
+    cursor: not-allowed;
+    filter: saturate(0.6);
+    transform: none;
+}
+
+/* A disabled key has no light sweep. The anchor form uses aria-disabled instead of the disabled attribute,
+   so both are matched. */
+.m-btn--key:disabled::after,
+.m-btn--key[aria-disabled="true"]::after {
+    animation: none;
+}
+
+/* Reduced motion also removes the key's hover lift. The blanket rule below already removes transitions,
+   so without this the key would jump by the lift distance instead of staying in place. */
+@media (prefers-reduced-motion: reduce) {
+    .m-btn--key:hover:not(:disabled),
+    .m-btn--force-hover.m-btn--key {
+        transform: none;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Badges, progress bars and countdowns
+   --------------------------------------------------------------------------- */
+
+/* A dot means actionable or unseen. It never shows a number, and screen readers get its meaning from its
+   label, not its colour. */
+.m-badge {
+    /* The dot is a span, and an inline span inside a block eyebrow ignores the width and height below. */
+    display: inline-block;
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: var(--m-r-pill);
+    background: var(--m-danger);
+    box-shadow: 0 0 0 2px var(--ground);
+}
+
+.m-progress {
+    position: relative;
+    display: block;
+    flex: 1;
+    height: 0.6rem;
+    border-radius: var(--m-r-pill);
+    background: rgba(255, 255, 255, 0.09);
+    overflow: hidden;
+}
+
+.m-progress__fill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--m-live) 0%, #f0abfc 100%);
+    transition: width var(--m-t) var(--m-ease);
+}
+
+.m-progress--claim .m-progress__fill {
+    background: linear-gradient(90deg, var(--m-claim) 0%, #7ff3de 100%);
+}
+
+.m-progress__label {
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--m-ink-2);
+}
+
+/* A countdown. The "ending soon" state has a word and an icon as well as a colour. */
+.m-clock {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.82rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--m-ink-2);
+}
+
+.m-clock--soon {
+    color: var(--m-live);
+    font-weight: 700;
+}
+
+.m-clock--expired {
+    color: var(--m-ink-3);
+}
+
+/* ---------------------------------------------------------------------------
+   Screen states such as loading, empty and error
+   Each state shows an explanation. A disabled control with no explanation is not an acceptable state.
+   --------------------------------------------------------------------------- */
+.m-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1.75rem var(--m-pad);
+    text-align: center;
+    color: var(--m-ink-2);
+}
+
+.m-state__title { font-weight: 700; color: var(--m-ink); }
+.m-state__note  { font-size: 0.86rem; }
+
+/* A skeleton takes the same space as the final layout, so nothing moves when the data arrives. */
+.m-skeleton {
+    border-radius: var(--m-r);
+    background: linear-gradient(100deg, rgba(255,255,255,0.05) 30%, rgba(255,255,255,0.11) 50%, rgba(255,255,255,0.05) 70%);
+    background-size: 220% 100%;
+    /* The shimmer is a transform on an overlay instead of background-position on this element, so the
+       loop is composited. */
+    position: relative;
+    overflow: hidden;
+}
+
+.m-skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.09), transparent);
+    animation: m-sheen 1.4s linear infinite;
+}
+
+@keyframes m-sheen {
+    to { transform: translateX(100%); }
+}
+
+/* ---------------------------------------------------------------------------
+   Toasts
+   The shell's short-lived status line. Sheets and dialogs use the raised panel classes in app.css (`.pnl`).
+   --------------------------------------------------------------------------- */
+.m-toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(var(--m-nav-h) + var(--m-safe-b) + 0.75rem);
+    z-index: var(--layer-meta-toast);
+    transform: translateX(-50%);
+    max-width: min(92cqw, var(--m-col));
+    padding: 0.7rem 1rem;
+    border: 1px solid var(--m-hairline-2);
+    border-radius: var(--m-r-pill);
+    background: rgba(6, 15, 12, 0.96);
+    color: var(--m-ink);
+    font-size: 0.9rem;
+    box-shadow: 0 14px 34px -16px rgba(0, 0, 0, 0.95);
+}
+
+/* The reward reveal. The title appears letter by letter, the items are shown large below it, and the button
+   below them can be pressed from the first frame. RevealCascade.StepMs sets the per-letter delay from C#, so
+   the whole entrance is short at any title length. The scrim is a vignette: the centre is the dialog scrim
+   (--scrim, as in .pnl), and the edges darken to --scrim-deep so the screen behind stays visible but does not
+   compete with the reward. */
+.m-reveal {
+    position: fixed;
+    inset: 0;
+    z-index: var(--layer-meta-reward);
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: 1.2rem;
+    padding: 0 var(--m-pad);
+    background: radial-gradient(ellipse 85% 75% at 50% 45%, var(--scrim) 0%, rgba(2, 8, 6, 0.8) 55%, var(--scrim-deep) 100%);
+    backdrop-filter: blur(2px);
+    text-align: center;
+}
+
+/* Row 1, the title. Slightly tilted back, with the perspective the letters rise against. Capitals come from
+   text-transform, so the element's text is the title the caller passed. */
+.m-reveal__source {
+    margin: 0;
+    perspective: 40rem;
+    transform: rotateX(12deg);
+    font-size: clamp(2.2rem, 11cqw, 3.4rem);
+    font-weight: 900;
+    line-height: 1.15;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--m-gold);
+}
+
+/* ---------------------------------------------------------------------------
+   The letter cascade. CascadeTitle.razor renders the structure, and these rules style it.
+   A title shown letter by letter, used by the reward reveal and the results overlay. RevealCascade.StepMs
+   sets the per-letter delay from C# as --cascade-step on the cascade's span, so the entrance is short at
+   any title length.
+   --------------------------------------------------------------------------- */
+.cascade {
+    /* The duration of one letter's rise. A component can override it on its own class. */
+    --cascade-in: 160ms;
+}
+
+/* Each word is one inline block, so a long title wraps between words and never inside a word. */
+.cascade__word-group { display: inline-block; }
+
+/* Row 2, the word under the title. letter-spacing also adds space after the last letter, and the negative
+   right margin removes it, so the word is centred on its letters. */
+.m-reveal__word {
+    margin: 0 -0.35em 0 0;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    color: var(--m-gold-light);
+}
+
+/* One letter of the cascade. It rises into place after its own delay, and the shine crosses it twice and
+   stops, so the shine ends with the entrance. */
+.cascade__letter {
+    display: inline-block;
+    transform-origin: 50% 100%;
+    color: var(--m-gold);
+    background: linear-gradient(100deg, var(--m-gold-deep) 0 35%, #fff8d6 50%, var(--m-gold-deep) 65% 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-size: 300% 100%;
+    animation:
+        m-reveal-letter var(--cascade-in) cubic-bezier(0.2, 1.25, 0.4, 1) both,
+        m-reveal-shine 900ms linear 2;
+    animation-delay:
+        calc(var(--i) * var(--cascade-step)),
+        calc(var(--i) * var(--cascade-step) + 120ms);
+}
+
+@keyframes m-reveal-letter {
+    from { opacity: 0; transform: translateY(0.7em) rotateX(-55deg); }
+    to   { opacity: 1; transform: none; }
+}
+
+@keyframes m-reveal-shine {
+    from { background-position: 100% 0; }
+    to   { background-position: 0% 0; }
+}
+
+/* Rows 2 to 4 appear as whole rows while the letters are still arriving. The button can be pressed from
+   the first frame. */
+.m-reveal__word,
+.m-reveal__refusal { animation: m-reveal-row 140ms var(--m-ease) both 100ms; }
+
+.m-reveal__items,
+.m-reveal__pending,
+.m-reveal__warning { animation: m-reveal-row 140ms var(--m-ease) both 140ms; }
+
+.m-reveal__claim,
+.m-reveal__actions,
+.m-reveal__holding { animation: m-reveal-row 140ms var(--m-ease) both 160ms; }
+
+@keyframes m-reveal-row {
+    from { opacity: 0; transform: translateY(0.35rem) scale(0.97); }
+    to   { opacity: 1; transform: none; }
+}
+
+.m-reveal__items { display: flex; justify-content: center; width: 100%; }
+
+/* The muted cascade has no shine and no gold. The letters use the colour the caller sets on the cascade, and
+   the sentence next to it explains the result. */
+.m-reveal--failed .m-reveal__source { color: var(--m-ink); }
+
+.cascade--muted .cascade__letter {
+    color: currentcolor;
+    background: none;
+    -webkit-text-fill-color: currentcolor;
+    animation: m-reveal-letter var(--cascade-in) cubic-bezier(0.2, 1.25, 0.4, 1) both;
+    animation-delay: calc(var(--i) * var(--cascade-step));
+}
+
+.m-reveal__refusal { margin: 0; max-width: 26rem; font-size: 0.95rem; color: var(--m-ink-2); }
+.m-reveal__warning { display: grid; place-items: center; }
+
+.m-reveal__actions { display: flex; align-items: center; justify-content: center; gap: 0.6rem; }
+
+/* ---------------------------------------------------------------------------
+   Focus, touch targets and reduced motion
+   --------------------------------------------------------------------------- */
+
+/* A visible focus ring on every control a player can operate.
+
+   The router focuses the page's <h1> on every navigation, through tabindex="-1", so a screen reader
+   announces the new screen. Elements with tabindex="-1" are excluded, because a ring around a page title
+   looks like a rendering fault. */
+.m-shell :is(button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
+    outline: 2px solid var(--m-gold);
+    outline-offset: 2px;
+    border-radius: var(--m-r-sm);
+}
+
+/* The heading the router focuses also gets no browser focus ring. */
+.m-shell [tabindex="-1"]:focus,
+.m-shell [tabindex="-1"]:focus-visible {
+    outline: none;
+}
+
+/* Every control in the shell is at least 44px in both directions. The primary controls are larger. */
+.m-shell button,
+.m-shell [role="button"],
+.m-shell a {
+    min-height: 2.75rem;
+}
+
+/* Reduced motion: every animation jumps to its end state. No information is carried only by animation.
+
+   The ::before and ::after selectors are needed because `*` does not match pseudo-elements, and the skeleton
+   shimmer and the key's light sweep are both drawn on pseudo-elements.
+
+   The reward burst layer is also listed here. Under this preference the C# code starts no coin burst, so
+   these rules apply only when the app could not read the preference, for example when wallet-burst.js failed
+   to load. */
+@media (prefers-reduced-motion: reduce) {
+    .m-shell *,
+    .m-shell *::before,
+    .m-shell *::after,
+    .pnl *,
+    .pnl *::before,
+    .pnl *::after,
+    .m-reveal,
+    .m-reveal *,
+    .m-reveal *::before,
+    .m-reveal *::after,
+    .m-fx *,
+    .m-fx *::before,
+    .m-fx *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+
+    /* The cascade letters are a gradient clipped to the text. With the animation at its end state, the letters
+       would be transparent, so they fall back to plain gold text. The muted cascade's rule is more specific,
+       so its letters keep the caller's colour. */
+    .cascade__letter {
+        background: none;
+        color: var(--m-gold);
+        -webkit-text-fill-color: currentcolor;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Icons
+   Icons inherit currentColor, except the currency icons, which always use their currency's colour, because
+   players identify a currency by colour first.
+   --------------------------------------------------------------------------- */
+.m-icon { flex: 0 0 auto; }
+
+.m-icon--coin { color: var(--m-gold); }
+.m-icon--gem  { color: #7dd3fc; }
+.m-icon--spin { color: #d8b4fe; }
+
+/* ---------------------------------------------------------------------------
+   Avatars, names and cosmetics
+   Frames and name effects are CSS rules built from tokens, not image assets.
+   --------------------------------------------------------------------------- */
+/* The avatar disc is the medallion (app.css, .medallion) in its default green. The ring is an inset glow in
+   the equipped frame's colour instead of the medallion's gilt, so the frame looks the same where it is worn
+   as in the shop. AvatarFrame draws the frame shape as an SVG sized from the same variable, extending past
+   the disc for some shapes, so the disc does not clip its content. */
+.m-avatar {
+    --med-ring: inset 0 0 8px -2px var(--m-frame-color, var(--gold));
+    --med-counter: 0 0 0 1px rgba(0, 0, 0, 0.6);
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: var(--m-avatar-size, 44px);
+    height: var(--m-avatar-size, 44px);
+    overflow: visible;
+}
+
+/* The face is the avatar icon (AvatarIcon), sized from the same variable as the frame. Its colour is
+   --champagne, deliberately not a gold (docs/meta-shell.md, "Styles and design tokens"). */
+.m-avatar__face {
+    display: block;
+    width: calc(var(--m-avatar-size, 44px) * 0.56);
+    height: calc(var(--m-avatar-size, 44px) * 0.56);
+    color: var(--champagne);
+}
+
+.m-avatar__face svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+/* The frame shape that AvatarFrame draws around the face. Its box is the avatar's box, so it does not
+   overflow the layout, and the drawing is scaled up past that box with overflow: visible, for shapes such
+   as a crown or a hexagon. The SVG viewBox handles all sizes, so one drawing works from a standings row to
+   the preview. */
+.m-avatar__frame {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    pointer-events: none;
+}
+
+.m-frame--frame-sapphire { --m-frame-color: #60a5fa; }
+.m-frame--frame-gold     { --m-frame-color: var(--m-gold); }
+.m-frame--frame-emerald  { --m-frame-color: #34d399; }
+.m-frame--frame-amethyst { --m-frame-color: #c084fc; }
+.m-frame--frame-ruby     { --m-frame-color: #fb7185; }
+.m-frame--frame-platinum { --m-frame-color: #e2e8f0; }
+.m-frame--frame-silver   { --m-frame-color: #cbd5e1; }
+.m-frame--frame-bronze   { --m-frame-color: #d3a06a; }
+
+/* The plain frame: the default gold, as a frame the player can equip. It sets the colour explicitly instead
+   of relying on the fallback, so switching back to plain replaces the previous frame's colour. */
+.m-frame--frame-plain    { --m-frame-color: var(--gold); }
+
+.m-avatar__badge { position: absolute; top: 0; right: 0; }
+
+.m-name { font-weight: 700; }
+
+/* Only the premium tier is animated. Its loops follow the idle-loop rule: a loop that runs indefinitely
+   animates only compositor properties, so each effect is painted once into layers whose opacity is
+   animated (the frost's snow animates transform and opacity). The reduced-motion block below stops each
+   effect. It is separate from the shell's reduced-motion rule, because the gallery stories are outside
+   .m-shell. */
+
+/* The prism paints its gradient twice, at opposite ends of the range, and the second copy's opacity rises
+   and falls over the first. The gradient itself is never repainted. The copy gets the name text from the
+   data-text attribute (PlayerName). */
+.m-name--name-prism {
+    position: relative;
+    background: linear-gradient(90deg, #f472b6, #fbbf24, #34d399, #60a5fa, #c084fc);
+    background-size: 300% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+.m-name--name-prism::before {
+    content: attr(data-text) / "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, #f472b6, #fbbf24, #34d399, #60a5fa, #c084fc);
+    background-size: 300% 100%;
+    background-position: 100% 0;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    opacity: 0;
+    pointer-events: none;
+    animation: m-name-prism 12s ease-in-out infinite;
+}
+
+@keyframes m-name-prism {
+    0%, 100% { opacity: 0; }
+    50%      { opacity: 1; }
+}
+
+/* The bloom's glow is painted once, at full strength, on a copy of the name that fades in and out over the
+   name's faint static glow. Only opacity is animated. */
+.m-name--name-bloom {
+    position: relative;
+    color: var(--m-gold);
+    text-shadow: 0 0 2px rgba(245, 197, 66, 0.9);
+}
+
+.m-name--name-bloom::before {
+    content: attr(data-text) / "";
+    position: absolute;
+    inset: 0;
+    color: var(--m-gold);
+    text-shadow: 0 0 14px rgba(245, 197, 66, 0.9);
+    opacity: 0;
+    pointer-events: none;
+    animation: m-name-bloom 4s ease-in-out infinite alternate;
+}
+
+@keyframes m-name-bloom {
+    to { opacity: 1; }
+}
+
+/* The frost is the containing block for its absolutely positioned snow. position: relative is enough.
+   inline-block would stop the hero and preview names from wrapping the way NamePlate sizes them. */
+.m-name--name-frost {
+    position: relative;
+    color: #cfefff;
+    text-shadow: 0 0 6px #7dd3fc;
+}
+
+/* Two small dots fall from the name's top edge through the text, fading as they go. Their durations and
+   delays differ so they do not move together, and the fill mode keeps a delayed dot hidden until it starts.
+   A plate that clips its name, such as the identity row's ellipsis, cuts off the part above the line box. */
+.m-name--name-frost::before,
+.m-name--name-frost::after {
+    content: "";
+    position: absolute;
+    top: -0.2em;
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #f0fbff, #7dd3fc);
+    animation: m-name-drip 3s linear infinite backwards;
+}
+
+.m-name--name-frost::before { left: 20%; }
+
+.m-name--name-frost::after {
+    left: 70%;
+    animation-duration: 4.4s;
+    animation-delay: 1.6s;
+}
+
+@keyframes m-name-drip {
+    0%   { transform: translateY(0); opacity: 0; }
+    12%  { opacity: 0.9; }
+    100% { transform: translateY(1.3em); opacity: 0; }
+}
+
+.m-name--name-amber   { color: #fbbf24; }
+.m-name--name-azure   { color: #60a5fa; }
+.m-name--name-violet  { color: #c084fc; }
+.m-name--name-emerald { color: #34d399; }
+
+/* The plain name effect: the name inherits the colour of its container, the same as a name with no effect. */
+.m-name--name-plain   { color: inherit; }
+
+@media (prefers-reduced-motion: reduce) {
+    .m-name--name-prism::before,
+    .m-name--name-bloom::before { animation: none; }
+    .m-name--name-frost::before,
+    .m-name--name-frost::after { display: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   Card contents: emblems, rewards, shortcuts, grids and tabs
+   --------------------------------------------------------------------------- */
+.m-card__emblem {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    color: var(--m-gold);
+}
+
+.m-card__badge { display: inline-block; margin-left: 0.35rem; vertical-align: middle; }
+
+.m-rewards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0.5rem 0;
+}
+
+.m-reward-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--hairline);
+    border-radius: var(--m-r-sm);
+    background: rgba(0, 0, 0, 0.28);
+}
+
+.m-reward-item__amount { font-weight: 700; font-variant-numeric: tabular-nums; }
+.m-reward-item__label  { font-size: 0.72rem; color: var(--m-ink-3); }
+
+.m-rewards--compact .m-reward-item { padding: 0.2rem 0.4rem; }
+.m-rewards--compact .m-reward-item__label { display: none; }
+
+.m-progress-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.4rem 0;
+}
+
+.m-progress-row .m-progress { flex: 1; }
+
+.m-shortcuts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(4.5rem, 1fr));
+    gap: 0.5rem;
+}
+
+.m-shortcut {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.7rem 0.35rem;
+    border: 1px solid var(--hairline);
+    border-radius: var(--m-r);
+    background: rgba(14, 27, 22, 0.7);
+    color: var(--m-ink-2);
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+.m-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    gap: var(--m-gap);
+}
+
+/* Tiles side by side end on the same line: the card is a flex column and the foot takes the remaining
+   height, so a tile without a countdown does not end higher than its neighbour. In a single-column grid
+   the auto margin resolves to zero, and the padding provides the foot's gap. The unaffordable state's
+   second row is not pushed down. It sits under its foot with a small gap. */
+.m-grid > .m-card {
+    display: flex;
+    flex-direction: column;
+}
+
+.m-grid > .m-card .m-offer__foot:not(.m-offer__foot--secondary) {
+    margin-top: auto;
+    padding-top: 0.25rem;
+}
+
+.m-tabs {
+    display: flex;
+    gap: 0.35rem;
+    padding: 0.25rem;
+    border: 1px solid var(--hairline);
+    border-radius: var(--m-r);
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.m-tab {
+    flex: 1;
+    min-height: 2.75rem;
+    border: 0;
+    border-radius: var(--m-r-sm);
+    background: transparent;
+    color: var(--m-ink-3);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+}
+
+/* The selected tab has a filled background as well as a colour, so it is recognisable without colour. */
+.m-tab--selected {
+    background: linear-gradient(180deg, var(--surface-lift), var(--surface));
+    color: var(--m-gold);
+    box-shadow: inset 0 0 0 1px var(--m-gold-line);
+}
+
+.m-offer__bonus {
+    align-self: flex-start;
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--m-r-pill);
+    background: var(--m-gold);
+    color: var(--m-on-gold);
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+/* Every offer tile ends in a foot: the countdown and the price on the left, and the action, or the status
+   explaining why there is no action, at the right edge. The buy button is in the same place on every tile. */
+.m-offer__foot {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--m-gap);
+    margin-top: 0.75rem;
+}
+
+.m-offer__foot > :last-child { margin-left: auto; }
+
+/* The same action width on every tile and in every state. The featured tile's larger key is one size up.
+   A status in the slot has the button's classes, so it gets the same minimum width. A price chip does not
+   wrap, because a wrapped flex child can break the number across two lines. */
+.m-offer__foot .m-btn { min-width: 6.5rem; }
+.m-offer__foot .m-btn--lg { min-width: 8rem; }
+.m-offer__foot .m-chip { white-space: nowrap; }
+
+/* The second row, shown only in the unaffordable state: a link to where the player can get the currency. */
+.m-offer__foot--secondary { margin-top: 0.4rem; }
+
+/* ---------------------------------------------------------------------------
+   Standings
+   The rows use the shared standings row style (.stand-row in app.css). The board is table markup laid out
+   as grid rows: each tr is a grid of three columns (rank, player, score), and the row padding keeps the
+   content inside the ring. The explicit ARIA roles on the markup keep the table semantics that
+   display: grid removes. These rules style the contents: the header line, the player's own row, the
+   promotion zone, the movement chips and the prize rows.
+   --------------------------------------------------------------------------- */
+.m-standings, .m-standings thead, .m-standings tbody { display: block; width: 100%; font-size: 0.88rem; }
+
+.m-standings tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 0.28rem;
+}
+
+/* One grid per row: the rank and score columns take what they need, and the player column takes the rest.
+   The row padding, not cell padding, keeps the content inside the ring. With the automatic table layout, a
+   long name and its bot tag would widen the table past its card. In the grid, the name column shrinks and
+   the name is truncated with an ellipsis. */
+.m-standings tr {
+    display: grid;
+    grid-template-columns: [rank] 2.2rem [player] minmax(0, 1fr) [score] auto;
+    column-gap: 0.6rem;
+    align-items: center;
+    padding: 0.45rem 0.7rem;
+}
+
+.m-standings th, .m-standings td { display: block; min-width: 0; padding: 0; border: 0; }
+
+.m-standings th {
+    text-align: left;
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--m-ink-3);
+}
+
+.m-standings thead tr {
+    padding: 0.25rem 0.7rem 0.4rem;
+    border-bottom: 1px solid var(--hairline);
+    margin-bottom: 0.3rem;
+}
+
+.m-standings td:first-child { text-align: center; font-variant-numeric: tabular-nums; }
+
+.m-standings td:last-child { text-align: right; white-space: nowrap; }
+
+/* The player's own row and the promotion zone have a bar and a label as well as a colour. The own row's bar
+   is drawn in front of the .stand-row ring in the same box-shadow; on a first-place row the ring under the
+   bar is the gilt one. Both tints use background-color, not the shorthand, so the first-place
+   background-image stays on top of them. */
+.m-standings__self {
+    background-color: rgba(245, 197, 66, 0.09);
+    box-shadow: inset 3px 0 0 var(--m-gold), inset 0 0 0 1px rgba(125, 97, 40, 0.35);
+}
+
+.m-standings tr.stand-row--gilt.m-standings__self {
+    box-shadow: inset 3px 0 0 var(--m-gold), inset 0 0 0 1px var(--gilt);
+}
+
+.m-standings__promoting { background-color: rgba(46, 230, 197, 0.07); }
+
+/* First place uses .stand-row--gilt. The board adds a taller row, a gold rank next to the trophy, and an
+   inline icon, because an SVG defaults to block and would put the trophy on its own line. */
+.m-standings tr.stand-row--gilt { padding: 0.7rem 0.7rem; }
+
+.m-standings tr.stand-row--gilt td:first-child { color: var(--m-gold); font-weight: 800; white-space: nowrap; }
+.m-standings tr.stand-row--gilt .m-icon { display: inline-block; vertical-align: -3px; margin-right: 0.15rem; }
+
+/* The prize for a place, on the second line of the player cell, so the name's line keeps its height. It
+   wraps instead of widening the row. */
+.m-standings__prize {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-top: 0.25rem;
+    font-size: 0.72rem;
+    color: var(--m-ink-3);
+}
+
+.m-standings__prize .m-rewards { margin: 0; }
+.m-standings__prize--first { color: var(--m-gold); font-size: 0.78rem; }
+
+/* The player cell's first line: avatar, name and tags on one flex line with a gap, so the name never touches
+   the avatar frame regardless of the whitespace Razor emits. The name shrinks and is truncated with an
+   ellipsis instead of widening the row. */
+.m-standings__who {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.m-standings__who .m-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.m-standings__you {
+    padding: 0.1rem 0.35rem;
+    border-radius: var(--m-r-sm);
+    background: var(--m-gold);
+    color: var(--m-on-gold);
+    font-size: 0.62rem;
+    font-weight: 800;
+}
+
+.m-standings__bot {
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--m-ink-3);
+}
+
+.m-standings__delta { display: inline-flex; align-items: center; gap: 0.1rem; margin-right: 0.4rem; font-size: 0.75rem; }
+.m-standings__delta--up   { color: #34d399; }
+.m-standings__delta--down { color: var(--m-danger); }
+.m-standings__delta--flat { color: var(--m-ink-3); }
+
+/* ---------------------------------------------------------------------------
+   Profile, cosmetics and the sheet contents
+   --------------------------------------------------------------------------- */
+/* The profile hero card, the only card about the player instead of a feature. It has the shell's green
+   background with the light area and a quilted pattern. */
+.m-profile {
+    background:
+        repeating-linear-gradient(45deg,  rgba(255, 255, 255, 0.024) 0 1px, transparent 1px 17px),
+        repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.024) 0 1px, transparent 1px 17px),
+        radial-gradient(ellipse 90% 70% at 22% 0%, var(--ground-pool), transparent 70%),
+        linear-gradient(160deg, var(--surface-lift) 0%, var(--surface) 58%, var(--ground) 100%);
+}
+
+.m-profile__id {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.7rem, 3.6cqw, 1.15rem);
+}
+
+/* The portrait medallion: the shared medallion (app.css, .medallion) at the plate's size, with a lozenge at
+   the top and bottom. The lozenges are on a child element, because the medallion uses ::after for its
+   light. */
+.m-profile__medallion {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    padding: 0.62rem;
+}
+
+.m-profile__pips {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.m-profile__pips::before,
+.m-profile__pips::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    width: 0.66rem;
+    height: 0.66rem;
+    transform: translateX(-50%) rotate(45deg);
+    background: linear-gradient(140deg, var(--gold-light), var(--gold-deep));
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+
+.m-profile__pips::before { top: -0.28rem; }
+.m-profile__pips::after  { bottom: -0.28rem; }
+
+.m-profile__who {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.45rem;
+}
+
+.m-profile__name-edit {
+    align-items: flex-start;
+    max-width: 100%;
+    text-align: left;
+}
+
+.m-profile__name-edit .m-icon {
+    flex: 0 0 auto;
+    margin-top: 0.3rem;
+    color: var(--m-gold);
+}
+
+/* Three sizes, chosen by the name's length (Meta/NamePlate.cs). The plate has a fixed width and a generated
+   name is one long word, so a size that fits a short name would break a long one. */
+.m-profile__name {
+    font-size: clamp(1.3rem, 7cqw, 1.95rem);
+    font-weight: 800;
+    line-height: 1.12;
+    letter-spacing: -0.01em;
+    overflow-wrap: anywhere;
+}
+
+/* The selectors include the base class because NamePlate.cs always renders one of these modifiers together
+   with .m-profile__name. The extra class makes the smaller size win regardless of file order. */
+.m-profile__name.m-nameplate--tight   { font-size: clamp(1.05rem, 5.6cqw, 1.5rem); }
+.m-profile__name.m-nameplate--cramped { font-size: clamp(0.9rem, 4.3cqw, 1.2rem); letter-spacing: 0; }
+
+.m-profile__standing { margin-top: 0.85rem; }
+
+.m-profile__rename { margin-top: 0.9rem; }
+
+/* The server's reply to a rename. The colour repeats what the sentence and the icon say. The message must be
+   easy to spot, because a name that changes back without a visible reason is not acceptable. */
+.m-profile__message {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.6rem;
+}
+
+.m-profile__message .m-icon { flex: 0 0 auto; }
+
+.m-profile__message--ok  { color: var(--m-claim); }
+.m-profile__message--bad { color: var(--m-danger); }
+
+/* The player's record as a panel: the number first, large, with the label under it. */
+.m-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    margin: 0.9rem 0 0;
+    padding: 0.6rem 0.2rem;
+    border: 1px solid var(--hairline);
+    border-radius: var(--m-r);
+    background: rgba(0, 0, 0, 0.34);
+    text-align: center;
+}
+
+.m-stats > div {
+    display: flex;
+    flex-direction: column-reverse;
+    justify-content: flex-end;
+    gap: 0.15rem;
+    padding: 0 0.2rem;
+    border-left: 1px solid var(--hairline);
+}
+
+.m-stats > div:first-child { border-left: 0; }
+
+.m-stats dt { font-size: 0.6rem; letter-spacing: 0.09em; text-transform: uppercase; color: var(--m-ink-3); }
+
+.m-stats dd {
+    margin: 0;
+    font-size: clamp(1.2rem, 6.6cqw, 1.7rem);
+    font-weight: 800;
+    line-height: 1.05;
+    color: var(--m-gold);
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.55);
+}
+
+/* The "how others see you" preview, inset into a panel. It keeps the teal claim accent on purpose, unlike
+   the other cards, and it states a fact rather than offering an action, so it must not look tappable. */
+.m-profile__seen {
+    border-color: rgba(46, 230, 197, 0.32);
+    background: linear-gradient(160deg, rgba(18, 74, 69, 0.48) 0%, var(--surface) 60%, var(--ground) 100%);
+}
+
+.m-profile__seen .m-rule { justify-content: center; margin: 0 0 0.7rem; }
+
+/* A grid instead of a flex row, so the name is at the panel's true centre. The avatar and the standing have
+   different widths, and in a flex row the name would be off-centre by half the difference. */
+.m-profile__seen-panel {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.75rem 0.8rem;
+    border: 1px solid rgba(46, 230, 197, 0.22);
+    border-radius: var(--m-r);
+    background: rgba(0, 0, 0, 0.36);
+}
+
+/* The preview's name plate is narrower than the hero's, between the avatar and the standing, so it uses
+   smaller sizes. */
+.m-profile__seen-panel .m-name {
+    min-width: 0;
+    text-align: center;
+    font-size: clamp(0.95rem, 4.6cqw, 1.3rem);
+    overflow-wrap: anywhere;
+}
+
+/* The selectors include .m-name because PlayerAvatar always renders one of these modifiers with it, and the
+   extra class makes the smaller size win regardless of file order. */
+.m-profile__seen-panel .m-name.m-nameplate--tight   { font-size: clamp(0.85rem, 3.7cqw, 1.05rem); }
+.m-profile__seen-panel .m-name.m-nameplate--cramped { font-size: clamp(0.72rem, 3.1cqw, 0.92rem); }
+
+.m-profile__rank {
+    display: inline-flex;
+    align-items: center;
+    justify-self: end;
+    gap: 0.3rem;
+    color: var(--m-ink-3);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.m-profile__tabs { margin-top: 0.15rem; }
+
+/* The Overview tab is a span, because it is the current page, so it needs the centring a button gets by
+   default. */
+.m-profile__tabs .m-tab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* The shared control rule gives every .m-tab the pointer cursor. The Overview span is not a control, so the
+   cursor is reset here. The span selector leaves button tabs with the pointer. */
+.m-profile__tabs span.m-tab {
+    cursor: default;
+}
+
+/* The rename control is a MetaButton that resets the button's text style as well as its background and
+   border, so the name inside it is styled by the plate around it. */
+.m-name-edit {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.2rem 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-weight: inherit;
+    font-size: inherit;
+}
+
+.m-rename { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+
+.m-input {
+    flex: 1;
+    min-width: 8rem;
+    min-height: 2.75rem;
+    padding: 0 0.7rem;
+    border: 1px solid var(--m-hairline-2);
+    border-radius: var(--m-r-sm);
+    background: rgba(0, 0, 0, 0.35);
+    color: var(--m-ink);
+    font-size: 1rem;
+}
+
+/* The tile is a container, not a control. Its body is the preview button and its action is a separate
+   button. The parts (preview, name, badge, action) are stacked, except on a name effect tile, which is a
+   row. The zero minimum width lets the grid column set the tile's width, so a badge or button that does not
+   wrap cannot widen the column. */
+.m-cosmetic {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    min-width: 0;
+    padding: 0.7rem 0.35rem;
+    border: 1px solid var(--hairline);
+    border-radius: var(--m-r);
+    background: rgba(14, 27, 22, 0.7);
+    color: var(--m-gold);
+}
+
+/* The name effect row: the preview, the name, the badge and the action from left to right, in the same order
+   as the stacked tiles, centred vertically. The row wraps, so in a narrow cell the parts stack instead of
+   the preview overlapping its neighbours. */
+.m-cosmetic--row {
+    flex-flow: row wrap;
+    align-content: center;
+    align-items: center;
+    align-self: stretch;
+    gap: 0.4rem 0.6rem;
+    padding: 0.55rem 0.7rem;
+}
+
+/* The preview control. It is a button, so it keeps the browser's keyboard and pressed behaviour, without
+   the tile's background. */
+.m-cosmetic__body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    width: 100%;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+}
+
+.m-cosmetic--row .m-cosmetic__body {
+    flex-direction: row;
+    flex: 1;
+    justify-content: flex-start;
+    text-align: left;
+}
+
+/* The item preview. The avatar tile shows the icon on a square plate. The frame tile shows the player's own
+   avatar inside the frame. The clip is for the name effect preview, which is rendered text and would
+   otherwise paint over the neighbouring elements. */
+.m-cosmetic__figure {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    min-height: 40px;
+    overflow: hidden;
+}
+
+.m-cosmetic--row .m-cosmetic__figure {
+    flex: 1 1 auto;
+    justify-content: flex-start;
+}
+
+/* The name effect preview uses the tile's text size, not the name plate's display size. */
+.m-cosmetic .m-cosmetic__effect { font-size: 1rem; }
+
+/* The plain effect sets no colour and inherits it from its container, which is how a plain name turns gilt
+   on the viewer's own standings row. Inside a gold tile it would look like the amber effect, so here it
+   uses the normal text colour. The selector includes the effect class so it affects no other effect. */
+.m-cosmetic__effect.m-name--name-plain { color: var(--m-ink); }
+
+.m-cosmetic--previewed {
+    border-color: var(--m-claim);
+    box-shadow: 0 0 0 1px var(--m-claim);
+}
+
+/* The item name on one line. The full name is shown in the preview card. */
+.m-cosmetic__name {
+    overflow: hidden;
+    max-width: 100%;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--m-ink);
+    text-align: center;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.m-cosmetic--row .m-cosmetic__name {
+    flex: 0 0 auto;
+    text-align: left;
+}
+
+/* The state chip, centred between the name above and the action below. The tile-scoped selector overrides
+   the tag's own align-self. Inside a square tile, the tag's tracking and padding are reduced to fit. The row
+   layout keeps the default tag size. */
+.m-cosmetic .m-cosmetic__badge {
+    align-self: center;
+    padding: 0.15rem 0.45rem;
+    font-size: 0.58rem;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+}
+
+.m-cosmetic--row .m-cosmetic__badge {
+    padding: 0.25rem 0.7rem;
+    font-size: 0.66rem;
+    letter-spacing: 0.14em;
+}
+
+/* The chip's content, an icon and a word. The chip's flex gap has only this one child to space, so the gap
+   between the icon and the word is set here. */
+.m-cosmetic__badge-state {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+}
+
+/* The tile's action button, smaller than the Sm size, because the square tile is narrow on a phone. */
+.m-cosmetic .m-btn--sm {
+    min-height: 1.9rem;
+    padding: 0.15rem 0.45rem;
+    gap: 0.2rem;
+    font-size: 0.62rem;
+}
+
+.m-cosmetic .m-btn--sm .m-icon {
+    width: 12px;
+    height: 12px;
+}
+
+/* A fixed number of grid columns per cosmetic slot, never auto-fit, because with auto-fit the column count
+   and the width of a last lone tile would depend on the catalogue size. A last row with fewer tiles keeps
+   normal-width tiles, and a lone tile is never stretched. */
+.m-cosmetics-grid {
+    display: grid;
+    gap: var(--m-gap);
+}
+
+.m-cosmetics-grid--avatar     { grid-template-columns: repeat(4, 1fr); }
+.m-cosmetics-grid--frame      { grid-template-columns: repeat(3, 1fr); }
+.m-cosmetics-grid--nameeffect { grid-template-columns: 1fr; }
+
+/* The preview card: one centred column with the avatar, the state chip, the name, the flavour text and the
+   action. The children have no margins of their own, and the card sets the spacing. The extra top and bottom
+   padding leaves room for the frame, which is drawn larger than the avatar. The card scrolls with the page
+   and nothing in it is sticky. */
+.m-cosmetic-preview {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1.4rem var(--m-pad) 1.15rem;
+    text-align: center;
+}
+
+.m-cosmetic-preview > * { margin: 0; }
+
+.m-cosmetic-preview .m-card__row { flex-direction: column; gap: 0.55rem; }
+
+.m-cosmetic-preview .m-card__title { margin-top: 0.2rem; }
+
+.m-cosmetic-preview .m-card__actions { margin: 0.4rem 0 0; justify-content: center; width: 100%; }
+
+.m-cosmetic-preview .m-card__actions .m-btn { flex: 0 1 auto; min-width: 9rem; }
+
+.m-clock__soon-word { font-size: 0.78rem; }
+
+/* ===========================================================================
+   Decorative components
+   Medallions, engraved section rules, the step ladders, the gold keys and the Play hero. They are CSS and
+   inline SVG built from the tokens, with no bitmaps, so the look can be changed by editing the tokens
+   (docs/meta-shell.md, "Styles and design tokens").
+   =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   Emblems
+   A feature's icon is drawn on a medallion (app.css, .medallion) instead of on its own. An accent colours
+   the disc to show its meaning. The ring and the light stay the medallion's.
+   --------------------------------------------------------------------------- */
+.m-emblem {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: var(--m-emblem-size, 3.25rem);
+    height: var(--m-emblem-size, 3.25rem);
+    color: var(--med-ink, var(--gold));
+}
+
+/* An accent changes the disc colours and the icon colour. The ring and the light are the same on every
+   accent. */
+.m-emblem--claim    { --med-hi: #17605a; --med-lo: #06231f; --med-ink: var(--claim); }
+.m-emblem--live     { --med-hi: #58256f; --med-lo: #1c0b2c; --med-ink: #f0abfc; }
+.m-emblem--progress { --med-hi: #1d3f86; --med-lo: #0a1533; --med-ink: #93c5fd; }
+.m-emblem--gold     { --med-hi: #8f6a24; --med-lo: #2c1c07; --med-ink: var(--gold-light); }
+
+/* A locked emblem is grey with no gilt ring, because gold is reserved for meaning. */
+.m-emblem--locked {
+    --med-hi: #2a3350;
+    --med-lo: #0c1122;
+    --med-ring: 0 0 0 2px var(--hairline-strong);
+    --med-ink: var(--ink-3);
+}
+
+.m-emblem--lg { --m-emblem-size: 4.5rem; }
+.m-emblem--xl { --m-emblem-size: 6rem; }
+.m-emblem--sm { --m-emblem-size: 2.5rem; }
+
+/* ---------------------------------------------------------------------------
+   The engraved rule
+   A section heading drawn as a line with a lozenge on each side, used to separate sections without adding a
+   card.
+   --------------------------------------------------------------------------- */
+.m-rule {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.5rem 0 0.1rem;
+    color: var(--m-gold);
+    /* The line uses the gilt line token (--line-gilt), the same as the header plate's lines and the .strip
+       ring. A rule with an accent draws its line in the accent colour at reduced opacity. */
+    --m-rule-line: var(--line-gilt);
+}
+
+/* Aligned to the start of the card, as an eyebrow: the words first, and one line to the right. The centred
+   rule is for a section heading in the middle of a screen. */
+.m-rule--start { margin-top: 0; }
+.m-rule--start .m-rule__line:first-of-type,
+.m-rule--start .m-rule__gem:first-of-type { display: none; }
+
+.m-rule--claim { color: var(--m-claim); --m-rule-line: currentColor; }
+.m-rule--live  { color: var(--m-live);  --m-rule-line: currentColor; }
+
+.m-rule__line {
+    flex: 1 1 0;
+    min-width: 0.75rem;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--m-rule-line));
+}
+
+.m-rule__line:last-child { background: linear-gradient(270deg, transparent, var(--m-rule-line)); }
+
+/* The gilt token already includes transparency, so the default line needs no opacity. An accent line uses
+   currentColor, which is opaque, so it gets its opacity here. */
+.m-rule--claim .m-rule__line,
+.m-rule--live .m-rule__line { opacity: 0.5; }
+
+.m-rule__gem {
+    flex: 0 0 auto;
+    width: 0.4rem;
+    height: 0.4rem;
+    transform: rotate(45deg);
+    background: currentColor;
+    opacity: 0.85;
+}
+
+.m-rule__label {
+    flex: 0 0 auto;
+    /* The eyebrow style (app.css, .pnl__eyebrow). The colour is inherited from the rule, gold by default or
+       the accent colour, so the label and its line match. */
+    font-family: var(--font-display);
+    font-size: 0.58rem;
+    letter-spacing: 0.24em;
+    text-indent: 0.24em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------------
+   The ladder
+   One component for the daily streak's milestones and for the first-week event's days. The features differ
+   in text and routes but share this drawing of steps with a current position.
+   --------------------------------------------------------------------------- */
+/* An ordered list for screen readers, drawn without list bullets. */
+.m-rail {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    width: 100%;
+    margin: 0.35rem 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.m-rail__step {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+/* The connector line, drawn behind the step it leads to. It is lit when the previous step is done, so the
+   completed steps form one continuous line. */
+.m-rail__step + .m-rail__step::before {
+    content: "";
+    position: absolute;
+    top: calc(var(--m-rail-node, 2.1rem) / 2 - 1px);
+    right: 50%;
+    left: -50%;
+    height: 2px;
+    background: var(--m-hairline-2);
+}
+
+.m-rail__step--after-done::before { background: rgba(46, 230, 197, 0.55); }
+
+.m-rail__node {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    width: var(--m-rail-node, 2.1rem);
+    height: var(--m-rail-node, 2.1rem);
+    border-radius: var(--m-r-pill);
+    border: 2px solid var(--m-hairline-2);
+    background: rgba(6, 15, 12, 0.9);
+    color: var(--m-ink-3);
+    font-size: 0.85rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+.m-rail__node--done {
+    border-color: var(--m-gold-line);
+    background: radial-gradient(circle at 50% 30%, #14504a, #06231f);
+    color: var(--m-claim);
+}
+
+/* The current step: a gold ring and a glow, and the only step with its number in gold. */
+.m-rail__node--current {
+    border-color: var(--m-gold);
+    background: radial-gradient(circle at 50% 30%, #55351c, #1a1006);
+    color: var(--m-gold-light);
+    box-shadow: 0 0 0 0.22rem rgba(245, 197, 66, 0.16);
+}
+
+.m-rail__node--prize {
+    border-color: var(--m-gold-line);
+    background: radial-gradient(circle at 50% 30%, #58256f, #1c0b2c);
+    color: var(--m-gold);
+}
+
+/* A missed day keeps its number, struck through, instead of a check mark or a lock. The tile below it says
+   "Missed", and the step's accessible text says the same, so the strike-through and the colour are not the
+   only indication. */
+.m-rail__node--missed {
+    border-style: dashed;
+    color: var(--m-ink-3);
+    text-decoration: line-through;
+}
+
+.m-rail__step--missed .m-rail__label { color: var(--m-ink-3); }
+
+.m-rail__label {
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--m-ink-3);
+    text-align: center;
+    white-space: nowrap;
+}
+
+.m-rail__step--current .m-rail__label { color: var(--m-gold); }
+.m-rail__step--done    .m-rail__label { color: var(--m-ink-2); }
+
+/* The value under each step, such as the streak bonus. It is a separate row, so the labels above stay
+   aligned. */
+.m-rail-values {
+    display: flex;
+    gap: 0.3rem;
+    margin-top: 0.5rem;
+}
+
+.m-rail-value {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2rem;
+    padding: 0.3rem 0.15rem;
+    border: 1px solid var(--hairline);
+    border-radius: var(--m-r-pill);
+    background: rgba(0, 0, 0, 0.3);
+    font-size: 0.72rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--m-ink-2);
+    white-space: nowrap;
+}
+
+.m-rail-value--current {
+    border-color: rgba(46, 230, 197, 0.55);
+    background: rgba(46, 230, 197, 0.12);
+    color: var(--m-claim);
+}
+
+/* ---------------------------------------------------------------------------
+   Chips
+   A small labelled value, such as a streak, a phase, a bonus or a lock reason. Unlike a badge, a chip always
+   carries a value. The background and ring come from .strip, which the element also has. The transparent
+   border keeps the chip's size, and the .strip ring is the visible edge.
+   --------------------------------------------------------------------------- */
+.m-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.6rem;
+    border: 1px solid transparent;
+    border-radius: var(--m-r-pill);
+    color: var(--m-ink-2);
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+/* An accent chip colours only its ring and its text. The background stays the .strip background. */
+.m-chip--claim { box-shadow: 0 0 0 1px rgba(46, 230, 197, 0.5), var(--shadow-brass-lit); color: var(--m-claim); }
+.m-chip--live  { box-shadow: 0 0 0 1px rgba(232, 121, 249, 0.5), var(--shadow-brass-lit); color: var(--m-live-light); }
+.m-chip--gold  { box-shadow: 0 0 0 1px var(--line-gilt), var(--shadow-brass-lit); color: var(--m-gold); }
+
+/* The streak block on the Next-up card: the count, large, with its unit written out. */
+.m-stat-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.05rem;
+    flex: 0 1 auto;
+    min-width: 0;
+    padding: 0.45rem 0.7rem;
+    border: 1px solid var(--hairline);
+    border-radius: var(--m-r);
+    background: rgba(0, 0, 0, 0.3);
+}
+
+/* The caption can wrap. A caption such as "Ready to claim" is wider than the number under it, and on one
+   line it would push the row past the card's clipped edge. */
+.m-stat-block__cap {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--m-gold);
+    text-align: center;
+    text-wrap: balance;
+}
+
+.m-stat-block__value {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 1.5rem;
+    font-weight: 800;
+    line-height: 1.05;
+    font-variant-numeric: tabular-nums;
+    color: var(--m-ink);
+}
+
+.m-stat-block__unit { font-size: 0.68rem; color: var(--m-ink-3); }
+
+/* ---------------------------------------------------------------------------
+   Keys
+   The gold key is the screen's primary action, and a screen has at most one. It has a bevel, a rim and a top
+   highlight.
+   --------------------------------------------------------------------------- */
+.m-btn--key {
+    position: relative;
+    border-radius: var(--m-r-pill);
+    border: 2px solid var(--m-gold-deep);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.75),
+        inset 0 -0.35rem 0.5rem -0.3rem rgba(120, 70, 0, 0.65),
+        0 0.4rem 1rem -0.4rem rgba(0, 0, 0, 0.9);
+    overflow: hidden;
+}
+
+.m-btn--block { width: 100%; max-width: 22rem; }
+
+.m-btn--lg {
+    min-height: 3.25rem;
+    font-size: 1.05rem;
+}
+
+/* ---------------------------------------------------------------------------
+   The hero banner: the game's logo and the Play button
+   The turning card, the title and the four suits are decoration. The key and the help button are the
+   controls. Every animation is a transform or an opacity, because a player can leave this screen open for a
+   long time.
+   --------------------------------------------------------------------------- */
+.m-hero {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.55rem;
+    width: 100%;
+    min-height: 19rem;
+    padding: var(--m-pad);
+    padding-top: 3.4rem;
+    border: 1px solid var(--m-gold-line);
+    border-radius: var(--m-r-lg);
+    background:
+        radial-gradient(ellipse 70% 46% at 50% 92%, #6d1526 0%, #360a15 45%, transparent 100%),
+        radial-gradient(ellipse 120% 62% at 50% 0%, var(--ground-pool) 0%, transparent 62%),
+        var(--ground);
+    overflow: hidden;
+    /* The 3D perspective for the turning card, set once on the parent. */
+    perspective: 700px;
+}
+
+/* The help button in the plate's top-right corner, which opens the rules summary. It is the smallest control
+   on the screen, but not smaller than the shell's 44px touch target minimum. */
+.m-hero__help {
+    position: absolute;
+    top: 0.7rem;
+    right: 0.7rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 50%;
+    border: 1px solid var(--m-gold-line);
+    background: rgba(6, 10, 24, 0.55);
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.m-hero__help:hover,
+.m-hero__help:focus-visible {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--gold);
+}
+
+/* The turning card.
+
+   The animation changes only `transform`, so nothing is repainted. `will-change` creates the compositor
+   layer in advance, and the perspective on the parent sets up the 3D context once.
+
+   The card rotates without moving along the Z axis. The glyph is a colour emoji bitmap, and a Z translation
+   under perspective would scale it and make the browser rasterise it again on every frame. */
+.m-hero__mark {
+    font-size: 3.5rem;
+    line-height: 1;
+    backface-visibility: hidden;
+    will-change: transform;
+    animation: m-logo-turn 6s ease-in-out infinite;
+}
+
+@keyframes m-logo-turn {
+    0%, 100% { transform: translate3d(0, 3px, 0)  rotateY(-14deg) rotateX(-3deg) rotateZ(-1.5deg); }
+    50%      { transform: translate3d(0, -3px, 0) rotateY(14deg)  rotateX(3deg)  rotateZ(1.5deg); }
+}
+
+/* The idle loop is decoration, so reduced motion stops it. The card stays in the pose of the first
+   keyframe. */
+@media (prefers-reduced-motion: reduce) {
+    .m-hero__mark {
+        animation: none;
+    }
+}
+
+.m-hero__wordmark {
+    font-size: 2.25rem;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+/* The four suits under the title. Decorative only. The rules summary behind the help button explains the
+   game. */
+.m-hero__suits {
+    display: flex;
+    gap: 0.7rem;
+    font-size: 0.95rem;
+    line-height: 1;
+    color: var(--text-muted);
+}
+
+.m-hero__suits span:nth-child(2),
+.m-hero__suits span:nth-child(3) {
+    color: var(--card-red);
+}
+
+.m-hero__key {
+    flex-direction: column;
+    gap: 0.05rem;
+    width: min(18rem, 86%);
+    min-height: 4.4rem;
+    padding: 0.55rem 1.1rem;
+}
+
+.m-hero__play {
+    font-size: 2.1rem;
+    line-height: 1;
+    letter-spacing: 0.14em;
+}
+
+/* The caption is inside the plate under the key, so it reads as part of the key and not as a caption for
+   the picture. */
+.m-hero__sub {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--m-on-gold);
+    opacity: 0.78;
+}
+
+/* The decorative diamonds on each side of the caption. */
+.m-hero__sub::before,
+.m-hero__sub::after {
+    content: "";
+    width: 0.28rem;
+    height: 0.28rem;
+    transform: rotate(45deg);
+    background: currentColor;
+}
+
+/* The message shown under the key when matchmaking fails. */
+.m-hero__unavailable {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--danger);
+}
+
+/* The rules summary. */
+.m-rules {
+    max-width: 22rem;
+    padding: 0.9rem 1.1rem;
+    border-radius: var(--m-r);
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.55;
+}
+
+/* The summary inside a raised panel. The help dialog marks it with .pnl--prose, and the summary's own card
+   styling is removed, because the panel already provides it. */
+.pnl--prose .m-rules {
+    border: none;
+    background: transparent;
+    padding: 0;
+    max-width: none;
+}
+
+.m-rules p {
+    margin: 0.15rem 0;
+}
+
+.m-rules__lead {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.m-rules__close {
+    display: block;
+    margin: 1rem auto 0;
+}
+
+/* The light band that moves across the key. Only transform is animated, so it is composited. It is a sweep
+   rather than a pulse, because a pulsing button looks like an alarm. */
+.m-btn--key::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -60%;
+    width: 45%;
+    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+    transform: translateX(0);
+    animation: m-sweep 4.5s var(--m-ease) infinite;
+    pointer-events: none;
+}
+
+@keyframes m-sweep {
+    0%,  55% { transform: translateX(0); opacity: 0; }
+    60%      { opacity: 1; }
+    100%     { transform: translateX(370%); opacity: 0; }
+}
+
+/* ---------------------------------------------------------------------------
+   Cards, continued: the tall featured card
+   A hub's first card stacks its content, because the countdown, the progress bar and the key do not fit
+   next to an emblem on a phone.
+   --------------------------------------------------------------------------- */
+.m-card--tall { padding: var(--m-pad); }
+
+.m-card__head {
+    display: flex;
+    align-items: center;
+    gap: var(--m-gap);
+}
+
+.m-card__head .m-card__grow { display: flex; flex-direction: column; gap: 0.2rem; }
+
+/* The key is centred with a maximum width instead of stretched across the card. */
+.m-card__foot {
+    display: flex;
+    justify-content: center;
+    margin-top: 0.75rem;
+}
+
+/* A chip next to the key, such as the spin's token cost or a tile's price, is centred vertically, spaced from
+   the key, and kept on one line. Otherwise the flex row would make it wrap while the key keeps its width. */
+.m-card__foot .m-chip {
+    align-self: center;
+    margin-right: 0.6rem;
+    white-space: nowrap;
+}
+
+.m-card__headline {
+    display: block;
+    margin: 0;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.5rem;
+    line-height: 1.1;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--gold-light);
+    /* The .ts-engraved text shadow from app.css. */
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.85), 0 -1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* An inset panel inside a card, such as the reward showcase, the day ladder or the grand prize. It is darker
+   than the card, so the card still reads as one object. */
+.m-inset {
+    margin-top: 0.6rem;
+    padding: 0.7rem;
+    border: 1px solid var(--hairline);
+    border-radius: var(--m-r);
+    background: rgba(6, 15, 12, 0.42);
+}
+
+.m-inset--gold { border-color: var(--m-gold-line); }
+
+.m-card__eyebrow-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--m-gap);
+}
+
+/* A feature name tag: the .strip background (the element also has the class) with the display font in
+   tracked capitals. The transparent border keeps the tag's size, and the .strip ring is the visible edge. */
+.m-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    align-self: flex-start;
+    padding: 0.25rem 0.7rem;
+    border: 1px solid transparent;
+    border-radius: var(--m-r-pill);
+    color: var(--m-gold);
+    font-family: var(--font-display);
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+/* A quiet tag for a status sentence, such as "Competition not available yet". It uses sentence case, normal
+   tracking and the body font, because the text is a sentence, not a heading. The background is the same as
+   .m-tag. Only the text differs. */
+.m-tag--quiet {
+    color: var(--m-ink-2);
+    font-family: var(--font-body);
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    text-transform: none;
+}
+
+/* The claim accent tag, for a state the player already has. Like the claim chip, only the ring and the text
+   are coloured, and the tag's text always states the meaning. */
+.m-tag--claim { box-shadow: 0 0 0 1px rgba(46, 230, 197, 0.5), var(--shadow-brass-lit); color: var(--m-claim); }
+
+/* ---------------------------------------------------------------------------
+   Reward showcase
+   Used by the reward reveal and the "today's reward" panel: the currency icon on its medallion, the amount
+   in large type, and the unit under it.
+   --------------------------------------------------------------------------- */
+.m-rewards--showcase {
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    margin: 0;
+}
+
+.m-rewards--showcase .m-reward-item {
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.35rem 0.5rem;
+    border: 0;
+    background: transparent;
+    text-align: center;
+}
+
+.m-rewards--showcase .m-reward-item__amount { font-size: 1.35rem; line-height: 1.1; }
+.m-rewards--showcase .m-reward-item__label  { font-size: 0.7rem; color: var(--m-gold); }
+
+/* The large showcase used by the reveal: the items are the main content of the screen, and the amounts are
+   sized for the available width. The same medallion, plus sign and order as the preview. */
+.m-rewards--hero {
+    align-items: center;
+    justify-content: center;
+    gap: 0.9rem;
+    margin: 0;
+}
+
+.m-rewards--hero .m-reward-item {
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    text-align: center;
+}
+
+.m-rewards--hero .m-reward-item__amount { font-size: 2.2rem; line-height: 1.1; }
+.m-rewards--hero .m-reward-item__label  { font-size: 0.85rem; color: var(--m-gold); }
+
+/* The plus sign between two rewards. Hidden from screen readers, which read the items themselves. */
+.m-rewards__plus {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: var(--m-r-pill);
+    border: 1px solid var(--hairline);
+    color: var(--m-ink-3);
+    font-weight: 800;
+}
+
+/* ---------------------------------------------------------------------------
+   Goal rows
+   One row per goal or mission: emblem, name, count, reward and one control. On a phone the control moves to
+   its own line instead of wrapping the name. In a goal list, the rows have one gap between them and a
+   hairline above every row but the first.
+   --------------------------------------------------------------------------- */
+.m-goal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    margin-top: 0.6rem;
+}
+
+.m-goal-list > .m-goal + .m-goal {
+    padding-top: 0.65rem;
+    border-top: 1px solid var(--hairline);
+}
+
+.m-goal {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.m-goal__body { flex: 1 1 auto; min-width: 0; }
+
+.m-goal .m-btn { flex: 0 0 auto; }
+
+/* The count and the reward are under the name instead of beside it. Three content columns and a control do
+   not fit across a phone, and the name must not wrap. */
+.m-goal__meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.2rem;
+}
+
+.m-goal__meta .m-rewards { margin: 0; }
+
+.m-goal__title {
+    display: block;
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.m-goal__count {
+    font-size: 0.8rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--m-ink-3);
+}
+
+.m-goal--complete .m-goal__count { color: var(--m-claim); }
+
+/* The row's state in words. The colour and the emblem alone cannot tell a locked day from a missed one, and
+   meaning must never depend on them alone. */
+.m-goal__note {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 0.8rem;
+    color: var(--m-ink-3);
+}
+
+.m-goal--complete .m-goal__note { color: var(--m-claim); }
+
+/* The control on a list row: full height, still a 44px touch target, and narrower, because the row also
+   holds a name. */
+.m-btn--sm {
+    padding: 0 0.7rem;
+    font-size: 0.85rem;
+}
+
+/* ---------------------------------------------------------------------------
+   The wheel
+   The pointer is fixed and the face rotates under it, so a spin is one transform on one element and
+   reduced motion shows only its end position.
+   --------------------------------------------------------------------------- */
+.m-wheel {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: min(16rem, 70cqw);
+    aspect-ratio: 1;
+    margin: 0.25rem auto 0;
+}
+
+.m-wheel__face {
+    width: 100%;
+    height: 100%;
+    /* The resting angle. The face keeps the angle it stopped at, so closing the result does not move it and
+       the next spin starts from there. */
+    transform: rotate(var(--m-wheel-rest, 0deg));
+    filter: drop-shadow(0 0.6rem 1.4rem rgba(0, 0, 0, 0.85));
+}
+
+.m-wheel__pointer {
+    position: absolute;
+    top: -0.35rem;
+    left: 50%;
+    transform: translateX(-50%);
+    color: var(--m-gold);
+    filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.8));
+}
+
+/* ---------------------------------------------------------------------------
+   Screen states, drawn as panels
+   Each state shows an explanation. The loading state has the shape of the cards it replaces, so nothing
+   moves when the data arrives.
+   --------------------------------------------------------------------------- */
+.m-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 2rem var(--m-pad);
+    border: 1px solid var(--hairline);
+    border-radius: var(--m-r);
+    background: var(--grad-panel);
+    text-align: center;
+    color: var(--m-ink-2);
+}
+
+.m-state__title { margin: 0; font-size: 1.05rem; font-weight: 700; color: var(--m-ink); }
+.m-state__note  { margin: 0; font-size: 0.86rem; max-width: 26rem; }
+
+/* The loading skeleton has a card's shape: an emblem, two lines and a control. */
+.m-state--loading {
+    padding: 0;
+    border: 0;
+    background: none;
+    gap: var(--m-gap);
+}
+
+.m-skeleton-card {
+    display: flex;
+    align-items: center;
+    gap: var(--m-gap);
+    width: 100%;
+    padding: var(--m-pad);
+    border: 1px solid var(--hairline);
+    border-radius: var(--m-r);
+    background: var(--grad-panel);
+}
+
+.m-skeleton-card__lines { flex: 1; display: flex; flex-direction: column; gap: 0.45rem; }
+
+/* A short note, used for the spin wheel's promise line and a refused spin. */
+.m-note {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0;
+    padding: 0.85rem var(--m-pad);
+    border: 1px solid var(--hairline);
+    border-radius: var(--m-r);
+    background: rgba(14, 27, 22, 0.55);
+    color: var(--m-ink-2);
+    font-size: 0.86rem;
+    line-height: 1.35;
+}
+
+/* The "Claimed, come back tomorrow" state: a check mark, the text, and when the next claim opens. */
+.m-done {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid rgba(46, 230, 197, 0.35);
+    border-radius: var(--m-r);
+    background: rgba(46, 230, 197, 0.08);
+}
+
+/* Shown next to the route buttons in one card foot. It uses the buttons' corner radius instead of the card's,
+   so the two read as one group, and it has no top margin, because the foot provides the space above them and
+   two stretched flex items only have the same height when their block margins match. */
+.m-done--paired { margin-top: 0; border-radius: var(--m-r-sm); }
+
+.m-done__body { min-width: 0; }
+.m-done__title { display: block; font-weight: 700; color: var(--m-claim); }
+.m-done__note  { display: block; margin-top: 0.1rem; font-size: 0.82rem; color: var(--m-ink-2); }
+
+/* ---------------------------------------------------------------------------
+   Shortcuts, in the medallion style
+   --------------------------------------------------------------------------- */
+.m-shortcut {
+    gap: 0.4rem;
+    padding: 0.65rem 0.35rem;
+    background: linear-gradient(180deg, rgba(19, 41, 31, 0.75), rgba(14, 27, 22, 0.75));
+}
+
+.m-shortcut span { text-align: center; line-height: 1.15; }
+
+/* ---------------------------------------------------------------------------
+   The hub
+   A hub is a flex container with its own gap, because the column's gap applies only to the column's direct
+   children and the hub is one of them. Without it, the hub's cards would touch.
+   --------------------------------------------------------------------------- */
+.m-hub {
+    display: flex;
+    flex-direction: column;
+    gap: var(--m-gap);
+}
+
+/* Reduced motion removes the key's light sweep layer. The blanket rule above already stops its animation,
+   and this also removes the layer, so the band is not left in the middle of the key. */
+@media (prefers-reduced-motion: reduce) {
+    .m-btn--key::after { display: none; }
+}
+
+/* Visually hidden text for screen readers. Used where a state is shown as a shape, such as a check mark or a
+   gold ring. */
+.u-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
+
+
+/* ---------------------------------------------------------------------------
+   The Next-up card body and the live event teaser
+   Both have the content on the left, the emblem in the middle and the button on the right, and both must fit
+   on a narrow phone with a three-digit number.
+   --------------------------------------------------------------------------- */
+.m-card__title--lead {
+    margin-top: 0.25rem;
+    font-size: 1.35rem;
+}
+
+/* A card has overflow: hidden for its rounded corners, so a card that clips its own button does not show up
+   as document overflow in tests. To prevent clipping, the row wraps, the figure shrinks, and its caption can
+   wrap. */
+.m-next {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--m-gap);
+    margin-top: 0.7rem;
+}
+
+.m-next .m-emblem { margin-right: auto; }
+.m-next .m-btn { flex: 0 0 auto; }
+
+/* On a very narrow screen, the emblem is hidden first. The number and the key are kept. */
+@container (max-width: 21.5rem) {
+    .m-next .m-emblem { display: none; }
+}
+
+.m-live {
+    display: flex;
+    align-items: stretch;
+    gap: 0.6rem;
+    margin-top: 0.35rem;
+}
+
+/* These sizes let the activity's name fit on one line on a narrow phone. The emblem and the aside are
+   smaller, because a wrapped name is harder to read. */
+.m-live .m-emblem { --m-emblem-size: 2.9rem; }
+.m-live .m-card__head { gap: 0.6rem; }
+.m-live__aside .m-clock { font-size: 0.76rem; }
+
+.m-live__main { flex: 1 1 auto; min-width: 0; }
+
+.m-live__points {
+    display: block;
+    margin-top: -0.15rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: #f0abfc;
+}
+
+/* The countdown and the reward, separated from the activity by a vertical hairline. The column is narrow, so
+   the activity's name keeps as much width as possible. The button is a small control at the bottom of the
+   column, right-aligned. */
+.m-live__aside {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    padding-left: 0.6rem;
+    border-left: 1px solid var(--hairline);
+}
+
+.m-live__aside .m-btn {
+    align-self: flex-end;
+    margin-top: auto;
+}
+
+/* The live card's title is one step smaller than the shell's card title, so a title such as "Weekly Table
+   Challenge" fits on one line. */
+.m-live .m-card__title { font-size: 0.95rem; line-height: 1.2; }
+.m-live .m-card__note  { font-size: 0.78rem; }
+
+/* The offer teaser's price and View button, in a right-hand column like the live teaser's aside. The column
+   is only as wide as its widest item, so the text keeps the rest. margin-left: auto puts the column at the
+   row's right edge, which the card row's last-button rule cannot do here because the row's last child is
+   the column. The items stretch to one width, so the chip and the button line up with the card's padding. */
+.m-teaser__aside {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.35rem;
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding-left: 0.6rem;
+    border-left: 1px solid var(--hairline);
+}
+
+.m-teaser__aside .m-chip { justify-content: center; white-space: nowrap; }
+.m-teaser__aside .m-btn  { width: 100%; }
+
+/* A long title wraps between words in the space the aside leaves, and the aside stays vertically centred. */
+.m-teaser .m-card__title { font-size: 0.95rem; line-height: 1.2; overflow-wrap: anywhere; }
+.m-teaser .m-card__note  { font-size: 0.78rem; }
+
+/* The grand prize, shown next to the days instead of at the end of them, because the last day's step is a
+   marker, not a preview of the prize. */
+.m-prize {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    flex: 0 0 auto;
+    max-width: 9.5rem;
+    padding: 0.6rem;
+    border: 1px solid var(--m-gold-line);
+    border-radius: var(--m-r);
+    background: rgba(0, 0, 0, 0.32);
+    text-align: center;
+}
+
+.m-prize__cap {
+    font-size: 0.6rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--m-gold);
+}
+
+.m-prize .m-rewards { justify-content: center; margin: 0; }
+
+/* One spin that stops on the sector the server chose. Only transform is animated, and it does not loop. The
+   component sets the angles and the duration as custom properties: the angles depend on the result, and
+   tests shorten the duration. */
+.m-wheel__face--spinning {
+    animation: m-spin var(--m-wheel-ms, 2800ms) cubic-bezier(0.22, 0.9, 0.16, 1) 1 both;
+}
+
+/* The spin starts at the resting angle, which is also the face's transform without the animation. The end
+   angle is the resting angle plus whole turns and the sector angle, so the last frame matches the new resting
+   angle and nothing jumps when the class is removed.
+
+   Both fallbacks are the start angle, so a face without the angles set does not turn at all. */
+@keyframes m-spin {
+    from { transform: rotate(var(--m-wheel-rest, 0deg)); }
+    to   { transform: rotate(var(--m-wheel-to, 0deg)); }
+}
+
+/* The amount on a wedge. Never abbreviated, so the player can check it against the odds table. */
+.m-wheel__amount {
+    fill: var(--m-ink);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+/* The icon above the amount. Cream on the wedge's dark fill. The jackpot wedge is gold, and its icon is
+   darkened below. */
+.m-wheel__icon {
+    color: #fff6d8;
+}
+
+/* The tier colours. The jackpot's amount is dark on gold, the blank's skull is grey on near-black, and the
+   spin-again arrow is the live pink. The jackpot's icon is coloured through `color` only, because MetaIcon
+   draws with currentColor and a `fill` here would override the icon's fill="none" and fill its outlines.
+   These rules come before the winning wedge rules below, so a winning wedge keeps its own styles. */
+[data-tier="rare"] .m-wheel__amount { fill: #2a1a05; }
+
+[data-tier="rare"] .m-wheel__icon { color: #2a1a05; }
+
+[data-tier="nothing"] .m-wheel__icon { color: #9a9aa6; }
+
+[data-tier="spinagain"] .m-wheel__icon { color: #f0abfc; }
+
+/* The jackpot has a bright rim stroke even when not won, brighter than the other wedges' hairline. The
+   child combinator limits it to the wedge path, not the icon's paths inside the sector. */
+[data-tier="rare"] > path {
+    stroke: #fff6d8;
+    stroke-opacity: 0.9;
+}
+
+/* The winning wedge is lit. The pointer, this highlight and the result text all show the result, so none of
+   them is the only indication. The child combinator limits the highlight to the wedge path, so the icon
+   keeps its colour. */
+.m-wheel__sector--won > path {
+    stroke: var(--m-gold);
+    stroke-opacity: 1;
+    stroke-width: 2;
+    filter: brightness(1.45);
+}
+
+.m-wheel__sector--won .m-wheel__amount { fill: #fff6d8; }
+
+/* A won jackpot keeps its dark amount text, because the winning wedge's cream text would have too little
+   contrast on gold. The lit fill and stroke show the win instead. */
+.m-wheel__sector--won[data-tier="rare"] .m-wheel__amount {
+    fill: #2a1a05;
+}
+
+/* The hit animation, played by the winning sector between the end of the spin and the reveal: a gold flash
+   with sparks for a prize, a bounce for spin-again, and a tremble for a blank. The component sets the duration
+   as one custom property, so tests can shorten it. The keyframes end on the lit wedge's resting values, so
+   the animation ends on the picture the reveal opens over.
+
+   The bounce and the tremble run on the container, never on the face, because the face's transform holds the
+   resting angle. The flashes use the child combinator like the winning wedge rules above, so the icon keeps
+   its colour. */
+.m-wheel--hit-reward .m-wheel__sector--won > path {
+    animation: m-wheel-flash-gold var(--m-wheel-hit-ms, 520ms) ease-out 1;
+}
+
+@keyframes m-wheel-flash-gold {
+    0%   { filter: brightness(2.4) saturate(1.4); }
+    60%  { filter: brightness(1.7); }
+    100% { filter: brightness(1.45); }
+}
+
+/* The prize sparks, one per eighth of a turn, from under the pointer tip. They are rendered only during the
+   hit animation. The rotation is applied after the centring translate, so each spark moves outward along
+   its own radius. */
+.m-wheel__spark {
+    position: absolute;
+    top: -0.2rem;
+    left: 50%;
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 50%;
+    background: var(--m-gold);
+    animation: m-wheel-spark var(--m-wheel-hit-ms, 520ms) cubic-bezier(0.16, 1, 0.3, 1) 1 both;
+}
+
+@keyframes m-wheel-spark {
+    from { transform: translate(-50%, 0) scale(1); opacity: 1; }
+    to   { transform: translate(-50%, 0) rotate(var(--spark-a, 0deg)) translateY(-2.6rem) scale(0.2); opacity: 0; }
+}
+
+/* The spin-again bounce: one overshoot and back. The wedge stroke is pink for the whole hit animation (the
+   static stroke rule below), and returns to the lit gold at the end. */
+.m-wheel--hit-respin {
+    animation: m-wheel-bounce var(--m-wheel-hit-ms, 520ms) cubic-bezier(0.34, 1.56, 0.64, 1) 1;
+}
+
+@keyframes m-wheel-bounce {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.045); }
+    100% { transform: scale(1); }
+}
+
+.m-wheel--hit-respin .m-wheel__sector--won > path {
+    stroke: #f0abfc;
+    animation: m-wheel-flash-plum var(--m-wheel-hit-ms, 520ms) ease-out 1;
+}
+
+@keyframes m-wheel-flash-plum {
+    0%   { filter: brightness(1.8); }
+    100% { filter: brightness(1.45); }
+}
+
+/* The blank tremble ends early on purpose, and the wheel is still for the rest of the hit animation, so the
+   tremble and the reveal opening are separate. The wedge stroke is grey for the whole animation, and the
+   flash dims the wedge and holds it dim (fill mode both) until the reveal removes the classes. A blank never
+   lights up gold. */
+.m-wheel--hit-blank {
+    animation: m-wheel-tremble calc(var(--m-wheel-hit-ms, 520ms) * 0.6) linear 1;
+}
+
+@keyframes m-wheel-tremble {
+    0%, 100% { transform: translateX(0); }
+    20%      { transform: translateX(-3px); }
+    40%      { transform: translateX(3px); }
+    60%      { transform: translateX(-2px); }
+    80%      { transform: translateX(2px); }
+}
+
+.m-wheel--hit-blank .m-wheel__sector--won > path {
+    stroke: #9a9aa6;
+    animation: m-wheel-flash-dull calc(var(--m-wheel-hit-ms, 520ms) * 0.6) ease-out 1 both;
+}
+
+@keyframes m-wheel-flash-dull {
+    0%   { filter: brightness(1.6); }
+    100% { filter: brightness(1); }
+}
+
+/* The published odds as a table with two columns: the prize and its probability. The total row lets the
+   player check the sum. */
+.m-odds {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 0.75rem;
+    font-size: 0.9rem;
+}
+
+.m-odds th,
+.m-odds td {
+    padding: 0.45rem 0.2rem;
+    text-align: left;
+    border-bottom: 1px solid var(--hairline);
+}
+
+.m-odds th:last-child,
+.m-odds td:last-child { text-align: right; }
+
+.m-odds thead th { color: var(--m-ink-2); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.m-odds tfoot td { font-weight: 700; color: var(--m-gold); border-bottom: 0; }
+
+/* The secondary routes next to the earn-token panel, in the same card foot. They wrap instead of shrinking,
+   so their touch targets keep their size, and they stack when the foot is narrow. The left margin is the gap
+   to the panel. The top margin is zero for the same reason as in .m-done--paired. */
+.m-card__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0;
+    margin-left: 0.6rem;
+}
+
+.m-card__actions .m-btn { flex: 1 1 auto; justify-content: center; }
+
+/* Centred variants, for screens about one object in the middle of the card. */
+.m-card__headline--centred,
+.m-card__note--centred { text-align: center; }
+
+.m-card__headline--centred { margin-top: 0.75rem; }
+
+/* An eyebrow row with a single item keeps that item on the right. */
+.m-card__eyebrow-row--end { justify-content: flex-end; }
+
+
+/* ===========================================================================
+   The reward arrival animation
+   The last step of the shared reward flow (docs/meta-shell.md, "The shared reward flow"): sprites fly from
+   the reward's items into the matching HUD balance. WalletBurstPlan (C#, tested) decides the sprite count,
+   timing, burst points and variation, and wallet-burst.js measures where the reward items and balance chips are.
+   These rules set the burst distance, the shape of the two stages and the look of each currency.
+
+   m-fx-emit moves a sprite out to its burst point, easing out, and m-fx-travel then accelerates it into the
+   chip. The sprites animate only transform and opacity, because there can be many of them at once.
+   =========================================================================== */
+
+/* The layer the animation is drawn on: a fixed layer covering the frame, above everything except the
+   connection shell, so the sprites fly over whatever screen is shown. */
+.m-fx {
+    position: fixed;
+    inset: 0;
+    z-index: var(--layer-meta-fx);
+    overflow: hidden;
+    pointer-events: none;
+}
+
+/* One currency's sprites. The element covers the layer instead of having no size, because its sprites are
+   positioned absolutely. An element with no box cannot be seen by a test and would make the sprites'
+   containing block differ from the element they are measured against. */
+.m-fx__spray {
+    position: absolute;
+    inset: 0;
+}
+
+/* The start and end point of each currency's sprites, from the coordinates wallet-burst.js publishes on the
+   frame. Each currency starts from its own reward item, and falls back to the row centre and then to fixed
+   positions near the reward row and the HUD chips, so without the script the sprites still fly to the HUD. */
+.m-fx__spray--coins {
+    --fx-from-x: var(--m-fx-origin-coins-x, var(--m-fx-origin-x, 50cqw));
+    --fx-from-y: var(--m-fx-origin-coins-y, var(--m-fx-origin-y, 24rem));
+    --fx-to-x:   var(--m-fx-coins-x, 20cqw);
+    --fx-to-y:   var(--m-fx-coins-y, 4rem);
+}
+
+.m-fx__spray--gems {
+    --fx-from-x: var(--m-fx-origin-gems-x, var(--m-fx-origin-x, 50cqw));
+    --fx-from-y: var(--m-fx-origin-gems-y, var(--m-fx-origin-y, 24rem));
+    --fx-to-x:   var(--m-fx-gems-x, 50cqw);
+    --fx-to-y:   var(--m-fx-gems-y, 4rem);
+}
+
+.m-fx__spray--spintokens {
+    --fx-from-x: var(--m-fx-origin-spintokens-x, var(--m-fx-origin-x, 50cqw));
+    --fx-from-y: var(--m-fx-origin-spintokens-y, var(--m-fx-origin-y, 24rem));
+    --fx-to-x:   var(--m-fx-spintokens-x, 80cqw);
+    --fx-to-y:   var(--m-fx-spintokens-y, 4rem);
+}
+
+/* One sprite, positioned only by its transform. The negative margin puts its centre on the transformed
+   point, so a translate is a position, not an offset. */
+.m-fx__sprite {
+    /* The two stages' points. The burst point is a short radial offset from the reward item: --fx-ex and
+       --fx-ey are a unit-circle direction, and --fx-burst is the distance. Both stages use the same two
+       end points, so changing the distance or the item position moves both stages together. */
+    --fx-burst: 4.5rem;
+    --fx-emit-x: calc(var(--fx-from-x) + var(--fx-burst) * var(--fx-ex));
+    --fx-emit-y: calc(var(--fx-from-y) + var(--fx-burst) * var(--fx-ey));
+
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1.35rem;
+    height: 1.35rem;
+    margin: -0.675rem 0 0 -0.675rem;
+    animation-name: m-fx-emit, m-fx-travel;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1), cubic-bezier(0.6, 0, 0.9, 0.5);
+    /* The emit animation has a backwards fill, so the sprite stays hidden at the item during its delay. The
+       travel animation has only a forwards fill, because it animates the same properties as the emit, and a
+       backwards fill would override the emit from the start and keep the sprite at the burst point. The two
+       stages meet at the same values, so the handover is smooth. */
+    animation-fill-mode: both, forwards;
+    animation-delay: 0ms, 0ms;
+    animation-duration: 0ms, 0ms;
+}
+
+/* The facets and highlight of each currency. They are static and move with the sprite's transform. */
+.m-fx__sprite::before,
+.m-fx__sprite::after {
+    content: "";
+    position: absolute;
+}
+
+/* Coins are gold and gems are blue everywhere, in flight as well as in the balance, because players identify
+   a currency by colour first. The colours come from the tokens.
+
+   At this size colour alone is not enough: a sprite lands next to the chip's sharp icon, and a soft blob of
+   the right colour looks like a rendering fault. So each currency has a shape with a hard edge: a coin, a
+   cut gem, and a wheel for a spin token. The coin and the token get a small glow to separate them from the
+   screen behind. The gem gets none, because its clip-path also clips an outer shadow, and its light top
+   facet separates it instead. */
+/* The coin: a hard bright rim with a shadow just inside it, and a face lit across its surface. A radial
+   highlight would make it look like a sphere, which shows no face and no visible rotation. */
+.m-fx__spray--coins .m-fx__sprite {
+    border-radius: 50%;
+    background: linear-gradient(154deg, var(--m-gold-light) 0%, var(--m-gold) 44%, var(--m-gold-deep) 100%);
+    box-shadow:
+        inset 0 0 0 1px rgba(255, 246, 207, 0.9),
+        inset 0 0 0 2px rgba(120, 78, 12, 0.55),
+        0 0 3px rgba(245, 197, 66, 0.4);
+}
+
+/* The ring and centre dot of the HUD's coin icon, because the sprite lands next to that icon. */
+.m-fx__spray--coins .m-fx__sprite::before {
+    inset: 24%;
+    border: 1px solid rgba(120, 78, 12, 0.6);
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 50%, rgba(120, 78, 12, 0.55) 0 26%, transparent 27%);
+}
+
+/* A crescent highlight along one edge of the rim. An off-centre mark makes the in-plane rotation visible. */
+.m-fx__spray--coins .m-fx__sprite::after {
+    inset: 6%;
+    border: 2px solid transparent;
+    border-top-color: rgba(255, 253, 240, 0.85);
+    border-radius: 50%;
+    transform: rotate(-40deg);
+}
+
+/* A cut gem: the stone's outline, with the top and bottom facets over it. The outline's clip-path also clips
+   the pseudo-elements, so the facets only need their inner edges. */
+.m-fx__spray--gems .m-fx__sprite {
+    clip-path: polygon(50% 0%, 100% 36%, 50% 100%, 0% 36%);
+    background: linear-gradient(152deg, #e0f2fe 0%, #7dd3fc 30%, var(--progress) 58%, #1d4ed8 100%);
+}
+
+/* The top facet, almost solid, which shows which way up the stone is. */
+.m-fx__spray--gems .m-fx__sprite::before {
+    inset: 0;
+    clip-path: polygon(50% 0%, 100% 36%, 50% 43%, 0% 36%);
+    background: linear-gradient(180deg, #ffffff 0%, rgba(186, 230, 253, 0.92) 100%);
+}
+
+/* The bottom facets, split down the middle. The hard line between them repeats on every sprite, so the
+   sprites read as the same object. */
+.m-fx__spray--gems .m-fx__sprite::after {
+    inset: 0;
+    clip-path: polygon(50% 43%, 100% 36%, 50% 100%, 0% 36%);
+    background: linear-gradient(90deg, rgba(29, 78, 216, 0.42) 0 50%, rgba(255, 255, 255, 0.34) 50% 100%);
+}
+
+/* A spin token is a wheel. The segments make the sprite's rotation visible. */
+.m-fx__spray--spintokens .m-fx__sprite {
+    border-radius: 50%;
+    background:
+        radial-gradient(circle at 50% 50%, #fdf4ff 0 24%, transparent 24.5%),
+        conic-gradient(
+            var(--m-live) 0 12.5%, #a21caf 0 25%,
+            var(--m-live) 0 37.5%, #a21caf 0 50%,
+            var(--m-live) 0 62.5%, #a21caf 0 75%,
+            var(--m-live) 0 87.5%, #a21caf 0 100%);
+    box-shadow: inset 0 0 0 1px rgba(253, 244, 255, 0.8), 0 0 3px rgba(232, 121, 249, 0.4);
+}
+
+.m-fx__spray--spintokens .m-fx__sprite::before {
+    inset: 17%;
+    border: 1px solid rgba(253, 244, 255, 0.85);
+    border-radius: 50%;
+}
+
+.m-fx__spray--spintokens .m-fx__sprite::after {
+    top: 11%;
+    left: 24%;
+    width: 26%;
+    height: 17%;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.7);
+}
+
+/* The emit stage eases out, so the burst is fastest at the start, and starts at zero scale, so the sprite
+   pops out instead of fading in. It ends at the burst point at full size and a third of the way through its
+   rotation, where the travel stage continues.
+
+   The travel stage accelerates into the chip, so the arrival is the fastest part. It ends smaller and at
+   reduced opacity, so the sprite merges into the chip.
+
+   The rotation continues across both stages without stopping. */
+@keyframes m-fx-emit {
+    0% {
+        transform: translate(var(--fx-from-x), var(--fx-from-y)) rotate(0deg) scale(0.35);
+        opacity: 0;
+    }
+
+    8% {
+        opacity: 1;
+    }
+
+    100% {
+        transform:
+            translate(var(--fx-emit-x), var(--fx-emit-y))
+            rotate(calc(var(--fx-spin) * 0.3))
+            scale(var(--fx-scale));
+        opacity: 1;
+    }
+}
+
+@keyframes m-fx-travel {
+    0% {
+        transform:
+            translate(var(--fx-emit-x), var(--fx-emit-y))
+            rotate(calc(var(--fx-spin) * 0.3))
+            scale(var(--fx-scale));
+        opacity: 1;
+    }
+
+    100% {
+        transform:
+            translate(var(--fx-to-x), var(--fx-to-y))
+            rotate(var(--fx-spin))
+            scale(calc(var(--fx-scale) * 0.7));
+        opacity: 0.85;
+    }
+}
+
+/* The reveal exit. Pressing the claim button closes the reveal while the sprites fly: the items row, where
+   the sprites start, shrinks, the text rises away and the scrim fades, so the animation plays over the
+   screen instead of over the reveal. */
+.m-reveal--exiting { animation: m-reveal-scrim-out var(--m-reveal-exit) var(--m-ease) forwards; }
+
+.m-reveal--exiting :is(.m-reveal__source, .m-reveal__word, .m-reveal__refusal, .m-reveal__holding,
+                       .m-reveal__pending, .m-reveal__warning, .m-reveal__claim, .m-reveal__actions) {
+    animation: m-reveal-row-out var(--m-reveal-exit) var(--m-ease) forwards;
+}
+
+.m-reveal--exiting .m-reveal__items {
+    animation: m-reveal-items-out var(--m-reveal-exit) var(--m-ease) forwards;
+}
+
+@keyframes m-reveal-scrim-out {
+    to { opacity: 0; }
+}
+
+@keyframes m-reveal-row-out {
+    to { opacity: 0; transform: translateY(-0.4rem); }
+}
+
+@keyframes m-reveal-items-out {
+    to { opacity: 0; transform: scale(0.6); }
+}

@@ -1,0 +1,67 @@
+@* A row of tabs drawn as a segmented control, in one of two modes.
+
+   With AsNavigation false it is an ARIA tablist: the tabs switch a panel on the same screen and route. With
+   AsNavigation true the tabs lead to separate routes. The current tab is then a span with aria-current rather
+   than a button, because a button that does nothing would mislead screen reader users.
+
+   The caller owns the selected key. OnSelect is raised with the key of the tapped tab. *@
+
+@if (AsNavigation)
+{
+    <nav class="@CssClass" aria-label="@AriaLabel" data-testid="@TestId">
+        @foreach ((string Key, string Label) item in Items)
+        {
+            if (item.Key == Selected)
+            {
+                <span class="m-tab m-tab--selected" aria-current="page" data-testid="@TestIdFor(item.Key)">@item.Label</span>
+            }
+            else
+            {
+                <button type="button" class="m-tab" data-testid="@TestIdFor(item.Key)"
+                        @onclick="() => OnSelect.InvokeAsync(item.Key)">@item.Label</button>
+            }
+        }
+    </nav>
+}
+else
+{
+    <div class="@CssClass" role="tablist" aria-label="@AriaLabel" data-testid="@TestId">
+        @foreach ((string Key, string Label) item in Items)
+        {
+            <button type="button"
+                    class="m-tab @(item.Key == Selected ? "m-tab--selected" : null)"
+                    role="tab"
+                    aria-selected="@(item.Key == Selected)"
+                    data-testid="@TestIdFor(item.Key)"
+                    @onclick="() => OnSelect.InvokeAsync(item.Key)">@item.Label</button>
+        }
+    </div>
+}
+
+@code {
+    /// <summary>The tabs, in display order. Key identifies the tab and Label is the visible text.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<(string Key, string Label)> Items { get; set; } = Array.Empty<(string, string)>();
+
+    /// <summary>The key of the selected tab.</summary>
+    [Parameter, EditorRequired] public string Selected { get; set; } = "";
+
+    /// <summary>Raised with the key of the tapped tab.</summary>
+    [Parameter] public EventCallback<string> OnSelect { get; set; }
+
+    /// <summary>Whether the tabs navigate between routes rather than swapping a panel on one screen.</summary>
+    [Parameter] public bool AsNavigation { get; set; }
+
+    /// <summary>Prepended to each tab's key to form its test id. When empty, the test id is the key.</summary>
+    [Parameter] public string? TestIdPrefix { get; set; }
+
+    /// <summary>The test id of the whole tab row.</summary>
+    [Parameter] public string? TestId { get; set; }
+
+    [Parameter] public string? AriaLabel { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    private string CssClass => string.IsNullOrEmpty(Class) ? "m-tabs" : $"m-tabs {Class}";
+
+    private string TestIdFor(string key) => string.IsNullOrEmpty(TestIdPrefix) ? key : $"{TestIdPrefix}-{key}";
+}

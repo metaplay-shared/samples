@@ -1,0 +1,71 @@
+@using WebClient.Meta
+@using WebClient.Services
+@inject NavigationManager Navigation
+@inject MetaStateService Meta
+
+@* A page header with a title, a back button, and at most one contextual action.
+
+   Back goes to the route's parent hub, not to the previous browser history entry, because after a deep link
+   or a refresh the history entry is outside the app (docs/meta-shell.md, "Screens and routes"). *@
+
+<div class="m-page-header @(ResolvedParent != null ? "m-page-header--child" : null)">
+    @if (ResolvedParent != null)
+    {
+        <MetaButton Variant="MetaButtonVariant.Ghost" IconOnly AriaLabel="Back" TestId="page-back"
+                    Class="m-page-header__back" OnClick="GoBack">
+            <MetaIcon Name="back" Size="20" />
+        </MetaButton>
+    }
+    else if (Action != null)
+    {
+        <span class="m-page-header__spacer"></span>
+    }
+
+    <span class="m-page-header__plate">
+        <span class="m-page-header__pip" aria-hidden="true"><MetaIcon Name="spade" Size="18" /></span>
+        <span class="m-page-header__line" aria-hidden="true"></span>
+        <h1 class="m-page-header__title" data-testid="page-title">@Title</h1>
+        <span class="m-page-header__line" aria-hidden="true"></span>
+        <span class="m-page-header__pip" aria-hidden="true"><MetaIcon Name="spade" Size="18" /></span>
+    </span>
+
+    @if (Action != null)
+    {
+        @Action
+    }
+    else if (ResolvedParent != null)
+    {
+        @* Add a spacer only to balance an element on the other side. A header with neither back nor action
+           gets no spacers, so the title keeps the full width. *@
+        <span class="m-page-header__spacer"></span>
+    }
+</div>
+
+@if (!string.IsNullOrEmpty(Subtitle))
+{
+    <p class="m-page-header__sub">@Subtitle</p>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string? Subtitle { get; set; }
+
+    /// <summary>An optional contextual action drawn on the right. The header supports only one.</summary>
+    [Parameter] public RenderFragment? Action { get; set; }
+
+    /// <summary>
+    /// The parent hub route that Back navigates to. When null, it is derived from the current route with
+    /// MetaRoutes.ParentOf. Set it only where the route has no meta parent, such as gallery stories.
+    /// </summary>
+    [Parameter] public string? Parent { get; set; }
+
+    private string? RouteParent => MetaRoutes.ParentOf(Navigation.CurrentRoute());
+
+    private string? ResolvedParent => Parent ?? RouteParent;
+
+    private void GoBack()
+    {
+        if (ResolvedParent is string parent)
+            EnvironmentLink.NavigateTo(Navigation, parent);
+    }
+}

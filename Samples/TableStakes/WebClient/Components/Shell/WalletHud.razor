@@ -1,0 +1,54 @@
+@using WebClient.Meta
+@using WebClient.Services
+@inherits MetaComponentBase
+@inject MetaplayClientService MetaplayService
+@inject WalletBurstService WalletBurst
+
+@* The wallet HUD shown on every meta route and on no game route. It contains only the balance chips. The
+   player's identity is on Home's identity row instead (docs/meta-shell.md, "Screens and routes"). *@
+
+<header class="m-hud">
+    @* Each Balance gets the real amount and the displayed amount from WalletBurstService. They differ only while
+        a reward animation is counting the displayed amount up to the real one. *@
+    <div class="m-hud__wallet" data-testid="hud-wallet">
+        <BalanceChip Kind="CurrencyKind.Coins"      Amount="Snapshot.Wallet.Coins"
+                 DisplayedAmount="WalletBurst.Displayed(CurrencyKind.Coins, Snapshot.Wallet)"
+                 IsReceivingReward="WalletBurst.RewardIncludes(CurrencyKind.Coins)"
+                 Progress="WalletBurst.Progress(CurrencyKind.Coins)" />
+        <BalanceChip Kind="CurrencyKind.Gems"       Amount="Snapshot.Wallet.Gems"
+                 DisplayedAmount="WalletBurst.Displayed(CurrencyKind.Gems, Snapshot.Wallet)"
+                 IsReceivingReward="WalletBurst.RewardIncludes(CurrencyKind.Gems)"
+                 Progress="WalletBurst.Progress(CurrencyKind.Gems)" />
+        <BalanceChip Kind="CurrencyKind.SpinTokens" Amount="Snapshot.Wallet.SpinTokens"
+                 DisplayedAmount="WalletBurst.Displayed(CurrencyKind.SpinTokens, Snapshot.Wallet)"
+                 IsReceivingReward="WalletBurst.RewardIncludes(CurrencyKind.SpinTokens)"
+                 Progress="WalletBurst.Progress(CurrencyKind.SpinTokens)" />
+    </div>
+</header>
+
+@code {
+    private MetaSnapshot Snapshot => Meta.Snapshot;
+
+    /// <summary>
+    /// Subscribes to MetaplayClientService as well as MetaStateService, because the wallet comes from the
+    /// player model, which arrives after the first render. Without that subscription the HUD would keep
+    /// showing the fixture balances.
+    /// </summary>
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        MetaplayService.OnStateChanged += OnStateChanged;
+
+        // WalletBurstService drives the count-up animation. During it the model has already changed, so no other
+        // event fires to redraw the balances.
+        WalletBurst.OnChanged += OnStateChanged;
+    }
+
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    protected override void OnDispose()
+    {
+        MetaplayService.OnStateChanged -= OnStateChanged;
+        WalletBurst.OnChanged -= OnStateChanged;
+    }
+}

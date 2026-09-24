@@ -1,0 +1,15 @@
+@namespace WebClient.Components.TableUI
+@inject NavigationManager Navigation
+
+@* The end panel for an abandoned match. A match is abandoned only when its join window expired before any
+   player subscribed, so there is no result or standings to show (docs/match.md, "Phases"). The results
+   overlay is not used here because it would have to name a winner. *@
+
+<ModalPanel Anchor="PanelAnchor.Bottom" TestId="abandoned-panel" Eyebrow="No game" Title="This table never started">
+    <ChildContent>
+        <p class="pnl__body">Nobody arrived in time, so there is no result to show.</p>
+    </ChildContent>
+    <Actions>
+        <a class="pnl__key btn-glossy" data-testid="abandoned-leave" href="@EnvironmentLink.Href(Navigation, MetaRoutes.Home)">Back to menu</a>
+    </Actions>
+</ModalPanel>

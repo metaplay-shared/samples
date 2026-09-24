@@ -1,0 +1,82 @@
+@using System.Globalization
+@using WebClient.Meta
+@using WebClient.Services
+@inject WalletBurstService WalletBurst
+@implements IDisposable
+
+@* The animation of claimed currency flying from the reward icons to the HUD balances, the last step of the
+   shared reward flow (docs/meta-shell.md, "The shared reward flow"). It is drawn once per claim, above
+   everything except the connection shell.
+
+   WalletBurstPlan decides the sprites and their timing, and wallet-burst.js measures the screen positions, so
+   this component only renders. Sprites animate only transform and opacity, so the browser needs no layout.
+   The layer ignores pointer events, so it never blocks the player's next tap. *@
+
+@if (WalletBurst.ActiveBurst is WalletBurstPlan plan)
+{
+    @* data-sprays is the number of currencies in the animation and data-sprites the number of sprites. Tests
+        read both. *@
+    <div class="m-fx" data-wallet-burst data-testid="wallet-burst"
+         data-sprites="@plan.SpriteCount" data-sprays="@plan.Bursts.Count" aria-hidden="true">
+        @foreach (CurrencyBurst burst in plan.Bursts)
+        {
+            string kind = Slug(burst.Currency);
+
+            @* One spray per currency, starting from that currency's reward icon. The sprays are ordered like
+               the balance chips they fly to, so their paths do not cross. *@
+            <div class="m-fx__spray m-fx__spray--@kind"
+                 data-testid="@($"wallet-burst-{kind}")"
+                 data-sprites="@burst.Sprites.Count">
+                @foreach (BurstSprite sprite in burst.Sprites)
+                {
+                    <span @key="@($"{WalletBurst.BurstId}:{kind}:{sprite.Index}")"
+                          class="m-fx__sprite"
+                          style="@SpriteStyle(sprite)"></span>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    /// <summary>The lower-case currency name, which matches RewardPreview's data-wallet-item values.</summary>
+    private static string Slug(CurrencyKind kind) => kind.ToString().ToLowerInvariant();
+
+    /// <summary>
+    /// The inline style for one sprite. The CSS custom properties are unitless scale factors, and meta-shell.css
+    /// holds the lengths they multiply, so the burst size is tuned in CSS and the per-sprite variation in C#.
+    /// <para>
+    /// The two animations get separate delays and durations: the emit animation starts after the sprite's
+    /// delay, and the travel animation starts when the emit animation ends.
+    /// </para>
+    /// </summary>
+    private static string SpriteStyle(BurstSprite sprite) => string.Create(
+        CultureInfo.InvariantCulture,
+        $"--fx-ex:{sprite.EmitX:0.###};--fx-ey:{sprite.EmitY:0.###};--fx-spin:{sprite.Spin:0.#}deg;--fx-scale:{sprite.Scale:0.###};animation-delay:{sprite.DelayMs}ms,{sprite.DelayMs + sprite.EmitMs}ms;animation-duration:{sprite.EmitMs}ms,{sprite.TravelMs}ms");
+
+    /// <summary>
+    /// The burst id that was last rendered, or -1 for none. ShouldRender uses it to re-render only when a
+    /// burst starts or ends.
+    /// <para>
+    /// WalletBurstService.OnChanged fires many times a second during the balance count-up, which the HUD needs.
+    /// Skipping those renders here avoids diffing every sprite element against unchanged markup.
+    /// </para>
+    /// </summary>
+    private int _renderedBurstId = -1;
+
+    protected override void OnInitialized() => WalletBurst.OnChanged += OnChanged;
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    protected override bool ShouldRender()
+    {
+        int flightId = WalletBurst.ActiveBurst == null ? -1 : WalletBurst.BurstId;
+        if (flightId == _renderedBurstId)
+            return false;
+
+        _renderedBurstId = flightId;
+        return true;
+    }
+
+    public void Dispose() => WalletBurst.OnChanged -= OnChanged;
+}

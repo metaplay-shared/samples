@@ -1,0 +1,78 @@
+@using Game.Logic
+@using WebClientBase.Configuration
+@inject WebClientConfig Config
+
+@* Home's hero card: the logo, the wordmark, the four suits, the PLAY button and the "How to play" button.
+
+    The root is a div, not a button, because the card holds two separate controls (PLAY and help). A button
+    cannot contain another button.
+
+    Until the session is ready, PLAY is disabled and its caption says "Connecting…". While matchmaking runs,
+    MetaLayout shows the searching dialog over the hero.
+
+    The rules summary opens in a narrow Panel. The pnl--prose class styles the panel for plain text content. *@
+
+<div class="m-hero" data-testid="play-hero" data-ready="@HasSession">
+    <button type="button"
+            class="m-hero__help"
+            aria-label="How to play"
+            data-testid="help"
+            @onclick="OnOpenHelp">?</button>
+
+    <div class="m-hero__mark" aria-hidden="true">@Config.LogoEmoji</div>
+
+    @* The wordmark is a div, not an h1, because the router moves focus to the page's first h1 on navigation.
+        On Home that would put focus mid-page, after the identity row in the tab order. Home has no h1. *@
+    <div class="m-hero__wordmark font-display">@Config.AppTitle.ToUpperInvariant()</div>
+
+    @* The four suit symbols are decoration and hidden from assistive technology. *@
+    <div class="m-hero__suits" aria-hidden="true">
+        <span>@("\u2660")</span><span>@("\u2665")</span><span>@("\u2666")</span><span>@("\u2663")</span>
+    </div>
+
+    <MetaButton Variant="MetaButtonVariant.Hero" TestId="play" Class="m-hero__key"
+                Disabled="@(!HasSession)" OnClick="OnPlay"
+                aria-disabled="@(HasSession ? null : "true")">
+        <span class="m-hero__play font-display">PLAY</span>
+        <span class="m-hero__sub">@(HasSession ? "Jump into a game" : "Connecting…")</span>
+    </MetaButton>
+
+    @if (Status == MatchmakingStatus.Unavailable)
+    {
+        <p class="m-hero__unavailable" role="status" data-testid="matchmaking-unavailable">That did not work. Try again.</p>
+    }
+</div>
+
+@if (_showHelp)
+{
+    @* The rules summary, copied verbatim from docs/game-rules.md. Keep the two in sync. *@
+    <ModalPanel TestId="help-dialog" Title="How to play" Width="PanelWidth.Narrow" Class="pnl--prose">
+        <section class="m-rules" data-testid="rules-summary">
+            <p class="m-rules__lead">You have five cards.</p>
+            <p>Play one card on your turn.</p>
+            <p>Follow the first suit played if you can.</p>
+            <p>Highest card of that suit wins, unless someone plays trump.</p>
+            <p>Win the most of the five tricks.</p>
+        </section>
+
+        <button type="button" class="strip ts-btn--dark ts-btn--dark--lg m-rules__close" data-testid="help-close" @onclick="OnCloseHelp">Close</button>
+    </ModalPanel>
+}
+
+@code {
+    /// <summary>Whether the client has a session. PLAY is disabled until it does.</summary>
+    [Parameter] public bool HasSession { get; set; }
+
+    /// <summary>The matchmaking status. When Unavailable, an error message is shown under PLAY.</summary>
+    [Parameter] public MatchmakingStatus Status { get; set; } = MatchmakingStatus.NotSearching;
+
+    /// <summary>Raised when the player taps PLAY. The caller starts matchmaking.</summary>
+    [Parameter] public EventCallback OnPlay { get; set; }
+
+    /// <summary>Whether the rules summary panel is open.</summary>
+    private bool _showHelp;
+
+    private void OnOpenHelp() => _showHelp = true;
+
+    private void OnCloseHelp() => _showHelp = false;
+}

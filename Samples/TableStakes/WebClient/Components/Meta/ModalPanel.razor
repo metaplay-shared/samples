@@ -1,0 +1,133 @@
+@* The modal surface used by every dialog and sheet in the client, on the table and in the meta layer: a scrim,
+   a panel, and an optional eyebrow, title and actions row.
+
+   wwwroot/modal-focus.js relies on the role="dialog", aria-modal="true" and tabindex="-1" set here to manage
+   focus. A caller that renders its own heading in ChildContent uses the pnl__title class and sets AriaLabel.
+
+   Open a panel only in response to a player action, never on app start (docs/meta-shell.md). *@
+
+@if (Open)
+{
+    <div class="@RootClass"
+         data-testid="@TestId"
+         role="dialog"
+         aria-modal="true"
+         aria-label="@AriaLabel"
+         aria-labelledby="@LabelledBy"
+         tabindex="-1"
+         @onclick="DismissFromScrim">
+        <div class="@PanelClass" data-drag-scroll @onclick:stopPropagation="true">
+
+            @if (ShowClose)
+            {
+                <MetaButton Variant="MetaButtonVariant.Ghost" IconOnly AriaLabel="Close" TestId="sheet-close"
+                            Class="pnl__close" OnClick="Dismiss">
+                    <MetaIcon Name="close" Size="20" />
+                </MetaButton>
+            }
+
+            @if (Eyebrow != null)
+            {
+                <p class="pnl__eyebrow">@Eyebrow</p>
+            }
+
+            @if (Title != null)
+            {
+                <h2 class="pnl__title" id="@($"{TestId}-title")">@Title</h2>
+            }
+
+            @ChildContent
+
+            @if (Actions != null)
+            {
+                <div class="pnl__actions">@Actions</div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    /// <summary>Whether the panel is shown. When false, nothing is rendered.</summary>
+    [Parameter] public bool Open { get; set; } = true;
+
+    /// <summary>Where the panel sits on the screen.</summary>
+    [Parameter] public PanelAnchor Anchor { get; set; } = PanelAnchor.Centre;
+
+    /// <summary>The panel width.</summary>
+    [Parameter] public PanelWidth Width { get; set; } = PanelWidth.Standard;
+
+    /// <summary>Optional small text above the title.</summary>
+    [Parameter] public string? Eyebrow { get; set; }
+
+    /// <summary>
+    /// The heading text, rendered by the component. Leave it null when the caller renders its own heading in
+    /// ChildContent.
+    /// </summary>
+    [Parameter] public string? Title { get; set; }
+
+    /// <summary>The accessible name. Set it when Title is null. It takes precedence over Title.</summary>
+    [Parameter] public string? AriaLabel { get; set; }
+
+    [Parameter] public string TestId { get; set; } = "panel";
+
+    /// <summary>Whether to draw a close button (accessible name "Close", test id "sheet-close").</summary>
+    [Parameter] public bool ShowClose { get; set; }
+
+    /// <summary>Whether tapping the scrim raises OnDismiss.</summary>
+    [Parameter] public bool DismissOnScrim { get; set; }
+
+    [Parameter] public EventCallback OnDismiss { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Optional action buttons, rendered in one row under the content.</summary>
+    [Parameter] public RenderFragment? Actions { get; set; }
+
+    /// <summary>Extra CSS classes added to the inner panel element, for example pnl--prose.</summary>
+    [Parameter] public string? Class { get; set; }
+
+    private string RootClass
+    {
+        get
+        {
+            string anchorClass = Anchor switch
+            {
+                PanelAnchor.Bottom => "pnl--bottom",
+                _                  => "pnl--centre",
+            };
+            return $"pnl {anchorClass} animate-fade-in";
+        }
+    }
+
+    private string PanelClass
+    {
+        get
+        {
+            string widthClass = Width switch
+            {
+                PanelWidth.Narrow => "pnl__panel--narrow",
+                PanelWidth.Wide   => "pnl__panel--wide",
+                _                 => "pnl__panel--standard",
+            };
+            string classes = $"pnl__panel {widthClass} animate-pop-in";
+            return string.IsNullOrEmpty(Class) ? classes : $"{classes} {Class}";
+        }
+    }
+
+    /// <summary>
+    /// The id of the rendered title for aria-labelledby, so the accessible name is always the visible heading.
+    /// Null when <see cref="AriaLabel"/> is set or there is no Title.
+    /// </summary>
+    private string? LabelledBy => Title != null && AriaLabel == null ? $"{TestId}-title" : null;
+
+    private async Task DismissFromScrim()
+    {
+        if (DismissOnScrim)
+            await Dismiss();
+    }
+
+    private async Task Dismiss()
+    {
+        await OnDismiss.InvokeAsync();
+    }
+}

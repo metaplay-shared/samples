@@ -1,0 +1,189 @@
+@page "/events"
+@layout MetaLayout
+@inherits MetaComponentBase
+
+@* The Events hub: one card per event feature, always shown even when there is nothing to do.
+
+   FeatureOrdering.Sort orders the cards. Daily Reward and the First-Week Event have separate cards, routes and
+   wording, because they look alike but work differently: the daily reward needs only a login, and first-week
+   goals need played matches (docs/meta-shell.md, "MetaSnapshot"). *@
+
+<ChildPageHeader Title="Events" Subtitle="Play, progress, and collect" />
+
+@if (!Snapshot.FirstWeek.State.IsLive())
+{
+    <ActivityStateBlock State="Snapshot.FirstWeek.State" SkeletonCardCount="5" />
+}
+else
+{
+    @* The hub is a single column of cards (meta-shell.css, "The hub"). *@
+    <div class="m-hub">
+        @{
+            IReadOnlyList<IFeatureView> sorted = FeatureOrdering.Sort(Snapshot.EventsFeatures);
+        }
+
+        @for (int i = 0; i < sorted.Count; i++)
+        {
+            IFeatureView view = sorted[i];
+
+            @* The featured card is the first card after sorting, not a fixed feature. *@
+            <div class="@(i == 0 ? "m-hub__lead" : null)">
+                <FeatureEntryCard View="view"
+                                  Featured="i == 0"
+                                  Accent="@Accent(view.Feature)"
+                                  Eyebrow="@Eyebrow(view.Feature)"
+                                  Headline="@Headline(view)"
+                                  Note="@Note(view)"
+                                  IconId="@Icon(view.Feature)"
+                                  CallToAction="@CallToActionLabel(view)"
+                                  ExpiredText="@ExpiredText(view.Feature)"
+                                  Badged="@Badged(view)"
+                                  HasClaimable="@FeatureClaims.HasClaimable(view)"
+                                  Current="@Current(view)"
+                                  Target="@Target(view)" />
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private MetaSnapshot Snapshot => Meta.Snapshot;
+
+    private static string Eyebrow(MetaFeature f) => f switch
+    {
+        MetaFeature.FirstWeekEvent => "First-week event",
+        MetaFeature.DailyReward    => "Daily reward",
+        MetaFeature.Missions       => "Missions",
+        MetaFeature.SpinWheel      => "Spin wheel",
+        _                          => "Weekly event",
+    };
+
+    /// <summary>
+    /// A fixed accent colour per feature. If the accent followed the state, every claimable card would have
+    /// the same colour. The state is shown by the button and the text instead.
+    /// </summary>
+    private static string Accent(MetaFeature f) => f switch
+    {
+        MetaFeature.DailyReward => "claim",
+        MetaFeature.Missions    => "progress",
+        _                       => "live",
+    };
+
+    private static string Icon(MetaFeature f) => f switch
+    {
+        MetaFeature.FirstWeekEvent => "trophy",
+        MetaFeature.DailyReward    => "chest",
+        MetaFeature.Missions       => "shield",
+        MetaFeature.SpinWheel      => "wheel",
+        _                          => "star",
+    };
+
+    private static string ExpiredText(MetaFeature f) => f switch
+    {
+        MetaFeature.FirstWeekEvent => "Today's goal expired",
+        MetaFeature.Missions       => "Reset",
+        MetaFeature.WeeklyEvent    => "Event ended",
+        _                          => "Ended",
+    };
+
+    private string Headline(IFeatureView view) => view switch
+    {
+        FirstWeekView f   => f.Headline,
+        @* Without a published reward cycle there is no streak to describe. *@
+        DailyRewardView d => d.State == ActivityState.Unavailable ? "Not available right now"
+                           : d.StreakDays == 0 ? "Your first reward"
+                           : $"{d.StreakDays}-day streak",
+        MissionsView m    => m.DailyMissionsTotal == 0 ? "No missions yet" : $"{m.DailyMissionsComplete} of {m.DailyMissionsTotal} complete",
+        @* The headline gives the spin balance and whether a spin is available. The prize teaser is the note.
+           There is no timer, because spin tokens do not expire. *@
+        SpinWheelView s   => s.State == ActivityState.Unavailable ? "Not available right now"
+                           : s.HasPendingReceipt ? "Your last spin is waiting"
+                           : s.SpinsAvailable == 0 ? "Earn your next token"
+                           : s.SpinsAvailable == 1 ? "1 spin available"
+                           : $"{s.SpinsAvailable} spins available",
+        WeeklyEventView w => w.Theme,
+        _                 => "",
+    };
+
+    private string Note(IFeatureView view) => view switch
+    {
+        @* FirstWeekView builds the summary, so the rule for what counts as complete stays in the view. *@
+        FirstWeekView f   => f.Summary,
+        @* The headline has the streak and the countdown has the next availability. The note adds today's
+           status, the current cycle step, and the last step's reward. *@
+        DailyRewardView d => DailyNote(d),
+        MissionsView m    => m.DailyMissionsTotal == 0    ? "Play a game and they open up"
+                           : m.ClaimableCount == 0 ? $"{m.DailyMissionsTotal - m.DailyMissionsComplete} still to finish"
+                           : m.ClaimableCount == 1 ? "1 reward ready"
+                           : $"{m.ClaimableCount} rewards ready",
+        SpinWheelView s   => s.PrizeTeaser,
+        @* The points are shown by the progress bar, so the note does not repeat them. *@
+        WeeklyEventView w => w.Tagline,
+        _                 => "",
+    };
+
+    /// <summary>
+    /// The daily reward card's note: the status, followed by the cycle position when there is one.
+    /// <para>
+    /// Each state has its own status text, so "Claimed" appears only when a reward was actually claimed. The
+    /// cycle position is left out when no further reward will open.
+    /// </para>
+    /// </summary>
+    private static string DailyNote(DailyRewardView view)
+    {
+        string status = view.State switch
+        {
+            ActivityState.Unavailable => "Nothing scheduled",
+            ActivityState.Expired     => "The cycle has ended",
+            ActivityState.Ready       => "Nothing open right now",
+            _                         => view.HasClaimableReward ? "Ready to claim" : "Claimed — come back tomorrow",
+        };
+
+        bool anythingAhead = view.State != ActivityState.Unavailable && view.State != ActivityState.Expired;
+        string cycle = anythingAhead ? DailyCycleNote(view) : "";
+
+        return cycle.Length == 0 ? status : $"{status} · {cycle}";
+    }
+
+    /// <summary>
+    /// The current cycle step and the last step's reward. The step counts today's claimable reward, so it
+    /// matches the step shown on the Daily Reward screen.
+    /// </summary>
+    private static string DailyCycleNote(DailyRewardView view)
+    {
+        if (view.Cycle.Count == 0)
+            return "";
+
+        int step = Math.Min(view.StepsClaimedInCycle + (view.HasClaimableReward ? 1 : 0), view.Cycle.Count);
+        CycleStepView last = view.Cycle[^1];
+
+        return $"Day {step} of {view.Cycle.Count} · Day {last.Step} pays {Currencies.Format(last.Coins)} coins"
+             + (last.HasSpinToken ? " + a spin" : "");
+    }
+
+    private static string CallToActionLabel(IFeatureView view) => ButtonLabels.For(view);
+
+    private static long Current(IFeatureView view) => view switch
+    {
+        FirstWeekView f   => f.GoalsComplete,
+        MissionsView m    => m.DailyMissionsComplete,
+        WeeklyEventView w => w.Points,
+        _                 => 0,
+    };
+
+    private static long Target(IFeatureView view) => view switch
+    {
+        FirstWeekView f   => f.GoalsTotal,
+        MissionsView m    => m.DailyMissionsTotal,
+        WeeklyEventView w => w.TargetPoints,
+        _                 => 0,
+    };
+
+    /// <summary>
+    /// Whether the card shows a badge: something is claimable, or the weekly event is newly available. A newly
+    /// available feature with nothing to claim is badged but keeps the non-claim button style, which follows
+    /// <see cref="FeatureClaims.HasClaimable"/> alone.
+    /// </summary>
+    private static bool Badged(IFeatureView view) =>
+        FeatureClaims.HasClaimable(view) || view is WeeklyEventView { IsNewlyAvailable: true };
+}

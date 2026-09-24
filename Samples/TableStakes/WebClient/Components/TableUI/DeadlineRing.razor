@@ -1,0 +1,40 @@
+@namespace WebClient.Components.TableUI
+
+@* The move-deadline ring. It is shown only during the closing window before the deadline, not for the whole
+   turn, and it switches to the urgent style when RemainingFraction drops to UrgentBelow.
+
+   MatchTableTime.TryGetMoveDeadlineRemaining decides whether the ring is shown. It hides the ring when no
+   seat is awaiting a move, while the presented board has not caught up, and when the host set no deadline.
+   This component only draws the values it is given. *@
+
+<svg class="ts-ring @(IsUrgent ? "ts-ring--urgent" : null)"
+     viewBox="0 0 40 40"
+     data-testid="deadline-ring"
+     role="timer"
+     aria-label="@($"{SecondsLeft} seconds left to play")">
+    <circle class="ts-ring__track" cx="20" cy="20" r="17" />
+    <circle class="ts-ring__sweep" cx="20" cy="20" r="17"
+            stroke-dasharray="@Circumference.ToString("0.##", Culture)"
+            stroke-dashoffset="@Offset.ToString("0.##", Culture)" />
+</svg>
+
+@code {
+    private static readonly System.Globalization.CultureInfo Culture = System.Globalization.CultureInfo.InvariantCulture;
+
+    /// <summary>The fraction of the closing window still remaining, from 0 to 1.</summary>
+    [Parameter] public double RemainingFraction { get; set; }
+
+    /// <summary>Whole seconds left, for the ring's accessible name.</summary>
+    [Parameter] public int SecondsLeft { get; set; }
+
+    /// <summary>The fraction of the window at or below which the ring uses the urgent style.</summary>
+    [Parameter] public double UrgentBelow { get; set; } = 0.35;
+
+    private double Clamped => RemainingFraction < 0.0 ? 0.0 : (RemainingFraction > 1.0 ? 1.0 : RemainingFraction);
+
+    private bool IsUrgent => Clamped <= UrgentBelow;
+
+    private const double Circumference = 2.0 * System.Math.PI * 17.0;
+
+    private double Offset => Circumference * (1.0 - Clamped);
+}

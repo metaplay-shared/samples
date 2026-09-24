@@ -1,0 +1,225 @@
+@page "/events/daily"
+@using Game.Logic
+@layout MetaLayout
+@inherits MetaComponentBase
+@inject MetaplayClientService Client
+
+@* The daily login reward screen. Rewards unlock by logging in and grow with the streak, which is how this
+   differs from the first-week event, where goals are completed by playing.
+
+   The rail shows the whole reward cycle in advance and the player's position on it. The text on this screen
+   talks about logging in, never about playing (docs/daily-rewards.md). *@
+
+<ChildPageHeader Title="Daily Reward" />
+
+@if (!View.State.IsLive())
+{
+    <ActivityStateBlock State="View.State" SkeletonCardCount="2" />
+}
+else if (View.State == ActivityState.Unavailable)
+{
+    @* The game config has no reward cycle, so the server would refuse every claim with
+       DailyRewardRefusal.ConfigUnavailable. Show an empty state instead of the streak card. *@
+    <ActivityStateBlock State="ActivityState.Unavailable" Title="No daily reward right now"
+                Note="There is nothing published to claim from. Check back later." />
+}
+else if (View.State == ActivityState.Expired)
+{
+    @* The schedule has no more activations, so the feature has ended. No countdown is shown. *@
+    <ActivityStateBlock State="ActivityState.Expired" Title="The daily reward has ended"
+                Note="Its schedule has no more days on it. Nothing further unlocks here." />
+}
+else if (View.State == ActivityState.Ready)
+{
+    @* No activation is open yet (the server would refuse with DailyRewardRefusal.NoActivation). Neither the
+       claimable nor the claimed card below applies. *@
+    <ActivityStateBlock State="ActivityState.Ready" Title="No reward open right now"
+                Note="The next one unlocks with the daily reset. Your streak keeps until then." />
+}
+else
+{
+    <div class="m-card m-card--claim m-card--featured m-card--tall">
+        <div class="m-card__head">
+            <MetaEmblem Name="chest" Accent="claim" Size="xl" />
+            <div class="m-card__grow">
+                <p class="m-card__headline">@StreakTitle</p>
+                <p class="m-card__title" data-testid="daily-status">
+                    @(View.HasClaimableReward ? "Today's reward is ready" : "Today's reward is claimed")
+                </p>
+
+                @* The skip-day chip shows whether the missed-day protection is still available. The warnings
+                   below tell the player before the claim that it will use the skip day or reset the streak. *@
+                <span class="strip m-chip @(View.SkipDayAvailable ? "m-chip--claim" : "m-chip--gold")" data-testid="daily-skip-day">
+                    <MetaIcon Name="@(View.SkipDayAvailable ? "shield" : "check")" Size="15" />
+                    @(View.SkipDayAvailable ? "One missed day protected" : "Skip day used this cycle")
+                </span>
+            </div>
+        </div>
+
+        @if (View.WillResetStreak)
+        {
+            <p class="m-card__note" data-testid="daily-reset-warning">
+                Your previous streak ended. Today's reward starts a new streak.
+            </p>
+        }
+        else if (View.WillUseSkipDay)
+        {
+            <p class="m-card__note" data-testid="daily-skip-day-warning">
+                You missed a day. Claiming today uses this cycle's one protected day.
+            </p>
+        }
+
+        <MetaSectionHeading Label="Today's reward" Accent="claim" />
+
+        <div class="m-inset">
+            <RewardPreview Bundle="View.TodayReward" Showcase="true" />
+        </div>
+
+        @if (View.HasClaimableReward)
+        {
+            <div class="m-card__foot">
+                @* The button says only "Claim", because the preview above already shows the reward. *@
+                <MetaButton Variant="MetaButtonVariant.Hero" Block="true" Size="MetaButtonSize.Lg"
+                            TestId="daily-claim" Disabled="@(_revealStage == RewardRevealStage.Granting)"
+                            OnClick="Claim">@ButtonLabels.Claim</MetaButton>
+            </div>
+        }
+        else
+        {
+            @* After claiming, show a claimed state with the time until the next reward, not a disabled button. *@
+            <div class="m-done" data-testid="daily-claimed">
+                <MetaEmblem Name="check" Accent="claim" />
+                <div class="m-done__body">
+                    <span class="m-done__title">Claimed — come back tomorrow</span>
+                    @* EndingSoonWithin is zero because this countdown is to an opening, not a deadline, so it
+                       never uses the "ending soon" style. *@
+                    <span class="m-done__note">
+                        The next one unlocks in
+                        <MetaCountdown Remaining="View.UntilNextAvailable" EndingSoonWithin="TimeSpan.Zero"
+                                       ExpiredText="a moment" />
+                    </span>
+                </div>
+            </div>
+        }
+
+        @if (_refusal is DailyRewardRefusal refused && refused != DailyRewardRefusal.AlreadyClaimed)
+        {
+            <p class="m-card__note" data-testid="daily-claim-failed">
+                That claim did not go through. Try again in a moment.
+            </p>
+        }
+    </div>
+
+    @if (Ladder.Count > 0)
+    {
+        <MetaSectionHeading Label="The seven-day cycle" Accent="claim" />
+        <div class="m-card">
+            <MetaRail Steps="Ladder" Label="Daily reward cycle" ValueIcon="coin" />
+        </div>
+    }
+
+    <div class="m-card m-card--live">
+        <span class="m-card__eyebrow">Tomorrow's reward</span>
+        <div class="m-card__row">
+            <MetaEmblem Name="calendar" Accent="live" Size="lg" />
+            <div class="m-card__grow">
+                <RewardPreview Bundle="View.TomorrowReward" />
+                <p class="m-card__note">Log in tomorrow to grow your streak.</p>
+            </div>
+        </div>
+    </div>
+
+}
+
+@* Hidden. It reports whether the SDK's journal consistency checks are enabled, so a browser test that sees no
+   desync error can confirm the checks were actually running. *@
+<span hidden data-testid="journal-checks">@(Client.ConsistencyChecksEnabled ? "on" : "off")</span>
+
+<RewardReveal Stage="_revealStage" Bundle="_revealedReward ?? View.TodayReward" Title="Daily reward" OnContinue="Dismiss" />
+
+@code {
+    private RewardRevealStage _revealStage = RewardRevealStage.Idle;
+
+    /// <summary>
+    /// The reward being claimed, saved when the claim starts. The view switches to the claimed state as soon
+    /// as the grant commits, after which <c>View.Today</c> may no longer be the claimed bundle.
+    /// </summary>
+    private RewardView? _revealedReward;
+
+    /// <summary>The refusal reason for the last claim, or null when there was no refusal.</summary>
+    private DailyRewardRefusal? _refusal;
+
+    private DailyRewardView View => Meta.Snapshot.DailyReward;
+
+    /// <summary>The headline. A zero-day streak is shown as "Your first reward".</summary>
+    private string StreakTitle => View.StreakDays == 0 ? "Your first reward" : $"{View.StreakDays}-day streak";
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+
+        // Also re-render on the clock tick, because the next reward becomes claimable at a time boundary, not
+        // on a model change. Without this the screen would stay in the claimed state past the reset.
+        Meta.OnTicked += OnChanged;
+
+        Client.DailyRewardClaimed += OnClaimed;
+        Client.DailyRewardRefused += OnRefused;
+    }
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    protected override void OnDispose()
+    {
+        Meta.OnTicked -= OnChanged;
+        Client.DailyRewardClaimed -= OnClaimed;
+        Client.DailyRewardRefused -= OnRefused;
+    }
+
+    /// <summary>
+    /// The whole reward cycle with the player's position, built by <see cref="StepRailBuilder.ForCycle"/>, which is
+    /// unit-tested.
+    /// </summary>
+    private IReadOnlyList<RailStep> Ladder => StepRailBuilder.ForCycle(View);
+
+    /// <summary>
+    /// Sends the claim request and shows the reveal in the Granting stage. The reveal moves to Granted only
+    /// when <see cref="OnClaimed"/> reports that the grant committed (docs/meta-shell.md, "The shared reward
+    /// flow").
+    /// </summary>
+    private void Claim()
+    {
+        _refusal = null;
+        _revealedReward = View.TodayReward;
+        _revealStage = RewardRevealStage.Granting;
+
+        if (!Client.ClaimDailyReward())
+        {
+            // There is no session, so the shell is running on fixtures. Show the Granted stage without
+            // changing any state.
+            _revealStage = RewardRevealStage.Granted;
+        }
+    }
+
+    /// <summary>Called when the grant has committed on the client's player model. Moves the reveal to Granted.</summary>
+    private void OnClaimed()
+    {
+        _revealStage = RewardRevealStage.Granted;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnRefused(DailyRewardRefusal refusal)
+    {
+        _refusal = refusal;
+
+        // A refused claim closes the reveal. The markup shows no error for AlreadyClaimed, because the screen
+        // already shows the claimed state.
+        _revealStage = RewardRevealStage.Idle;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void Dismiss()
+    {
+        _revealStage = RewardRevealStage.Idle;
+        _revealedReward = null;
+    }
+}

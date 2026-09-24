@@ -1,0 +1,13 @@
+<!-- The projects an E2E run needs: the game server, the web client the browser loads, and the test assembly
+     that drives them. tools/run-e2e.py builds this solution with one `dotnet build` so that the project graph is
+     evaluated and restored once, not once per project.
+
+     List only projects that the E2E run starts or tests. Every project listed here is built on every harness
+     run, and the harness starts the outputs of this build, so a project it starts must be listed.
+     The projects target different frameworks (WebClient is net10.0-browser, the others net10.0). This works
+     because a solution build builds each project for its own target framework. -->
+<Solution>
+  <Project Path="../Backend/Server/Server.csproj" />
+  <Project Path="../WebClient/WebClient.csproj" />
+  <Project Path="../WebClient.Tests/WebClient.Tests.csproj" />
+</Solution>

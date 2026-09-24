@@ -1,0 +1,31 @@
+@* A feature's icon drawn on a medallion (app.css, .medallion). This component sets the medallion's size and,
+   when Accent is set, the disc's colour.
+
+   It is decorative and hidden from assistive technology, because every screen that shows an emblem also
+   writes the feature's name beside it. *@
+
+<span class="medallion m-emblem @AccentClass @SizeClass" aria-hidden="true" data-testid="emblem">
+    <MetaIcon Name="@Name" Size="@IconSize" />
+</span>
+
+@code {
+    [Parameter, EditorRequired] public string Name { get; set; } = "star";
+
+    /// <summary>claim, live, progress, gold or locked. Null uses the medallion's default green.</summary>
+    [Parameter] public string? Accent { get; set; }
+
+    /// <summary>sm, md, lg or xl. Hub cards use md and a screen's hero uses lg or xl.</summary>
+    [Parameter] public string Size { get; set; } = "md";
+
+    private string? AccentClass => Accent == null ? null : $"m-emblem--{Accent}";
+
+    private string? SizeClass => Size == "md" ? null : $"m-emblem--{Size}";
+
+    private int IconSize => Size switch
+    {
+        "sm" => 20,
+        "lg" => 36,
+        "xl" => 48,
+        _    => 26,
+    };
+}

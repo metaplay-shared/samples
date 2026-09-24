@@ -1,0 +1,83 @@
+@using WebClient.Meta
+
+@* The items in a reward bundle, in bundle order. RewardReveal uses the same order, so a preview and its
+   reveal list the items the same way.
+
+   It has four densities: Compact for a goal row, the default list, Showcase for the main reward of a screen
+   (each item on an emblem), and Hero for the reveal (Showcase at a larger size). The "+" between showcased
+   items is hidden from screen readers. *@
+
+<span class="m-rewards @DensityClass" data-testid="reward-preview">
+    @for (int i = 0; i < Bundle.Items.Count; i++)
+    {
+        RewardViewItem item = Bundle.Items[i];
+
+        if (Presented && i > 0)
+        {
+            <span class="m-rewards__plus" aria-hidden="true">+</span>
+        }
+
+        <span class="m-reward-item" data-testid="reward-item" data-wallet-item="@WalletSlug(item)">
+            @if (Presented)
+            {
+                <MetaEmblem Name="@item.IconId" Size="@(Hero ? "lg" : "sm")" Accent="@EmblemAccent(item)" />
+            }
+            else
+            {
+                <MetaIcon Name="@item.IconId" Size="@(Compact ? 18 : 26)" Class="@IconClass(item)" />
+            }
+            <span class="m-reward-item__amount">@Currencies.Format(item.Amount)</span>
+            <span class="m-reward-item__label">@item.Label</span>
+        </span>
+    }
+</span>
+
+@code {
+    [Parameter, EditorRequired] public RewardView Bundle { get; set; } = RewardView.Empty;
+
+    /// <summary>Small inline density, for a row that already has a title and a button.</summary>
+    [Parameter] public bool Compact { get; set; }
+
+    /// <summary>Draws each item on an emblem, for the main reward of a screen.</summary>
+    [Parameter] public bool Showcase { get; set; }
+
+    /// <summary>Showcase at the larger size used by the reward reveal.</summary>
+    [Parameter] public bool Hero { get; set; }
+
+    /// <summary>Whether the items are drawn on emblems with "+" separators, which is true for Showcase and
+    /// Hero.</summary>
+    private bool Presented => Showcase || Hero;
+
+    private string? DensityClass => Hero ? "m-rewards--hero"
+        : Showcase ? "m-rewards--showcase"
+        : Compact ? "m-rewards--compact"
+        : null;
+
+    /// <summary>
+    /// The data-wallet-item value that wallet-burst.js uses to find where this item's currency animation starts.
+    /// It is the lower-case currency name, which matches the burst layer's CSS classes. Items that do not go
+    /// to the wallet, such as cosmetics, get no value.
+    /// </summary>
+    private static string? WalletSlug(RewardViewItem item) => item.TravelsToWallet
+        ? item.Currency!.Value.ToString().ToLowerInvariant()
+        : null;
+
+    /// <summary>
+    /// The currency's icon colour class, so each currency has the same colour everywhere. Non-currency items
+    /// inherit the surrounding colour.
+    /// </summary>
+    private static string? IconClass(RewardViewItem item) => item.Currency switch
+    {
+        CurrencyKind.Coins      => "m-icon--coin",
+        CurrencyKind.Gems       => "m-icon--gem",
+        CurrencyKind.SpinTokens => "m-icon--spin",
+        _                       => null,
+    };
+
+    private static string EmblemAccent(RewardViewItem item) => item.Currency switch
+    {
+        CurrencyKind.Gems       => "progress",
+        CurrencyKind.SpinTokens => "live",
+        _                       => "gold",
+    };
+}

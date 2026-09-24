@@ -1,0 +1,100 @@
+@using WebClient.Meta
+@using WebClient.Services
+
+@* Draws a screen's ActivityState when there is no normal content to show: a loading skeleton, or an emblem,
+   a title and a note for the other states, instead of a blank area or an unexplained disabled button. *@
+
+@if (State == ActivityState.Loading)
+{
+    @* Each skeleton card has the size and layout of a real card, so the page does not shift when the data
+       arrives (cumulative layout shift). *@
+    <div class="m-state m-state--loading" data-testid="state-loading" role="status" aria-label="Loading">
+        @for (int i = 0; i < SkeletonCardCount; i++)
+        {
+            <div class="m-skeleton-card">
+                <div class="m-skeleton" style="width: 3.25rem; height: 3.25rem; border-radius: 999px;"></div>
+                <div class="m-skeleton-card__lines">
+                    <div class="m-skeleton" style="height: 0.7rem; width: 45%;"></div>
+                    <div class="m-skeleton" style="height: 1.1rem; width: 78%;"></div>
+                    <div class="m-skeleton" style="height: 0.7rem; width: 60%;"></div>
+                </div>
+                <div class="m-skeleton" style="width: 5rem; height: 2.75rem;"></div>
+            </div>
+        }
+    </div>
+}
+else
+{
+    <div class="m-state" data-testid="@($"state-{State.ToString().ToLowerInvariant()}")" role="status">
+        <MetaEmblem Name="@IconFor(State)" Size="lg" Accent="@AccentFor(State)" />
+        <p class="m-state__title">@(Title ?? DefaultTitle)</p>
+        <p class="m-state__note">@(Note ?? DefaultNote)</p>
+
+        @if (State == ActivityState.Error || State == ActivityState.Offline)
+        {
+            <MetaButton TestId="state-retry" OnClick="Retry">
+                <MetaIcon Name="retry" Size="18" /> @ButtonLabels.Retry
+            </MetaButton>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public ActivityState State { get; set; }
+
+    /// <summary>Replaces the state's default title. Features should nearly always set it.</summary>
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Note { get; set; }
+
+    [Parameter] public EventCallback OnRetry { get; set; }
+
+    /// <summary>How many skeleton cards to draw while loading. Match the number of cards the loaded screen shows.</summary>
+    [Parameter] public int SkeletonCardCount { get; set; } = 3;
+
+    /// <summary>
+    /// The emblem colour for a state. It supplements the title and note, which every state has.
+    /// </summary>
+    private static string AccentFor(ActivityState state) => state switch
+    {
+        ActivityState.Error     => "locked",
+        ActivityState.Offline   => "locked",
+        ActivityState.Completed => "claim",
+        ActivityState.Expired   => "locked",
+        _                       => "gold",
+    };
+
+    private static string IconFor(ActivityState state) => state switch
+    {
+        ActivityState.Offline     => "offline",
+        ActivityState.Error       => "warning",
+        ActivityState.Expired     => "clock",
+        ActivityState.Completed   => "check",
+        ActivityState.Unavailable => "lock",
+        _                         => "star",
+    };
+
+    private string DefaultTitle => State switch
+    {
+        ActivityState.Offline     => "You are offline",
+        ActivityState.Error       => "That did not load",
+        ActivityState.Expired     => "This has ended",
+        ActivityState.Completed   => "All done for now",
+        ActivityState.Unavailable => "Nothing here yet",
+        _                         => "Nothing to do right now",
+    };
+
+    private string DefaultNote => State switch
+    {
+        ActivityState.Offline     => "What you can see may be out of date.",
+        ActivityState.Error       => "The connection dropped while this was loading.",
+        ActivityState.Expired     => "Its window closed. Check back for the next one.",
+        ActivityState.Completed   => "Come back tomorrow for more.",
+        ActivityState.Unavailable => "Play a few games and this will open up.",
+        _                         => "Everything here is up to date.",
+    };
+
+    private async Task Retry()
+    {
+        await OnRetry.InvokeAsync();
+    }
+}

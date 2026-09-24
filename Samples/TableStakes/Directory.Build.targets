@@ -1,0 +1,36 @@
+<Project>
+
+  <!-- Paths resolve from the directory of the nearest metaplay-project.yaml, not from this file. A git worktree
+       nested inside the main checkout can import the main checkout's copy of this file, which must still build the
+       worktree's MetaplaySDK. SDK projects never import this file, because the SDK has its own. -->
+  <PropertyGroup>
+    <_MetaplayTreeRoot>$([System.IO.Path]::GetDirectoryName($([MSBuild]::GetPathOfFileAbove('metaplay-project.yaml', '$(MSBuildProjectDirectory)'))))</_MetaplayTreeRoot>
+    <_MetaplayAttributesProject>$(_MetaplayTreeRoot)/../../MetaplaySDK/Backend/Attributes/Metaplay.Attributes.csproj</_MetaplayAttributesProject>
+    <_MetaplayAttributesAssembly>$(_MetaplayTreeRoot)/../../MetaplaySDK/Backend/Attributes/bin/$(Configuration)/netstandard2.0/Metaplay.Attributes.dll</_MetaplayAttributesAssembly>
+  </PropertyGroup>
+
+  <!-- Builds Metaplay.Attributes before any project compiles, so that the Metaplay source generator can load.
+       Projects outside Backend/ reference the generator as the analyzer project CodeAnalyzers.Shared, which passes
+       Metaplay.Attributes.dll to Roslyn by globbing its bin/$(Configuration) output (GetDependencyTargetPaths).
+       Roslyn resolves analyzer dependencies only from those files, so without the DLL the compiler reports only
+       warning CS8784 and builds an assembly with no generated code, which fails at run time. Backend/ projects
+       use the prebuilt analyzers and do not need the target. The Exists condition skips it once the DLL exists. -->
+  <Target Name="MetaplayAnalyzerDependency"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(_MetaplayTreeRoot)' != '' AND Exists('$(_MetaplayAttributesProject)') AND !Exists('$(_MetaplayAttributesAssembly)')">
+    <!-- No project here references Metaplay.Attributes, so restoring the calling project does not restore it,
+         and this target restores it first. The restore passes an extra global property so that MSBuild evaluates the
+         project separately for the restore and for the build, and the build sees the files the restore wrote.
+         The build sets TargetFramework explicitly because the MSBuild task passes the caller's global
+         properties down, and an inner build of a multi-targeted caller passes a TargetFramework that this
+         netstandard2.0 project does not have. -->
+    <MSBuild Projects="$(_MetaplayAttributesProject)"
+             Targets="Restore"
+             Properties="Configuration=$(Configuration);_MetaplayAttributesRestore=true"
+             RemoveProperties="TargetFramework;RuntimeIdentifier;SelfContained;PublishAot" />
+    <MSBuild Projects="$(_MetaplayAttributesProject)"
+             Properties="Configuration=$(Configuration);TargetFramework=netstandard2.0"
+             RemoveProperties="RuntimeIdentifier;SelfContained;PublishAot" />
+  </Target>
+
+</Project>

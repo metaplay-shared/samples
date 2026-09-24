@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/Metaplay/">
+    <Project Path="../../../MetaplaySDK/Backend/BotClient/Metaplay.BotClient.csproj" />
+    <Project Path="../../../MetaplaySDK/Backend/Cloud.Tests/Metaplay.Cloud.Tests.csproj" />
+    <Project Path="../../../MetaplaySDK/Backend/Cloud/Metaplay.Cloud.csproj" />
+    <Project Path="../../../MetaplaySDK/Backend/Server.Tests/Metaplay.Server.Tests.csproj" />
+    <Project Path="../../../MetaplaySDK/Backend/Server/Metaplay.Server.csproj" />
+    <Project Path="../../../MetaplaySDK/Backend/ServerShared/Metaplay.ServerShared.csproj" />
+  </Folder>
+  <Project Path="BotClient/BotClient.csproj" />
+  <Project Path="Server/Server.csproj" />
+  <Project Path="SharedCode/SharedCode.csproj" />
+</Solution>

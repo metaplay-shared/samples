@@ -1,0 +1,41 @@
+@using System.Reflection
+@using WebClientBase.Configuration
+@inject WebClientConfig Config
+
+@* Head content rendered through HeadOutlet, which the host builder registers: the document title and the theme CSS
+   variables from the game's WebClientConfig. The static head content is in index.html. *@
+<HeadContent>
+    <title>@Config.AppTitle</title>
+    <style>
+        * {
+            font-family: 'Inter', system-ui, sans-serif;
+        }
+
+        @Config.Theme.ToCssVariables()
+    </style>
+    @AdditionalHeadContent
+</HeadContent>
+
+<Router AppAssembly="Assembly.GetEntryAssembly()"
+        AdditionalAssemblies="new[] { typeof(App).Assembly }">
+    <Found Context="routeData">
+        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <LayoutView Layout="typeof(Layout.MainLayout)">
+            <div class="mp-fallback">
+                <h1 class="mp-fallback-title" style="color: var(--text-primary);">Page Not Found</h1>
+                <p style="color: var(--text-secondary);">The page you're looking for doesn't exist.</p>
+            </div>
+        </LayoutView>
+    </NotFound>
+</Router>
+
+@code {
+    /// <summary>
+    /// Additional content to render into the document head.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? AdditionalHeadContent { get; set; }
+}

@@ -1,0 +1,40 @@
+@* An offer teaser on Home. Home places it below the player's actionable items (docs/meta-shell.md).
+
+   The price and the View button stack in a right-hand column that is as wide as its wider item. The title
+   and tagline take the remaining width and wrap between words. *@
+
+<div class="m-card m-card--progress m-teaser" data-testid="offer-teaser">
+    @* Use the offer's own eyebrow so the teaser shows the same text, such as "just for you", as the shop. *@
+    <span class="m-card__eyebrow" data-testid="offer-teaser-eyebrow">@Offer.Eyebrow</span>
+    <div class="m-card__row">
+        <MetaEmblem Name="@Offer.IconId" Accent="progress" Size="lg" />
+        <div class="m-card__grow">
+            <p class="m-card__title">@Offer.Title</p>
+            @* The teaser has no lock chip, so it always shows the full tagline. *@
+            <p class="m-card__note">@Offer.Tagline</p>
+        </div>
+        <div class="m-teaser__aside">
+            @* The price is a chip, not a button, because Home's primary action is PLAY. A wallet price shows
+               its currency icon, as the shop tiles do. A demo price has no currency and shows "Demo" instead. *@
+            @if (Offer.Price.Kind == OfferPriceKind.Demo)
+            {
+                <span class="strip m-chip m-chip--gold" data-testid="offer-teaser-price">Demo @Offer.Price.DemoText</span>
+            }
+            else
+            {
+                <span class="strip m-chip m-chip--gold" data-testid="offer-teaser-price">
+                    <MetaIcon Name="@RewardViewItem.IconIdFor(Offer.Price.Currency)" Size="16" />
+                    @Currencies.Format(Offer.Price.Amount)
+                </span>
+            }
+            <MetaButton Variant="MetaButtonVariant.Ghost" Size="MetaButtonSize.Sm" TestId="offer-teaser-action"
+                        OnClick="OnOpen">@ButtonLabels.View</MetaButton>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public OfferView Offer { get; set; } = default!;
+
+    [Parameter] public EventCallback OnOpen { get; set; }
+}

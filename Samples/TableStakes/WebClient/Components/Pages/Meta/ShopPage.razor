@@ -1,0 +1,267 @@
+@page "/shop"
+@layout MetaLayout
+@using Metaplay.Core.Model
+@using Metaplay.Core.Offers
+@inherits MetaComponentBase
+@inject MetaplayClientService Client
+@inject NavigationManager Navigation
+
+@* The Shop screen: one featured offer, chosen by the SDK's offer priority order, and the offer catalogue
+   (docs/offers.md, "Resolving the featured offer"). A targeted featured offer shows a "Just for you" eyebrow
+   (OfferCard.razor). Nothing on this screen opens without a player action (docs/meta-shell.md).
+
+   Real-money prices are demo purchases, and the card, the confirmation and the reveal all say so, so a player
+   never mistakes one for a real charge. In-game currency prices are ordinary purchases. *@
+
+<ChildPageHeader Title="Shop" Subtitle="Offers selected for you" />
+
+@if (!View.State.IsLive())
+{
+    <ActivityStateBlock State="View.State" />
+}
+else
+{
+    @if (View.Featured is OfferView featured)
+    {
+        <OfferCard Offer="featured" Featured="true" Wallet="Meta.Snapshot.Wallet" OnBuy="() => Buy(featured)" />
+    }
+
+    @* Tapping the text also flips the switch, like a checkbox label. The text is not focusable, so the switch
+       is the only tab stop for the setting. *@
+    <div class="m-card__row">
+        <MetaToggle Checked="PersonalizationEnabled" OnToggle="() => TogglePersonalization()"
+                    Label="Personalized featured offers" TestId="personalization-toggle" />
+        <span class="m-card__note" @onclick="TogglePersonalization">Personalized featured offers</span>
+    </div>
+
+    <p class="m-card__eyebrow">All offers</p>
+
+    @if (View.Catalogue.Count == 0)
+    {
+        <ActivityStateBlock State="ActivityState.Unavailable" Title="Nothing on offer"
+                    Note="Check back later — offers change through the week." />
+    }
+    else
+    {
+        <div class="m-grid">
+            @foreach (OfferView offer in View.Catalogue)
+            {
+                <OfferCard Offer="offer" Wallet="Meta.Snapshot.Wallet" OnBuy="() => Buy(offer)" />
+            }
+        </div>
+    }
+
+    @* The shop links to Cosmetics instead of selling cosmetics. The Cosmetics screen shows a preview of the
+       item on the player, and offer rewards are currency bundles, so selling cosmetics as offers would add a
+       second grant path for cosmetics (docs/offers.md, docs/cosmetics.md). *@
+    <div class="m-card" data-testid="shop-cosmetics">
+        <div class="m-card__row">
+            <MetaIcon Name="frame" Size="32" />
+            <div class="m-card__grow">
+                <p class="m-card__title">Cosmetics</p>
+                <p class="m-card__note">@CosmeticsLine</p>
+            </div>
+            <MetaButton Variant="MetaButtonVariant.Ghost" Size="MetaButtonSize.Sm" TestId="shop-cosmetics-action"
+                        OnClick="OpenCosmetics">@ButtonLabels.Browse</MetaButton>
+        </div>
+    </div>
+}
+
+<ConfirmDialog Open="_offerToConfirm != null"
+               Title="@(_offerToConfirm?.Price.Kind == OfferPriceKind.Demo ? "Demo purchase" : "Confirm purchase")"
+               Question="@ConfirmQuestion"
+               ConfirmText="@(_offerToConfirm?.Price.Kind == OfferPriceKind.Demo ? "Demo purchase" : ButtonLabels.Buy)"
+               OnConfirm="ConfirmBuy"
+               OnCancel="() => _offerToConfirm = null" />
+
+<RewardReveal Stage="RevealStage" Bundle="@(_purchasedOffer?.Contents ?? RewardView.Empty)"
+              Title="@RevealTitle"
+              OnContinue="Acknowledge" OnRetry="Retry" />
+
+@* Hidden values for tests. The UI shows the same "Confirming with the server…" text while the SDK assigns the
+   dynamic offer content and while the receipt is being validated. A test that abandons a purchase after
+   validation starts needs to tell these apart. It must wait for demo-purchase-sent, which means the receipt
+   is in the model's PendingInAppPurchases. DemoPurchase reads Validating one JS interop call before the
+   receipt is actually sent, so waiting on demo-purchase-state alone can race a reload. *@
+<span hidden data-testid="demo-purchase-state">@Client.DemoPurchase</span>
+<span hidden data-testid="demo-purchase-sent">@(Client.PlayerModel?.PendingInAppPurchases.Count > 0)</span>
+
+@code {
+    private OfferView? _offerToConfirm;
+    private OfferView? _purchasedOffer;
+    private RewardRevealStage _localRevealStage = RewardRevealStage.Idle;
+
+    private ShopView View => Meta.Snapshot.Shop;
+
+    /// <summary>The Cosmetics card's note: the number of cosmetics and how many the player owns.</summary>
+    private string CosmeticsLine
+    {
+        get
+        {
+            CosmeticsView cosmetics = Meta.Snapshot.Cosmetics;
+            int owned = cosmetics.Items.Count(i => i.Ownership is CosmeticOwnership.Owned or CosmeticOwnership.Equipped);
+            return $"{cosmetics.Items.Count} items · {owned} owned";
+        }
+    }
+
+    private void OpenCosmetics()
+    {
+        Meta.RecordPromotedEntrySelection(Game.Logic.PromotedEntryPlacement.FeatureCard, MetaFeature.Cosmetics);
+        EnvironmentLink.NavigateTo(Navigation, MetaRoutes.Cosmetics);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="offer"/> exists in the game config's offers, as opposed to a fixture card. Only
+    /// real offers can be purchased. With a session, <c>WithRealShop</c> replaces the whole shop with real
+    /// offers, unless a scenario has claimed the Shop slice, in which case every card is a fixture.
+    /// </summary>
+    private bool IsRealOffer(OfferView? offer) =>
+        offer != null && Client.PlayerModel != null && Client.PlayerModel.GameConfig.Offers.ContainsKey(MetaOfferId.FromString(offer.Id));
+
+    /// <summary>
+    /// The reveal stage. For a real demo purchase it comes from <c>Client.DemoPurchase</c>, because the grant
+    /// happens several server round trips after the tap and the client service tracks it. Otherwise it is
+    /// <c>_localRevealStage</c>.
+    /// </summary>
+    private RewardRevealStage RevealStage => IsRealOffer(_purchasedOffer) && _purchasedOffer!.Price.Kind == OfferPriceKind.Demo
+        ? Client.DemoPurchase switch
+        {
+            MetaplayClientService.DemoPurchaseState.Preparing  => RewardRevealStage.Granting,
+            MetaplayClientService.DemoPurchaseState.Validating => RewardRevealStage.Granting,
+            MetaplayClientService.DemoPurchaseState.Granted    => RewardRevealStage.Granted,
+            MetaplayClientService.DemoPurchaseState.Failed     => RewardRevealStage.Failed,
+            _                                                  => RewardRevealStage.Idle,
+        }
+        : _localRevealStage;
+
+    /// <summary>
+    /// The reveal title. While the purchase is still in the Granting stage the title must not say it is
+    /// complete.
+    /// </summary>
+    private string RevealTitle
+    {
+        get
+        {
+            if (RevealStage == RewardRevealStage.Granting)
+                return _purchasedOffer?.Price.Kind == OfferPriceKind.Demo ? "Demo purchase" : "Purchasing";
+
+            return _purchasedOffer?.Price.Kind == OfferPriceKind.Demo ? "Demo purchase complete" : "Purchased";
+        }
+    }
+
+    /// <summary>
+    /// Opening the shop marks its targeted offers as seen, which clears the shop's badge. It also refreshes
+    /// the SDK offer groups, because <c>PlayerRefreshMetaOffers</c> is documented to run when the shop opens.
+    /// </summary>
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Client.OnStateChanged += OnChanged;
+
+        Client.RefreshOffers();
+
+        foreach (OfferView offer in View.All().Where(o => o.IsTargeted))
+            Meta.MarkOfferSeen(offer.Id);
+    }
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    protected override void OnDispose() => Client.OnStateChanged -= OnChanged;
+
+    /// <summary>
+    /// The confirmation text. For a wallet offer it states the price and the current balance
+    /// (docs/economy.md, docs/offers.md). For a demo offer it states that no real charge is made.
+    /// </summary>
+    private string ConfirmQuestion => _offerToConfirm == null
+        ? ""
+        : _offerToConfirm.Price.Kind == OfferPriceKind.Demo
+            ? $"{_offerToConfirm.Title} for {_offerToConfirm.Price.DemoText}. This is a demonstration — no real charge is made."
+            : $"{_offerToConfirm.Title} for {Currencies.Format(_offerToConfirm.Price.Amount)} {Currencies.NameOf(_offerToConfirm.Price.Currency)}. "
+              + $"You have {Currencies.Format(Meta.Snapshot.Wallet.AmountOf(_offerToConfirm.Price.Currency))} "
+              + $"{Currencies.NameOf(_offerToConfirm.Price.Currency)}.";
+
+    private void Buy(OfferView offer) => _offerToConfirm = offer;
+
+    /// <summary>Whether personalized featured offers are enabled. True, the default, when there is no session.</summary>
+    private bool PersonalizationEnabled => Client.PersonalizedOffersEnabled;
+
+    /// <summary>
+    /// Toggles the personalization setting. The player action executes on the client immediately, so the next
+    /// render shows the change (<c>docs/offers.md</c>, "Segment targeting").
+    /// <para>
+    /// The refresh is required. Turning the setting off deactivates the targeted group without a refresh,
+    /// because a transient group's <c>IsActive</c> is evaluated on every read. But the untargeted fallback
+    /// group may never have been activated for this player, and only <c>PlayerRefreshMetaOffers</c> activates
+    /// it, so without the refresh Featured would be empty.
+    /// </para>
+    /// </summary>
+    private void TogglePersonalization()
+    {
+        Client.SetPersonalizedOffersEnabled(!PersonalizationEnabled);
+        Client.RefreshOffers();
+    }
+
+    /// <summary>
+    /// Runs the confirmed purchase. A real demo offer uses the SDK's dynamic-content in-app purchase flow, and
+    /// the reveal shows the contents only after the server validates the receipt and grants them. A real
+    /// wallet offer is a player action whose result is known immediately. A fixture card, which exists only
+    /// when a scenario has claimed the Shop slice, shows the reveal without changing any state.
+    /// </summary>
+    private void ConfirmBuy()
+    {
+        _purchasedOffer = _offerToConfirm;
+        _offerToConfirm = null;
+
+        if (_purchasedOffer != null && IsRealOffer(_purchasedOffer))
+        {
+            StartRealPurchase(_purchasedOffer);
+            return;
+        }
+
+        _localRevealStage = RewardRevealStage.Granted;
+    }
+
+    /// <summary>
+    /// Starts the purchase of a real offer: the demo in-app purchase flow for a demo price, or the wallet purchase
+    /// action for a wallet price.
+    /// </summary>
+    private void StartRealPurchase(OfferView offer)
+    {
+        if (offer.Price.Kind == OfferPriceKind.Demo)
+        {
+            // No stage is set here. RevealStage reads the client's purchase state, which StartDemoOfferPurchase
+            // sets to Preparing before it returns.
+            Client.StartDemoOfferPurchase(offer.Id);
+            return;
+        }
+
+        MetaActionResult? result = Client.PurchaseWalletOffer(offer.Id);
+        _localRevealStage = result == MetaActionResult.Success ? RewardRevealStage.Granted : RewardRevealStage.Failed;
+    }
+
+    /// <summary>
+    /// Closes the reveal. It also clears the client's demo purchase state, so the next purchase can start and
+    /// the dismissed reveal does not reappear.
+    /// </summary>
+    private void Acknowledge()
+    {
+        _localRevealStage = RewardRevealStage.Idle;
+        _purchasedOffer = null;
+        Client.ClearDemoPurchase();
+    }
+
+    /// <summary>Retries a refused purchase as a new purchase. The refused one granted nothing.</summary>
+    private void Retry()
+    {
+        if (_purchasedOffer != null && IsRealOffer(_purchasedOffer))
+        {
+            if (_purchasedOffer.Price.Kind == OfferPriceKind.Demo)
+                Client.ClearDemoPurchase();
+
+            StartRealPurchase(_purchasedOffer);
+            return;
+        }
+
+        Acknowledge();
+    }
+}

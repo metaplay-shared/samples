@@ -1,0 +1,94 @@
+@namespace WebClient.Components.TableUI
+@using Game.Logic
+@using WebClient.Meta
+@using WebClient.Components.Meta
+
+@* One seat's plaque at the table: avatar, name, tricks won, and the on-turn highlight
+   (docs/game-rules.md, "Public and private information").
+
+   The avatar and name use the meta shell's PlayerAvatar and PlayerName, so the worn cosmetics look the same
+   as in the standings, Profile and shop (docs/cosmetics.md).
+
+   The plaque does not show whether a seat is played by a bot. The data-occupancy attribute records it: a seat
+   a bot is covering for reads HumanCoveredByBot and keeps the human's name
+   (docs/match.md, "When players stop playing"). *@
+
+<div class="ts-plaque ts-plaque--@ScreenPositionName @(IsOnTurn ? "ts-plaque--on-turn" : null) @(IsViewer ? "ts-plaque--viewer" : null) @(IsTakingTrick ? "ts-plaque--taking-trick" : null)"
+     style="@Style"
+     data-testid="@($"seat-{Seat.Seat}")"
+     data-position="@ScreenPositionName"
+     data-occupancy="@Seat.Occupancy"
+     data-connected="@(Seat.IsConnected ? "true" : "false")"
+     data-on-turn="@(IsOnTurn ? "true" : "false")"
+     data-taking-trick="@(IsTakingTrick ? "true" : "false")">
+
+    @* The worn avatar inside the worn frame. With nothing worn, PlayerAvatar draws the default avatar and
+       frame, as everywhere else. *@
+    <PlayerAvatar Identity="Identity" Class="ts-plaque__avatar" SizeCss="var(--ts-plaque-avatar)"
+                  TestId="@($"seat-{Seat.Seat}-avatar")" />
+
+    @* The name plate shows the name and the tricks won out of the tricks in a game. The number of cards the
+       seat holds is not shown here, because SeatHand draws it beside the plaque. *@
+    <div class="strip ts-plaque__nameplate ts-engraved">
+        <PlayerName Identity="Identity" Class="ts-plaque__name" TestId="@($"seat-{Seat.Seat}-name")" Title="@Identity.DisplayName" />
+        @if (IsViewer)
+        {
+            <span class="ts-plaque__you">You</span>
+        }
+        <span class="ts-plaque__score" title="Tricks won">
+            <span data-testid="@($"seat-{Seat.Seat}-tricks")">@TricksWon</span><span class="ts-plaque__of">/5</span>
+        </span>
+    </div>
+
+    @if (Ring != null)
+    {
+        <div class="ts-plaque__ring">@Ring</div>
+    }
+
+    @* Optional floating text over the plaque, such as "+1 point!" when this seat wins a trick. It is the last
+       child so it is positioned against the plaque's top edge. *@
+    @if (FloatingLabel != null)
+    {
+        @FloatingLabel
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public MatchSeat Seat { get; set; } = default!;
+
+    /// <summary>
+    /// The seat's public identity: the name and the worn cosmetics as style tokens
+    /// (<see cref="CosmeticsPolicy.ViewOf"/>). The caller passes it in because converting cosmetics to style
+    /// tokens needs the game config catalogue, which the page has and this component does not.
+    /// </summary>
+    [Parameter, EditorRequired] public IdentityView Identity { get; set; } = default!;
+
+    /// <summary>Where this seat is drawn on screen, after rotating the table so the viewer is at South.</summary>
+    [Parameter] public TableScreenPosition Position { get; set; }
+
+    /// <summary>The inline style with the seat's entrance delay (<see cref="CardArcStyle.ForSeat"/>).</summary>
+    [Parameter] public string? Style { get; set; }
+
+    [Parameter] public int TricksWon { get; set; }
+
+    /// <summary>Whether it is this seat's turn to play a card.</summary>
+    [Parameter] public bool IsOnTurn { get; set; }
+
+    /// <summary>Whether this is the viewer's own seat, which is always drawn at South.</summary>
+    [Parameter] public bool IsViewer { get; set; }
+
+    /// <summary>
+    /// Whether the cards of the won trick are currently moving to this plaque. The plaque shows a highlight
+    /// while it receives them (docs/game-rules.md).
+    /// </summary>
+    [Parameter] public bool IsTakingTrick { get; set; }
+
+    /// <summary>The move-deadline ring, or null when no ring is shown.</summary>
+    [Parameter] public RenderFragment? Ring { get; set; }
+
+    /// <summary>Floating text to render over the plaque, such as "+1 point!", or null.</summary>
+    [Parameter] public RenderFragment? FloatingLabel { get; set; }
+
+    private string ScreenPositionName => SeatRotation.ToCssName(Position);
+
+}

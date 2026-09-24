@@ -1,0 +1,11 @@
+GroupId #key,DisplayName,Description,Placement,Priority,Offers[],Segments[0],Lifetime,Cooldown,IsTransient,Schedule.TimeMode,Schedule.Start.Date,Schedule.Start.Time,Schedule.Duration,Schedule.Recurrence
+shop_featured.first_week,First week,"The starter bundle, while it is still the obvious next step.",shop_featured,10,starter-pack-1,first_week_non_purchaser,Fixed 72h,,TRUE,,,,,
+shop_featured.gem_funded,Gem funded,A premium bundle for a player who can already afford it.,shop_featured,20,lucky-spin-bundle,gem_funded,Fixed 24h,Fixed 7d,TRUE,,,,,
+shop_featured.engaged,Engaged,A deal for a player who keeps coming back to the table.,shop_featured,30,gem-booster-pack,engaged_non_purchaser,Fixed 72h,Fixed 7d,TRUE,,,,,
+shop_featured.fallback,Daily fallback,The offer everyone sees when no cohort's own offer applies.,shop_featured,100,daily-spin-deal,,,,FALSE,Local,2020-01-01,00:00:00,1d,1d
+shop_catalogue.daily,Shop catalogue,"The whole catalogue, sold-out entries included.",shop_catalogue,10,starter-pack-1,,,,FALSE,Local,2020-01-01,00:00:00,1d,1d
+,,,,,starter-pack-2,,,,,,,,,
+,,,,,gem-booster-pack,,,,,,,,,
+,,,,,lucky-spin-bundle,,,,,,,,,
+,,,,,coin-vault,,,,,,,,,
+,,,,,daily-spin-deal,,,,,,,,,

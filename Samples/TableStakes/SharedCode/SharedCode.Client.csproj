@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Client build of the shared game logic. The server compiles the same sources in
+    Backend/SharedCode/SharedCode.csproj against Metaplay.Cloud. The two cannot be one assembly because
+    Metaplay.Cloud and Metaplay.Client each compile the SDK's core types into themselves.
+
+    The WebAssembly client cannot generate its serializer at runtime, so it loads a pre-built
+    Metaplay.Generated.Browser.dll that references the game types by assembly identity. tools/SerializerGen and
+    WebClient both reference this one project so that identity matches.
+  -->
+  <PropertyGroup>
+    <!-- Two flavors, mirroring Metaplay.Client: net10.0-browser for the WebClient app (the compiler's BROWSER
+         define selects the SDK's WebSocket transport and compiles out runtime codegen), and net10.0 for
+         tools/SerializerGen, which needs the full .NET host to generate the serializer. Both produce the same
+         SharedCode.Client assembly identity, which is what the pre-built serializer binds against. -->
+    <TargetFrameworks>net10.0;net10.0-browser</TargetFrameworks>
+    <LangVersion>Latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Version>0.1.0.0</Version>
+    <!-- CS8632/CS8669: nullable annotations used while Nullable is disabled. -->
+    <NoWarn>$(NoWarn);CS8632;CS8669</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\MetaplaySDK\Backend\CodeAnalyzers\Metaplay.CodeAnalyzers.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\MetaplaySDK\Backend\CodeAnalyzers.Shared\Metaplay.CodeAnalyzers.Shared.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\MetaplaySDK\Dotnet\Client\Metaplay.Client.csproj" />
+  </ItemGroup>
+
+</Project>

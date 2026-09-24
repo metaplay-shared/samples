@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>Latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="nunit" Version="4.4.0" />
+    <PackageReference Include="NUnit.Analyzers" Version="4.10.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="NUnit3TestAdapter" Version="5.1.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Server\Server.csproj" />
+    <!-- The config build tool, for the test that checks that GameConfigGen refuses to write an archive when the
+         SDK build reported an error. -->
+    <ProjectReference Include="..\..\tools\GameConfigGen\GameConfigGen.csproj" />
+  </ItemGroup>
+
+  <!-- AnalyticsContractTests is compiled in from SharedCode.Tests rather than referenced. The test checks the
+       [AnalyticsEvent] types in the loaded assemblies, and this project is the only test run that loads the server
+       assembly, so compiling it here also covers analytics events declared in the server. -->
+  <ItemGroup>
+    <Compile Include="..\SharedCode.Tests\AnalyticsContractTests.cs" Link="AnalyticsContractTests.cs" />
+  </ItemGroup>
+
+  <!-- The match test helpers, compiled in from SharedCode.Tests so the server's seating tests use the same seats,
+       times and host shell as the shared-code match tests. MatchTestDeals needs TestBotConfig and TestMatchHost. -->
+  <ItemGroup>
+    <Compile Include="..\SharedCode.Tests\MatchTestDeals.cs" Link="MatchTestDeals.cs" />
+    <Compile Include="..\SharedCode.Tests\TestBotConfig.cs" Link="TestBotConfig.cs" />
+    <Compile Include="..\SharedCode.Tests\TestMatchHost.cs" Link="TestMatchHost.cs" />
+  </ItemGroup>
+
+</Project>
