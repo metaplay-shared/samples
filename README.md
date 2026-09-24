@@ -61,3 +61,11 @@ A preview of the Metaplay game client running as a Blazor WebAssembly app. It ne
 The game itself is deliberately minimal and not meant to be fun: its cards exist to exercise the systems, and a real game would build its own mechanics and card synergies on this foundation.
 
 To run it, start the server with `metaplay dev server` and the web client with `dotnet run --project Client/Client.csproj` (both from `Samples/CollectibleCardGame`), then open [http://localhost:5290](http://localhost:5290). Its dashboard needs Node.js and pnpm (`pnpm install` once, at the repository root). See [`Samples/CollectibleCardGame/README.md`](Samples/CollectibleCardGame/README.md) for the full steps and tests.
+
+### Table Stakes
+
+[`Samples/TableStakes`](Samples/TableStakes) is a realtime trick-taking card game for four players: a match on a multiplayer entity that keeps each player's hand secret, a matchmaker that fills empty seats with bots, and live-service features built on LiveOps Events, Leagues, MetaOffers and player segments, with a custom LiveOps Dashboard. A deployment runs at <https://public-cycles-beam-quickly-public.p2-eu.metaplay.dev/>.
+
+The project was written primarily by AI from specs, and people have only spot-checked it. Read the known issues in its README before copying a part of it into a game.
+
+To run it, start the server with `metaplay dev server` and the web client with `dotnet run --project WebClient/WebClient.csproj` (both from `Samples/TableStakes`), then open [http://localhost:5290](http://localhost:5290). See [`Samples/TableStakes/README.md`](Samples/TableStakes/README.md) for the dashboard, offline mode, bots and tests.
