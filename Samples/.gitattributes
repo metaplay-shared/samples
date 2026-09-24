@@ -38,3 +38,7 @@
 # Not here on purpose: *.svg (the root treats it as text and it diffs usefully),
 # and *.asset / *.prefab / *.unity / *.scenetemplate / *.shadergraph, which are
 # YAML text even at a couple of megabytes — LFS would kill their merges.
+
+# Prebuilt dashboards are served by the game server, which is often built on CI without LFS, so their images stay
+# plain blobs (the dashboards' own public/ folders opt out for the same reason).
+**/Backend/PrebuiltDashboard/** filter= diff= merge=
