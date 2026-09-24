@@ -1,0 +1,89 @@
+@namespace Game.Client.Components
+@using Game.Logic
+
+<button type="button" class="@(Variant == TileVariant.Row ? "deck-row" : $"card-item {(!Owned ? "unowned" : "")} {(Dimmed ? "in-deck" : "")}")"
+        data-testid="@TestId" data-card-id="@Card.CardId.Value" data-owned="@Owned.ToString().ToLowerInvariant()"
+        data-rank="@Rank" data-locked="@Locked.ToString().ToLowerInvariant()" @onclick="Clicked"
+        aria-label="@(Card.DisplayName + (Variant == TileVariant.Row ? ", remove from deck" : Owned ? $", rank {Rank}" : ", not owned"))">
+    @if (Variant == TileVariant.Row)
+    {
+        <span class="mana">@Stats.Cost</span><CardPortrait Card="Card" />
+        <span class="row-name">@Card.DisplayName</span>
+        @if (Locked) { <span title="Locked" data-testid="lock-mark">🔒</span> }
+        <span class="minus" aria-hidden="true">−</span>
+    }
+    else
+    {
+        <CardFace Card="Card" Rank="@(Owned ? Rank : 1)" Locked="Locked" ShowStats="@(Card.Type == CardType.Critter)" />
+        <span class="rank-label @(!Owned ? "unowned-label" : "")" data-testid="rank-stars">@(Owned ? RankStars : "Not owned")</span>
+        @if (Badge != null) { <span class="added" data-testid="card-badge">@Badge</span> }
+    }
+</button>
+
+@code {
+    public enum TileVariant
+    {
+        /// <summary> The collection grid and the deckbuilder's picker. </summary>
+        Grid,
+        /// <summary> One line in a deck list. </summary>
+        Row,
+    }
+
+    /// <summary> The card to draw. </summary>
+    [Parameter, EditorRequired]
+    public CardInfo Card { get; set; } = default!;
+
+    /// <summary> This account's rank for the card, or 0 when it owns none. </summary>
+    [Parameter]
+    public int Rank { get; set; }
+
+    /// <summary> Whether the account owns a copy. </summary>
+    [Parameter]
+    public bool Owned { get; set; }
+
+    /// <summary> Whether the card sits in one of the account's lock slots. </summary>
+    [Parameter]
+    public bool Locked { get; set; }
+
+    /// <summary> Draws the tile as unavailable (already in the deck, or not offerable). </summary>
+    [Parameter]
+    public bool Dimmed { get; set; }
+
+    /// <summary> Optional short label under the tile, e.g. the pick affordance's hint. </summary>
+    [Parameter]
+    public string? Badge { get; set; }
+
+    /// <summary> The rank ceiling, for the hollow half of the star row. From <c>Global.RankMax</c>. </summary>
+    [Parameter]
+    public int RankMax { get; set; } = 5;
+
+    [Parameter]
+    public TileVariant Variant { get; set; } = TileVariant.Grid;
+
+    [Parameter]
+    public EventCallback<CardId> OnClick { get; set; }
+
+    /// <summary>
+    /// The tile's <c>data-testid</c>. Defaulted, and overridden where two sets of cards share a screen — the
+    /// deckbuilder's picker and the deck it is filling — so a test can name one of them.
+    /// </summary>
+    [Parameter]
+    public string TestId { get; set; } = "card-tile";
+
+    /// <summary> The card's numbers at this account's rank, which is what a player actually fields. </summary>
+    CardStats Stats => Card.GetStatsAtRank(Owned ? Rank : 1);
+
+    /// <summary> Filled stars up to the rank, hollow to the ceiling. Unowned cards show none. </summary>
+    string RankStars
+    {
+        get
+        {
+            if (!Owned)
+                return "";
+
+            return new string('★', Rank) + new string('☆', Math.Max(0, RankMax - Rank));
+        }
+    }
+
+    Task Clicked() => OnClick.HasDelegate ? OnClick.InvokeAsync(Card.CardId) : Task.CompletedTask;
+}

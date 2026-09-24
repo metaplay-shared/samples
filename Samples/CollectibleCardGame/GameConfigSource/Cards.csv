@@ -1,0 +1,68 @@
+CardId #key,DisplayName,Clan,Type,Rarity,Cost,Attack,Health,IsSnack,Keywords,ChooseTarget,Hello,Goodbye,OnAttack,TurnStart,TurnEnd,RankTrack,Collectible,InStarterCollection,ArtEmoji,RulesText,Flavor
+EmberKit,Ember Kit,Kitsune,Critter,Common,1,10,5,,Zoomies,,,,,,,CritterDefault,true,true,🦊,Zoomies.,"First out of the den, first into trouble."
+Foxfire,Foxfire,Kitsune,Trick,Common,2,,,,,AnyTarget,DamageChosen3,,,,,TrickAmount5,true,true,🔥,Deal 15 damage to a critter or a Den.,It's not arson if it's beautiful.
+FlameDancer,Flame Dancer,Kitsune,Critter,Common,3,10,15,,,,,,BurnDen1,,,Body10x15,true,true,💃,"After this critter attacks, deal 5 damage to the enemy Den.",Every step scorches the floorboards.
+SizzleWhisker,Sizzle Whisker,Kitsune,Critter,Rare,3,15,10,,Zoomies,,,BurnDen1,,,,Body15x10,true,true,✨,Zoomies. Goodbye: deal 5 damage to the enemy Den.,Goes out with a bang. Always with a bang.
+CinderStorm,Cinder Storm,Kitsune,Trick,Rare,3,,,,,,SweepEnemies1,,,,,None,true,true,🌋,Deal 5 damage to every enemy critter.,The forecast said light drizzle. Of embers.
+NineTailMatriarch,Nine-Tail Matriarch,Kitsune,Critter,Epic,6,25,20,,,,DenPerKitsune,,,,,Body25x20,true,true,🦊,Hello: deal 5 damage to the enemy Den for each other Kitsune card you have played this match.,Every tail remembers a fire you started.
+PebbleCollector,Pebble Collector,Tidepool,Critter,Common,2,10,10,,,,PeekTop3Keep1,,,,,Body10x10,true,true,🦦,"Hello: look at the top 3 cards of your deck, put 1 in your hand and the rest on the bottom.",Every pebble is his favorite pebble.
+TideScholar,Tide Scholar,Tidepool,Critter,Common,3,10,15,,,,DrawOne,,,,,Body10x15,true,true,🐧,Hello: draw a card.,Reads the currents. Files them alphabetically.
+Slipstream,Slipstream,Tidepool,Trick,Common,1,,,,,,ManaBurst2,,,,,None,true,true,🌀,Gain 2 mana this turn.,Faster wet than dry.
+BubbleDrifter,Bubble Drifter,Tidepool,Critter,Common,3,15,10,,Bubble,,,,,,,Body15x10,true,true,🫧,Bubble.,Pop quiz: what floats and doesn't care?
+Undertow,Undertow,Tidepool,Trick,Rare,4,,,,,AnyCritter,"BounceChosen, DrawOne",,,,,TrickCheaper3,true,true,🌊,"Return a critter to its owner's hand, then draw a card.",The sea returns everything eventually.
+Riptide,Riptide,Tidepool,Trick,Epic,6,,,,,,BounceAll,,,,,None,true,true,🌊,Return every critter to its owner's hand.,Everyone out of the pool.
+AcornHoard,Acorn Hoard,Mossback,Trick,Common,2,,,,,,RampOne,,,,,None,true,true,🌰,Gain 1 maximum mana permanently.,"Winter plans, spring dividends."
+MossyYearling,Mossy Yearling,Mossback,Critter,Common,2,5,10,,,,,,,,GrowSelf1,Body5x10,true,true,🐻,"At the end of your turn, this critter gains +5/+5.",Come back next week. You'll see.
+HoneyFeast,Honey Feast,Mossback,Trick,Common,2,,,true,,FriendlyCritter,BuffChosen22,,,,,None,true,true,🍯,Snack: give a friendly critter +10/+10.,"Sticky paws, the wholesome way."
+BoulderBoar,Boulder Boar,Mossback,Critter,Common,5,30,25,,,,,,,,,Body30x25Late,true,true,🐗,,Geology in motion.
+AcornForager,Acorn Forager,Mossback,Critter,Rare,3,10,15,,,,RampOne,,,,,Body10x15,true,true,🐿️,Hello: gain 1 maximum mana permanently.,Finds acorns nobody buried.
+OldMossback,Old Mossback,Mossback,Critter,Epic,7,35,40,,Guard,,,,,,,Body35x40Late,true,true,🐻‍❄️,Guard.,"The forest grew around him, politely."
+SunbeamRetriever,Sunbeam Retriever,Sunny,Critter,Common,3,10,15,,Guard,,,,,,,Body10x15,true,true,🐕,Guard.,Fetches sunbeams. Drops them on friends.
+WarmBiscuit,Warm Biscuit,Sunny,Trick,Common,2,,,true,,FriendlyCritterOrOwnDen,HealChosen4,,,,,TrickAmount3,true,true,🍪,Snack: restore 20 health to a friendly critter or your Den.,Fresh from the den oven.
+PackCheer,Pack Cheer,Sunny,Trick,Common,3,,,,,,RallyFriendly11,,,,,None,true,true,📣,Give your critters +5/+5.,One good boy is a start. A pack is a plan.
+BiscuitHound,Biscuit Hound,Sunny,Critter,Common,4,15,15,,Snacktime,,,,,,,Body15x15,true,true,🐶,Snacktime.,"Bites you, feels great about himself."
+SheepdogShepherd,Sheepdog Shepherd,Sunny,Critter,Rare,4,10,15,,,,SummonLambs2,,,,,Body10x15,true,true,🐕‍🦺,Hello: summon two 5/5 Lambs.,Never works alone. Contractually.
+DawnShepherd,Dawn Shepherd,Sunny,Critter,Epic,6,20,30,,Guard,,,,,HealDenPerFriendly,,Body20x30,true,true,🌅,"Guard. At the start of your turn, restore 5 health to your Den for each friendly critter.","Counts the flock, heals the home."
+MoonlitAlleycat,Moonlit Alleycat,Moonlight,Critter,Common,2,15,5,,Sneaky,,,,,,,Body15x5,true,true,🐈‍⬛,Sneaky.,You never saw her. You never do.
+SmokeBomb,Smoke Bomb,Moonlight,Trick,Common,1,,,,,FriendlyCritter,CloakChosenSneaky,,,,,None,true,true,💨,Give a friendly critter Sneaky.,"Exit, stage everywhere."
+MoonlightSeance,Moonlight Séance,Moonlight,Trick,Common,3,,,,,,CopyBigOwnCritter,,,,,None,true,true,🕯️,Add a copy of the costliest critter in your graveyard to your hand.,The dumpster remembers its heroes.
+WhiskerThief,Whisker Thief,Moonlight,Critter,Rare,4,10,10,,,EnemyCritter,"ShrinkChosen11, GrowSelf1",,,,,Body10x10,true,true,🦝,"Hello: give an enemy critter -5/-5, then this critter gains +5/+5.",Your stats. Her stats now.
+DumpsterBandit,Dumpster Bandit,Moonlight,Critter,Rare,3,10,15,,,,CopyCheapEnemyTrick,,,,,Body10x15,true,true,🗑️,Hello: add a copy of the cheapest trick in the enemy graveyard to your hand.,"One critter's trash, same critter's loss."
+RaccoonRingleader,Raccoon Ringleader,Moonlight,Critter,Epic,6,20,20,,Sneaky,,CopyBigEnemyCard,,,,,Body20x20,true,true,🎭,Sneaky. Hello: add a copy of the costliest card in the enemy graveyard to your hand.,Plans the heist. Names the heist. Is the heist.
+MeadowMouse,Meadow Mouse,Wanderer,Critter,Common,1,5,10,,,,,,,,,Body5x10,true,true,🐭,,Small. Determined. Mostly small.
+GardenSnail,Garden Snail,Wanderer,Critter,Common,1,0,15,,Guard,,,,,,,Body0x15,true,true,🐌,Guard.,"Slow to move, slower to move past."
+BusyBeaver,Busy Beaver,Wanderer,Critter,Common,2,10,10,,,,,,,,,Body10x10,true,true,🦫,,Has a project. Won't say what.
+TrailRabbit,Trail Rabbit,Wanderer,Critter,Common,2,10,5,,Zoomies,,,,,,,CritterDefault,true,true,🐇,Zoomies.,Gone before the grass bends back.
+RiverDuck,River Duck,Wanderer,Critter,Common,2,5,15,,,,,,,,,Body5x15,true,true,🦆,,Unbothered. Moisturized. In her lane.
+PondFrog,Pond Frog,Wanderer,Critter,Common,3,15,15,,,,,,,,,Body15x15,true,true,🐸,,Sits exactly where he means to.
+WiseTortoise,Wise Tortoise,Wanderer,Critter,Common,3,10,20,,,,,,,,,Body10x20,true,true,🐢,,Has seen this match before. All of them.
+PricklyHedgehog,Prickly Hedgehog,Wanderer,Critter,Common,4,15,20,,,,,,,,,Body15x20,true,true,🦔,,Hugs on her own terms.
+StrayGoat,Stray Goat,Wanderer,Critter,Common,4,20,15,,,,,,,,,Body20x15,true,true,🐐,,Eats fences. Respects none.
+HillPony,Hill Pony,Wanderer,Critter,Common,4,15,25,,,,,,,,,Body15x25,true,true,🐴,,"Sturdy uphill, smug downhill."
+GreyOwl,Grey Owl,Wanderer,Critter,Common,5,15,30,,,,,,,,,Body15x30,true,true,🦉,,Asks who. Knows exactly who.
+OldBadger,Old Badger,Wanderer,Critter,Common,5,20,25,,,,,,,,,Body20x25,true,true,🦡,,Retired from digging. Not from grudges.
+MooseWanderer,Moose Wanderer,Wanderer,Critter,Common,6,25,30,,,,,,,,,Body25x30,true,true,🫎,,Takes the scenic route through your board.
+BerrySnack,Berry Snack,Wanderer,Trick,Common,1,,,true,,FriendlyCritterOrOwnDen,HealChosen2,,,,,None,true,true,🫐,Snack: restore 10 health to a friendly critter or your Den.,Five a day keeps the Kitsune away.
+FieldNotes,Field Notes,Wanderer,Trick,Common,2,,,,,,DrawOne,,,,,None,true,true,📓,Draw a card.,Somebody wrote down where the good stuff is.
+TheAcorn,The Acorn,Wanderer,Trick,Common,0,,,,,,AcornMana1,,,,,None,false,false,🌰,Gain 1 mana this turn.,"Compensation, and a small apology, for going second."
+LambToken,Lamb,Sunny,Critter,Common,1,5,5,,,,,,,,,None,false,false,🐑,,"Summoned, and delighted about it."
+EmberEaredHare,Ember-Eared Hare,Kitsune,Critter,Common,1,10,5,,Zoomies,,,,,,,CritterDefault,true,false,🦊,Zoomies.,"By the time you notice the ears, the rest is already trouble."
+PaperLanternPrank,Paper Lantern Prank,Kitsune,Trick,Common,2,,,,,AnyTarget,DamageChosen3,,,,,TrickAmount5,true,false,🔥,Deal 15 damage to a critter or a Den.,"Harmless fun, assuming the lantern was supposed to breathe fire."
+BonfireBengal,Bonfire Bengal,Kitsune,Critter,Rare,3,15,10,,Zoomies,,,BurnDen1,,,,Body15x10,true,false,✨,Zoomies. Goodbye: deal 5 damage to the enemy Den.,Treats every entrance like a finale and every finale like an encore.
+TheHundredTailTale,The Hundred-Tail Tale,Kitsune,Critter,Epic,6,25,20,,,,DenPerKitsune,,,,,Body25x20,true,false,🦊,Hello: deal 5 damage to the enemy Den for each other Kitsune card you have played this match.,The story grows a new tail every time it is told.
+MapShellTurtle,Map-Shell Turtle,Tidepool,Critter,Common,2,10,10,,,,PeekTop3Keep1,,,,,Body10x10,true,false,🐢,"Hello: look at the top 3 cards of your deck, put 1 in your hand and the rest on the bottom.","Every route is on the shell, if you know which spiral to follow."
+MoonpoolFrog,Moonpool Frog,Tidepool,Critter,Common,3,15,10,,Bubble,,,,,,,Body15x10,true,false,🫧,Bubble.,The moon is definitely in the pond. He checked twice.
+SealOfApproval,Seal of Approval,Tidepool,Trick,Rare,4,,,,,AnyCritter,"BounceChosen, DrawOne",,,,,TrickCheaper3,true,false,🌊,"Return a critter to its owner's hand, then draw a card.","Stamped, splashed and sent back for revision."
+SpringTide,Spring Tide,Tidepool,Trick,Epic,6,,,,,,BounceAll,,,,,None,true,false,🌊,Return every critter to its owner's hand.,The board gets one deep breath before everything starts again.
+PocketShovelMole,Pocket-Shovel Mole,Mossback,Critter,Common,2,5,10,,,,,,,,GrowSelf1,Body5x10,true,false,🦡,"At the end of your turn, this critter gains +5/+5.",The shovel is pocket-sized. The ambition is geological.
+BuriedAcorn,Buried Acorn,Mossback,Trick,Common,2,,,,,,RampOne,,,,,None,true,false,🌰,Gain 1 maximum mana permanently.,Plant one now. Remember where later.
+DeepdelverMole,Deepdelver Mole,Mossback,Critter,Rare,3,10,15,,,,RampOne,,,,,Body10x15,true,false,🦡,Hello: gain 1 maximum mana permanently.,Came looking for bedrock. Found tomorrow's mana instead.
+HillRaiserMole,Hill-Raiser Mole,Mossback,Critter,Epic,7,35,40,,Guard,,,,,,,Body35x40Late,true,false,🦡,Guard.,Yesterday the hill was not there. Neither was she.
+LongdogLookout,Longdog Lookout,Sunny,Critter,Common,3,10,15,,Guard,,,,,,,Body10x15,true,false,🐕,Guard.,The front half spots trouble. The back half is still rounding the corner.
+PicnicBasket,Picnic Basket,Sunny,Trick,Common,1,,,true,,FriendlyCritterOrOwnDen,HealChosen2,,,,,None,true,false,🫐,Snack: restore 10 health to a friendly critter or your Den.,Packed for four. Heals approximately one.
+RescueStBernard,Rescue St. Bernard,Sunny,Critter,Rare,4,10,15,,,,SummonLambs2,,,,,Body10x15,true,false,🐕‍🦺,Hello: summon two 5/5 Lambs.,Never asks why the lambs were on the mountain. Just brings them home.
+HearthOfTheWholePack,Hearth of the Whole Pack,Sunny,Critter,Epic,6,20,30,,Guard,,,,,HealDenPerFriendly,,Body20x30,true,false,🌅,"Guard. At the start of your turn, restore 5 health to your Den for each friendly critter.",Wherever she lies down becomes home.
+KeyholeKitten,Keyhole Kitten,Moonlight,Critter,Common,2,15,5,,Sneaky,,,,,,,Body15x5,true,false,🐈‍⬛,Sneaky.,"If the head fits, the rest considers itself invited."
+PossumEncore,Possum Encore,Moonlight,Trick,Common,3,,,,,,CopyBigOwnCritter,,,,,None,true,false,🕯️,Add a copy of the costliest critter in your graveyard to your hand.,The first performance was only a very convincing rehearsal.
+VelvetRopeCat,Velvet-Rope Cat,Moonlight,Critter,Rare,4,10,10,,,EnemyCritter,"ShrinkChosen11, GrowSelf1",,,,,Body10x10,true,false,🦝,"Hello: give an enemy critter -5/-5, then this critter gains +5/+5.",The rope is there to keep everyone else away from her exhibit.
+QueenOfBorrowedThings,Queen of Borrowed Things,Moonlight,Critter,Epic,6,20,20,,Sneaky,,CopyBigEnemyCard,,,,,Body20x20,true,false,🎭,Sneaky. Hello: add a copy of the costliest card in the enemy graveyard to your hand.,Your treasure was merely waiting to join a better collection.

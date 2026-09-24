@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <Playwright>
+    <!-- Run tests in headless mode (no visible browser window) -->
+    <BrowserName>chromium</BrowserName>
+    <LaunchOptions>
+      <Headless>true</Headless>
+      <!-- Set to false to see the browser for debugging:
+      <Headless>false</Headless>
+      <SlowMo>500</SlowMo>
+      -->
+    </LaunchOptions>
+    <!-- Screenshot on failure -->
+    <ExpectTimeout>5000</ExpectTimeout>
+  </Playwright>
+</RunSettings>

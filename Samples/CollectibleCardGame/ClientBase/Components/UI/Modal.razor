@@ -1,0 +1,145 @@
+@namespace Game.ClientBase.Components.UI
+
+@if (IsOpen)
+{
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
+         style="background: @BackdropBackground;"
+         @onclick="OnBackdropClick">
+        <div class="w-full @SizeClass p-5 rounded-2xl border animate-pop-in"
+             style="background: var(--bg-card); border-color: var(--border-color); box-shadow: 0 20px 60px rgba(0,0,0,0.6);"
+             @onclick:stopPropagation="true">
+            @if (!string.IsNullOrEmpty(Title) || HeaderContent != null)
+            {
+                <div class="flex items-center justify-between mb-4">
+                    @if (HeaderContent != null)
+                    {
+                        @HeaderContent
+                    }
+                    else
+                    {
+                        <div class="flex items-center gap-2">
+                            @if (!string.IsNullOrEmpty(Icon))
+                            {
+                                <span class="text-xl">@Icon</span>
+                            }
+                            <h2 class="text-lg font-semibold" style="color: var(--text-primary);">@Title</h2>
+                        </div>
+                    }
+                    @if (ShowCloseButton)
+                    {
+                        <button class="w-8 h-8 rounded-full flex items-center justify-center"
+                                style="background: var(--bg-hover); color: var(--text-secondary);"
+                                @onclick="OnClose">
+                            <span>✕</span>
+                        </button>
+                    }
+                </div>
+            }
+
+            <div>
+                @ChildContent
+            </div>
+
+            @if (FooterContent != null)
+            {
+                <div class="mt-4 pt-4 flex gap-2 justify-end" style="border-top: 1px solid var(--border-color);">
+                    @FooterContent
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    /// <summary>
+    /// Modal size.
+    /// </summary>
+    public enum ModalSize
+    {
+        Small,
+        Medium,
+        Large
+    }
+
+    /// <summary>
+    /// Whether the modal is open.
+    /// </summary>
+    [Parameter]
+    public bool IsOpen { get; set; }
+
+    /// <summary>
+    /// Callback when modal should close.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    /// <summary>
+    /// Modal title.
+    /// </summary>
+    [Parameter]
+    public string? Title { get; set; }
+
+    /// <summary>
+    /// Icon (emoji) for header.
+    /// </summary>
+    [Parameter]
+    public string? Icon { get; set; }
+
+    /// <summary>
+    /// Whether to show close button in header. Default: true
+    /// </summary>
+    [Parameter]
+    public bool ShowCloseButton { get; set; } = true;
+
+    /// <summary>
+    /// Whether clicking backdrop closes modal. Default: true
+    /// </summary>
+    [Parameter]
+    public bool CloseOnBackdropClick { get; set; } = true;
+
+    /// <summary>
+    /// Backdrop (scrim) background. Default: rgba(0, 0, 0, 0.7).
+    /// Pass a lighter value to keep the screen behind the modal visible.
+    /// </summary>
+    [Parameter]
+    public string BackdropBackground { get; set; } = "rgba(0, 0, 0, 0.7)";
+
+    /// <summary>
+    /// Modal size. Default: Medium
+    /// </summary>
+    [Parameter]
+    public ModalSize Size { get; set; } = ModalSize.Medium;
+
+    /// <summary>
+    /// Custom header content (replaces Title/Icon).
+    /// </summary>
+    [Parameter]
+    public RenderFragment? HeaderContent { get; set; }
+
+    /// <summary>
+    /// Main modal content.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// Footer content (typically action buttons).
+    /// </summary>
+    [Parameter]
+    public RenderFragment? FooterContent { get; set; }
+
+    private string SizeClass => Size switch
+    {
+        ModalSize.Small => "max-w-xs",
+        ModalSize.Large => "max-w-lg",
+        _ => "max-w-sm"
+    };
+
+    private async Task OnBackdropClick()
+    {
+        if (CloseOnBackdropClick)
+        {
+            await OnClose.InvokeAsync();
+        }
+    }
+}

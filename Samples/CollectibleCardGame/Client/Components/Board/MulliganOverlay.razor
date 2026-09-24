@@ -1,0 +1,57 @@
+@namespace Game.Client.Components.Board
+@using Game.Logic
+
+@* The opening hand under an already-revealed Weather, toggled for replacement, and one confirm.
+
+   This is the one place the client batches, and the reason is the server: a seat's mulligan is swapped as one
+   step, and both seats answer under one shared deadline. Lapsing keeps the dealt hand. The Weather is revealed first
+   because mulliganing around it is the entire reason the Weather is public — revealing it afterwards would
+   make it dice on an outcome, which is the one thing this game's randomness is not allowed to be.
+
+   The scrim covers the whole board uniformly. The hand component raises only the physical cards above it,
+   while this overlay repeats the Weather in a dedicated reading position clear of the fan. *@
+
+<div class="board-overlay board-overlay-mulligan" data-testid="mulligan-overlay">
+    <aside class="mulligan-weather" data-testid="mulligan-weather">
+        <WeatherBanner Weather="@Weather" IsHeldOpen="true" />
+    </aside>
+    <div class="overlay-panel">
+        @if (HasAnswered)
+        {
+            @* This seat has answered and the table has not left the phase, because the other seat has not.
+               There is nothing left to ask, so the panel stops asking: no prompt, no count, and above all no
+               confirm, because an enabled control that does nothing is the defect this panel had. *@
+            <h3>Waiting for your opponent</h3>
+            <p data-testid="mulligan-waiting">Your hand is in. The board opens when your opponent answers or the
+               shared deadline lapses.</p>
+        }
+        else
+        {
+            <h3>Your opening hand</h3>
+            <p>Tap the cards you would rather not keep. What you put back is reshuffled and redrawn — the same
+               number, from the same deck.</p>
+            <p class="overlay-count" data-testid="mulligan-selected-count">@Selected.Count marked for replacement</p>
+            <div class="overlay-actions">
+                <button class="overlay-confirm" data-testid="mulligan-confirm" disabled="@IsBusy" @onclick="Confirm">
+                    @(Selected.Count == 0 ? "Keep this hand" : $"Replace {Selected.Count}")
+                </button>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public HashSet<CardInstanceId> Selected { get; set; } = new HashSet<CardInstanceId>();
+    [Parameter] public WeatherInfo? Weather { get; set; }
+    [Parameter] public bool IsBusy { get; set; }
+
+    /// <summary>
+    /// Whether this seat has already submitted. The scrim stays — the table is still in the mulligan and the
+    /// board behind it is not playable — but every control that would act is gone, because the one predicate
+    /// that decides whether an answer is still accepted is the same one <c>OnMulliganConfirm</c> checks.
+    /// </summary>
+    [Parameter] public bool HasAnswered { get; set; }
+    [Parameter] public EventCallback OnConfirm { get; set; }
+
+    Task Confirm() => OnConfirm.HasDelegate ? OnConfirm.InvokeAsync() : Task.CompletedTask;
+}

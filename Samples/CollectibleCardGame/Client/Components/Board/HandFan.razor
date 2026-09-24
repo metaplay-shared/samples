@@ -1,0 +1,291 @@
+@namespace Game.Client.Components.Board
+@using Game.Logic
+@using Game.Client.Components
+@using Game.Client.Services
+@using Microsoft.AspNetCore.Components.Web
+
+@* The player's hand, on an arc along the bottom edge and face up — the only hand whose faces are drawn.
+
+   The cards are points on one circle whose centre is far below the board, so the fan's lower parts sit under
+   the board's own edge and only the cost, the art and the name show at rest. The card under the pointer
+   grows and rises out of the fan as its clan crest travels from below the cost to its open corner; hold a
+   moment longer and a parchment rules plaque opens beside it.
+
+   Legality is shown, never explained: cards playable right now are haloed and take input; everything else is
+   dimmed and inert. The lift is local feedback and is not game state, and the pressed card stands up out of
+   the hand rather than following the pointer — a card under the finger is a render per pointer sample, on a
+   WebAssembly UI whose whole render budget is the game's.
+
+   The mulligan is the exception to "dimmed unless playable", and it has to be: nothing is playable during
+   the mulligan, and the hand is the very thing the overlay asks the player to tap. While it is open, the
+   cards that may be put back are bright and take input, and a tap marks one for replacement rather than
+   playing it. A card the mulligan cannot put back stays dim, for the same reason an unplayable card does. *@
+
+<div class="hand @(IsBusy ? "hand-inert" : "") @(IsMulliganOpen ? "hand-mulligan" : "")"
+     data-testid="hand"
+     data-count="@Cards.Count">
+    @for (int ndx = 0; ndx < Cards.Count; ndx++)
+    {
+        HandCard card = Cards[ndx];
+        HandCardPlacement place = _placements[ndx];
+        CardInfo? info = Catalogue(card.Card);
+        bool playable = !IsBusy && PlayableIds.Contains(card.Instance);
+        bool selected = SelectedInstance.HasValue && SelectedInstance.Value == card.Instance;
+        bool marked = MarkedIds.Contains(card.Instance);
+        bool markable = IsMulliganOpen && ReplaceableIds.Contains(card.Instance);
+        bool peeking = _peeked.HasValue && _peeked.Value == card.Instance;
+        CardInstanceId instance = card.Instance;
+
+        <div @key="instance" class="handcard @(selected ? "handcard-selected" : "") @(peeking ? "handcard-peeking" : "") @(IsResolving(instance) ? "handcard-resolving-play" : "")"
+             data-testid="hand-card"
+             data-instance="@card.Instance.Value"
+             data-card-id="@card.Card.Value"
+             data-playable="@playable.ToString().ToLowerInvariant()"
+             data-mulligan="@markable.ToString().ToLowerInvariant()"
+             data-selected="@selected.ToString().ToLowerInvariant()"
+             data-marked="@marked.ToString().ToLowerInvariant()"
+             data-cost="@Cost(card)"
+             role="button"
+             tabindex="0"
+             style="--fan-x: @Num(place.OffsetX); --fan-y: @Num(place.OffsetY); --fan-rot: @Num(place.RotationDeg)deg; z-index: @(ndx + 1);"
+             @onclick="() => Clicked(instance)"
+             @onkeydown="args => KeyDown(args, instance)"
+             @onfocus="() => _lastPointerWasTouch ? Task.CompletedTask : HoverIn(instance)"
+             @onblur="() => ClearPeek(instance)"
+             @onpointerenter="args => PointerEntered(args, instance)"
+             @onmouseleave="() => ClearPeek(instance)"
+             @onpointerdown="args => PointerDown(args, instance)">
+
+            <CardFace Card="@info"
+                      Mode="CardFace.FaceMode.Summary"
+                      Rank="@card.Rank"
+                      Cost="@Cost(card)"
+                      ShowStats="@(info != null && info.Type == CardType.Critter)"
+                      IsPlayable="@(playable && !selected)"
+                      IsSelected="@selected"
+                      IsLifted="@selected"
+                      IsMarked="@marked"
+                      IsDimmed="@(!playable && !selected && !markable && !IsMulliganOpen)"
+                      Mark="@(marked ? "✂️" : null)"
+                      CostTestId="hand-card-cost"
+                      NameTestId="hand-card-name"
+                      AttackTestId="hand-card-attack"
+                      HealthTestId="hand-card-health"
+                      KeywordsTestId="hand-card-keywords" />
+
+            @* The parchment is a peek, not a step: it is withheld while an intent is in
+               flight. Only the active card renders one; the actual card above is the face being enlarged. *@
+            @if (peeking && info != null && !IsBusy && !IsResolving(instance))
+            {
+                <div class="handcard-peek handcard-peek-right @(UsesEdgeFallback(place) ? "handcard-peek-edge" : "")">
+                    <CardTooltip Card="@info" Rank="@card.Rank" RankMax="@RankMax" />
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<HandCard> Cards { get; set; } = new List<HandCard>();
+    [Parameter] public SharedGameConfig? Config { get; set; }
+    [Parameter] public MatchRulesState? Rules { get; set; }
+    [Parameter] public int Seat { get; set; }
+    [Parameter] public HashSet<CardInstanceId> PlayableIds { get; set; } = new HashSet<CardInstanceId>();
+    /// <summary> Cards toggled for replacement in the mulligan, or kept from a peek. </summary>
+    [Parameter] public HashSet<CardInstanceId> MarkedIds { get; set; } = new HashSet<CardInstanceId>();
+
+    /// <summary>
+    /// Whether this seat may still answer the mulligan, in which case a tap marks the card for replacement
+    /// and the cards that may be marked are bright: legality has nothing to say about a hand nobody may play
+    /// from yet. This is the seat's own state, not the table's — once this seat has answered the fan goes dim
+    /// and inert even though the scrim is still up, because a lit hand that refuses every tap is a lie.
+    /// </summary>
+    [Parameter] public bool IsMulliganOpen { get; set; }
+
+    /// <summary>
+    /// The cards the mulligan may put back. Everything else in the hand stays dim and inert while the
+    /// mulligan is open: a card that came from no deck of this seat's can never go back into one, so
+    /// offering it would be offering a mark the table refuses.
+    /// </summary>
+    [Parameter] public HashSet<CardInstanceId> ReplaceableIds { get; set; } = new HashSet<CardInstanceId>();
+    [Parameter] public CardInstanceId? SelectedInstance { get; set; }
+    [Parameter] public BoardBeat? Beat { get; set; }
+
+    /// <summary>
+    /// Whether the Full-face peek is withheld: an intent is in flight, the table is holding a beat, or a
+    /// selection is choosing its target. The last one is not politeness — the peek opens over the board,
+    /// which is where the targets are, so a face that appeared while the player was reaching for one would
+    /// cover the thing they are aiming at.
+    /// </summary>
+    [Parameter] public bool IsBusy { get; set; }
+
+    [Parameter] public EventCallback<CardInstanceId> OnCardClick { get; set; }
+
+    List<HandCardPlacement> _placements = new List<HandCardPlacement>();
+
+    /// <summary> Which card's rules plaque is open, or null. Local feedback; never game state. </summary>
+    CardInstanceId? _peeked;
+
+    /// <summary>
+    /// Which card the pointer is on right now, which is not the same as which plaque is open: the plaque waits
+    /// out <see cref="PeekDelayMs"/> first. Without that wait a sweep along the hand opens and closes a rules
+    /// plaque per card — the flicker the design's hover delay exists to prevent — and every one of them is a
+    /// render on a UI whose whole budget is the game's.
+    /// </summary>
+    CardInstanceId? _hovering;
+
+    /// <summary> Whether the click following the last pointer-down came from touch. </summary>
+    // Keep pointer identity through blur/leave and compatibility clicks; only another pointer-down changes it.
+    bool _lastPointerWasTouch;
+    bool _touchPeeked;
+    bool _wasBusy;
+    int _hoverGeneration;
+
+    int RankMax => Config?.Global.RankMax ?? 5;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        foreach (CardInstanceId instance in _presentedCosts.Keys.ToArray())
+        {
+            if (!Contains(instance))
+                _presentedCosts.Remove(instance);
+        }
+
+        // Pure geometry, recomputed only when the hand's size changes.
+        if (_placements.Count != Cards.Count)
+            _placements = HandFanGeometry.Layout(Cards.Count);
+
+        // A peek cannot outlive the card it was opened on, or the moment the board stops taking input.
+        if (_peeked.HasValue && (IsBusy || !Contains(_peeked.Value)))
+            _peeked = null;
+        if (_hovering.HasValue && !Contains(_hovering.Value))
+            _hovering = null;
+        bool resumeHover = _wasBusy && !IsBusy;
+        if (IsBusy && !_wasBusy)
+        {
+            ++_hoverGeneration;
+            _touchPeeked = false;
+        }
+        _wasBusy = IsBusy;
+        if (resumeHover && _hovering.HasValue)
+            await HoverIn(_hovering.Value);
+    }
+
+    bool Contains(CardInstanceId instance)
+    {
+        foreach (HandCard card in Cards)
+        {
+            if (card.Instance == instance)
+                return true;
+        }
+
+        return false;
+    }
+
+    bool IsResolving(CardInstanceId instance)
+        => Beat?.Kind == BoardBeatKind.CardPlay && Beat.Source == instance;
+
+    CardInfo? Catalogue(CardId cardId)
+        => Config != null && Config.Cards.TryGetValue(cardId, out CardInfo card) ? card : null;
+
+    /// <summary>
+    /// What the card costs right now, by the same shared function the server validates the play with — not
+    /// the number the hand was delivered with, which a Weather that discounts the first trick of a turn has
+    /// since moved.
+    /// <para>
+    /// It calls <see cref="ManaRules.CostToPlay"/> directly. The wrapper that used to sit in front of it
+    /// existed to translate a projection into the arguments the shared rule wanted, and there is no
+    /// projection left to translate.
+    /// </para>
+    /// </summary>
+    int Cost(HandCard card)
+    {
+        // A queued turn or effect must not change the hand's price before its board is presented.
+        if (IsBusy && _presentedCosts.TryGetValue(card.Instance, out int presented))
+            return presented;
+
+        if (Rules == null || Config == null)
+            return 0;
+
+        int cost = ManaRules.CostToPlay(Config, Rules, Seat, card);
+        _presentedCosts[card.Instance] = cost;
+        return cost;
+    }
+
+    readonly Dictionary<CardInstanceId, int> _presentedCosts = new Dictionary<CardInstanceId, int>();
+
+    static string Num(double value) => value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Only cards near the fan's right edge need a left-side fallback, and only when the board is narrow
+    /// enough that the preferred right-side parchment would cross the viewport. CSS owns that width check.
+    /// </summary>
+    static bool UsesEdgeFallback(HandCardPlacement place) => place.OffsetX >= 0.7;
+
+    /// <summary>
+    /// The pointer arrived on a card. The rules plaque opens only if it is still there when the delay is up, so
+    /// moving across the hand costs nothing.
+    /// </summary>
+    Task PointerEntered(PointerEventArgs args, CardInstanceId instance)
+        => args.PointerType == "mouse" ? HoverIn(instance) : Task.CompletedTask;
+
+    async Task HoverIn(CardInstanceId instance)
+    {
+        _touchPeeked = false;
+        _hovering = instance;
+        int generation = ++_hoverGeneration;
+        if (IsBusy)
+            return;
+
+        await Task.Delay(PeekDelayMs);
+
+        if (generation == _hoverGeneration && _hovering == instance && !IsBusy && Contains(instance))
+        {
+            _peeked = instance;
+            StateHasChanged();
+        }
+    }
+
+    void ClearPeek(CardInstanceId instance)
+    {
+        // Leaving an old card must not cancel a newer card's pending inspection.
+        if (_hovering == instance)
+        {
+            ++_hoverGeneration;
+            _hovering = null;
+        }
+        if (_peeked == instance)
+        {
+            _touchPeeked = false;
+            _peeked = null;
+        }
+    }
+
+    /// <summary> How long the pointer has to rest on a card before its Full face opens. </summary>
+    const int PeekDelayMs = 350;
+
+    /// <summary>
+    /// Touch taps toggle inspection; dragging commits a play. Mulligan taps still mark replacements.
+    /// Mouse and keyboard keep their ordinary click behavior.
+    /// </summary>
+    void PointerDown(PointerEventArgs args, CardInstanceId instance)
+    {
+        _lastPointerWasTouch = args.PointerType == "touch";
+    }
+
+    Task KeyDown(KeyboardEventArgs args, CardInstanceId instance)
+        => args.Key is "Enter" or " " ? OnCardClick.InvokeAsync(instance) : Task.CompletedTask;
+
+    Task Clicked(CardInstanceId instance)
+    {
+        if (_lastPointerWasTouch && !IsMulliganOpen)
+        {
+            _hovering = null;
+            _peeked = _peeked == instance && _touchPeeked ? null : instance;
+            _touchPeeked = _peeked.HasValue;
+            return Task.CompletedTask;
+        }
+
+        return OnCardClick.HasDelegate ? OnCardClick.InvokeAsync(instance) : Task.CompletedTask;
+    }
+}

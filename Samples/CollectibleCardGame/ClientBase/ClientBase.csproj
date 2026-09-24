@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <!--
+    Game-agnostic Blazor shell: connection lifecycle, the connection-trouble app shell, environment selection,
+    the theme and a handful of UI primitives. Everything here would look the same in any Metaplay web game;
+    the game half lives in Client/.
+
+    Static web assets (wwwroot/css, wwwroot/js) are served to the app under _content/ClientBase/ - that path
+    follows the *assembly* name, so renaming this project moves them.
+  -->
+  <PropertyGroup>
+    <!-- Browser-only: consumed solely by the WASM Client, so it takes the same TFM as the SDK's
+         browser flavor of Metaplay.Client. -->
+    <TargetFramework>net10.0-browser</TargetFramework>
+    <!-- The assembly is ClientBase (which is what _content/ClientBase/ follows), but the types live under
+         Game.* like the rest of the sample, so the .razor components' generated namespaces have to be told. -->
+    <RootNamespace>Game.ClientBase</RootNamespace>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>Latest</LangVersion>
+    <!-- Suppress nullable annotation warnings since Nullable is disabled -->
+    <NoWarn>$(NoWarn);CS8632;CS8669</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Blazor WebAssembly hosting + component APIs. -->
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\MetaplaySDK\Backend\CodeAnalyzers\Metaplay.CodeAnalyzers.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\MetaplaySDK\Backend\CodeAnalyzers.Shared\Metaplay.CodeAnalyzers.Shared.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\MetaplaySDK\Dotnet\Client\Metaplay.Client.csproj" />
+  </ItemGroup>
+
+</Project>

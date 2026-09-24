@@ -1,0 +1,85 @@
+@namespace Game.Client.Components.Board
+@using Game.Logic
+@implements IDisposable
+
+@if (ShowFlight && Current is CardPlayedEvent played && Info(played) is CardInfo card)
+{
+    <div class="trick-flight-destination" data-testid="trick-flight-destination"
+         data-instance="@played.Instance.Value" aria-hidden="true">
+        <CardFace Card="@card" Rank="@played.Rank" Cost="@played.ManaSpent" ShowStats="false" />
+    </div>
+}
+@if (ShowDetail && _shown is CardPlayedEvent last && Info(last) is CardInfo lastCard)
+{
+    <aside class="last-trick @(_fading ? "last-trick-fading" : "")" data-testid="last-trick" data-instance="@last.Instance.Value"
+           aria-label="Last trick played">
+        <CardFace Card="@lastCard" Rank="@last.Rank" Cost="@last.ManaSpent" ShowStats="false" />
+        <div class="last-trick-copy">
+            <small>@(last.Seat == State.LocalSeat ? "Your trick" : "Opponent's trick")</small>
+            <strong>@lastCard.DisplayName</strong>
+            <p>@lastCard.RulesText</p>
+        </div>
+    </aside>
+}
+
+@code {
+    [Parameter, EditorRequired] public BoardViewState State { get; set; } = default!;
+    [Parameter] public bool ShowFlight { get; set; } = true;
+    [Parameter] public bool ShowDetail { get; set; }
+
+    CardPlayedEvent? _seen;
+    CardPlayedEvent? _shown;
+    bool _fading;
+    CancellationTokenSource? _expiry;
+
+    protected override void OnParametersSet()
+    {
+        if (!ShowDetail || Last is not CardPlayedEvent candidate || ReferenceEquals(candidate, _seen))
+            return;
+
+        _expiry?.Cancel();
+        _expiry?.Dispose();
+        _expiry = new CancellationTokenSource();
+        _seen = candidate;
+        _shown = candidate;
+        _fading = false;
+        _ = ExpireAsync(_expiry.Token);
+    }
+
+    async Task ExpireAsync(CancellationToken cancellation)
+    {
+        try
+        {
+            await Task.Delay(6000, cancellation);
+            await InvokeAsync(() => { cancellation.ThrowIfCancellationRequested(); _fading = true; StateHasChanged(); });
+            await Task.Delay(250, cancellation);
+            await InvokeAsync(() => { cancellation.ThrowIfCancellationRequested(); _shown = null; StateHasChanged(); });
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    public void Dispose()
+    {
+        _expiry?.Cancel();
+        _expiry?.Dispose();
+    }
+
+    CardInfo? Info(CardPlayedEvent played)
+        => State.Config != null && State.Config.Cards.TryGetValue(played.Card, out CardInfo info)
+            && info.Type != CardType.Critter ? info : null;
+
+    CardPlayedEvent? Current => State.Beat?.Event is CardPlayedEvent played && Info(played) != null ? played : null;
+
+    CardPlayedEvent? Last
+    {
+        get
+        {
+            for (int index = State.History.Count - 1; index >= 0; index--)
+            {
+                if (State.History[index] is CardPlayedEvent played && Info(played) != null)
+                    return Current?.Instance == played.Instance ? null : played;
+            }
+            return null;
+        }
+    }
+}

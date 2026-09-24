@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Shared game-logic assembly for the Blazor WebAssembly client. Lives inside SharedCode/ and compiles the
+    sources around it as a normal project.
+
+    The WebAssembly client cannot generate its serializer at runtime (mono-wasm has no Reflection.Emit / Roslyn),
+    so it loads a pre-built Metaplay.Generated.Browser.dll. That generated assembly references the concrete game
+    types (PlayerModel, PlayerActions, ...) *by assembly identity*. To make the identity match between the
+    build-time generator (Tools/SerializerGen) and the runtime app (Client), the game types live here in a single
+    shared assembly that both projects reference - rather than being source-included into each.
+
+    The server-side counterpart is Backend/SharedCode/SharedCode.csproj, which source-includes this same tree but
+    compiles it against Metaplay.Cloud (server) and is therefore not usable in the browser.
+  -->
+  <PropertyGroup>
+    <!-- Two flavors, mirroring Metaplay.Client: net10.0-browser for the Client app (the compiler's BROWSER
+         define selects the SDK's WebSocket transport and compiles out runtime codegen), and net10.0 for
+         Tools/SerializerGen, which needs the full .NET host to generate the serializer. Both produce the same
+         GameLogic assembly identity, which is what the pre-built serializer binds against. -->
+    <TargetFrameworks>net10.0;net10.0-browser</TargetFrameworks>
+    <LangVersion>Latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Version>0.1.0.0</Version>
+    <!-- CS8632/CS8669: nullable annotations used while Nullable is disabled. -->
+    <NoWarn>$(NoWarn);CS8632;CS8669</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\MetaplaySDK\Backend\CodeAnalyzers\Metaplay.CodeAnalyzers.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\MetaplaySDK\Backend\CodeAnalyzers.Shared\Metaplay.CodeAnalyzers.Shared.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\MetaplaySDK\Dotnet\Client\Metaplay.Client.csproj" />
+  </ItemGroup>
+
+</Project>

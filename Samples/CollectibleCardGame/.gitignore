@@ -1,0 +1,17 @@
+# Temporary build files
+**/obj/
+**/bin/
+
+# `dotnet ef` on macOS/Linux leaves a literal "bin\Debug" directory behind (it hands MSBuild a
+# Windows-style relative output path), which the **/bin/ rule above does not match.
+**/bin\\Debug/
+
+# Metaplay client storage dirs
+**/PersistentData/
+**/TemporaryCache/
+
+# State dumps from checksum mismatches with the server
+StateDump_*.txt
+
+# Per-checkout local listener configuration; never shipped or shared with another worktree.
+Client/wwwroot/appsettings.Development.json

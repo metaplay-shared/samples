@@ -1,0 +1,117 @@
+@namespace Game.Client.Components.Board
+@using Metaplay.Core
+
+@* The turn's one irreversible control, and everything that belongs with it.
+
+   The decided layout puts the turn counter here rather than in the opposite corner: how
+   many turns you have had, the button, how long is left and how much of the turn is unspent are one
+   question asked four ways, and they were spread across three corners of the board.
+
+   It never blocks and never asks a modal question: it carries a quiet nudge while the turn still has
+   something in it — unspent mana, a playable card, a ready critter that has not attacked — and a player
+   deliberately holding mana still ends their turn in one press.
+
+   The clock comes in two parts over one deadline. The quiet readout counts the whole turn; the ring appears
+   and turns urgent only as the deadline closes. Both are withheld while the board trails, because a clock
+   draining for a turn the player has not been shown yet is worse than no clock. *@
+
+<div class="endturn-wrap">
+    @* The turn number rides data attributes as well as the copy: while the board trails the indicator says
+       nothing on purpose, and a value a test can read in every state should not be parsed out of prose. *@
+    <div class="endturn-turnno" data-testid="turn-indicator"
+         data-state="@IndicatorState" data-turn="@Turn"
+         data-trailing="@IsTrailing.ToString().ToLowerInvariant()"
+         data-queue="@QueueLength">@TurnLabel</div>
+
+    <button class="endturn @(HasSomethingLeft ? "endturn-nudge" : "")"
+            data-testid="end-turn"
+            data-has-something-left="@HasSomethingLeft.ToString().ToLowerInvariant()"
+            disabled="@(!IsEnabled)"
+            @onclick="Clicked">
+        <span class="endturn-label">End<br />turn</span>
+        <DeadlineRing DeadlineAt="@DeadlineAt" Now="@Now" IsAllowed="@RingAllowed" />
+    </button>
+
+    @if (RingAllowed && Remaining.HasValue)
+    {
+        <div class="endturn-clock @(IsUrgent ? "endturn-clock-urgent" : "")"
+             data-testid="turn-clock"
+             data-remaining-seconds="@RemainingSeconds">@RemainingText</div>
+    }
+
+    @if (HasSomethingLeft)
+    {
+        <div class="endturn-left @(IsUrgent ? "endturn-left-urgent" : "")" data-testid="end-turn-nudge">
+            @ActionsLeftText
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public bool IsEnabled { get; set; }
+    [Parameter] public bool HasSomethingLeft { get; set; }
+
+    /// <summary> How many things the turn still has in it, which is what the nudge counts. </summary>
+    [Parameter] public int ActionsLeft { get; set; }
+
+    /// <summary>
+    /// How many turns this seat has had, counting from one. Client-derived from the turn number and the seat
+    /// order: the model's turn number counts both seats' turns, and "your turn 12" is not a thing a player
+    /// recognises as their fourth turn.
+    /// </summary>
+    [Parameter] public int OwnTurnNumber { get; set; }
+
+    /// <summary> Whose turn the screen says it is, or that it is withholding the answer. </summary>
+    [Parameter] public string IndicatorState { get; set; } = "";
+
+    /// <summary> The table's own turn number, which is the value a test reads. </summary>
+    [Parameter] public int Turn { get; set; }
+
+    [Parameter] public bool IsTrailing { get; set; }
+    [Parameter] public int QueueLength { get; set; }
+    [Parameter] public MetaTime? DeadlineAt { get; set; }
+    [Parameter, EditorRequired] public MetaTime Now { get; set; }
+    [Parameter] public bool RingAllowed { get; set; } = true;
+    [Parameter] public EventCallback OnClick { get; set; }
+
+    /// <summary>
+    /// What the cluster says it is. Withheld while the board trails: nobody is on turn as far as the screen
+    /// is concerned while a beat is still playing out the attack that ended the last one.
+    /// </summary>
+    string TurnLabel => IndicatorState switch
+    {
+        "over"     => "GAME OVER",
+        "trailing" => "",
+        "mulligan" => "MULLIGAN",
+        "yours"    => $"YOUR TURN {OwnTurnNumber}",
+        _          => "THEIR TURN",
+    };
+
+    MetaDuration? Remaining
+    {
+        get
+        {
+            if (!DeadlineAt.HasValue)
+                return null;
+
+            MetaDuration left = DeadlineAt.Value - Now;
+            return left > MetaDuration.Zero ? left : MetaDuration.Zero;
+        }
+    }
+
+    int RemainingSeconds => Remaining.HasValue ? (int)((Remaining.Value.Milliseconds + 999) / 1000) : 0;
+
+    string RemainingText => $"{RemainingSeconds / 60}:{RemainingSeconds % 60:00}";
+
+    /// <summary> The last stretch, where the readout reddens and the ring appears. </summary>
+    bool IsUrgent => Remaining.HasValue && Remaining.Value <= MetaDuration.FromSeconds(10);
+
+    string ActionsLeftText => ActionsLeft switch
+    {
+        <= 0 => "something left",
+        1    => "1 action left",
+        _    => $"{ActionsLeft} actions left",
+    };
+
+    Task Clicked() => OnClick.HasDelegate ? OnClick.InvokeAsync() : Task.CompletedTask;
+}

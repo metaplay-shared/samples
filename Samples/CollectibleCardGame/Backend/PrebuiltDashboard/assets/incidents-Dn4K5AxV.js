@@ -1,0 +1,1 @@
+import{c as e,i as t,l as n}from"./src-D_s7tMpl.js";function r(r,i){return{permission:`api.incident_reports.view`,pollingPolicy:t(),fetcherPolicy:n(`/players/${r}/incidentReport/${i}`),cacheRetentionPolicy:e(1e4)}}export{r as t};

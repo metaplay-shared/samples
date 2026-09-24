@@ -1,0 +1,28 @@
+@namespace Game.Client.Components
+@using Game.Logic
+@using Game.Client.Services
+
+@* Decorative artwork beside an existing card name. The catalog owns identity and composition in every screen. *@
+<span class="card-portrait card-portrait-@Size.ToString().ToLowerInvariant()"
+      data-testid="card-portrait" data-card-id="@Card?.CardId.Value"
+      data-art-treatment="@Art.Treatment" data-art-fallback="@Art.IsFallback.ToString().ToLowerInvariant()"
+      aria-hidden="true">
+    <img class="card-portrait-backdrop" src="@Art.BackdropSrc" alt="" loading="lazy" decoding="async" draggable="false" />
+    @if (Art.IllustrationSrc != null)
+    {
+        <img class="card-portrait-cutout" src="@Art.IllustrationSrc" alt="" loading="lazy" decoding="async" draggable="false" />
+    }
+    else if (Art.IsFallback)
+    {
+        <span class="card-portrait-fallback">@(Card?.ArtEmoji ?? "?")</span>
+    }
+</span>
+
+@code {
+    public enum PortraitSize { Small, Grid }
+
+    [Parameter] public CardInfo? Card { get; set; }
+    [Parameter] public PortraitSize Size { get; set; } = PortraitSize.Small;
+
+    CardArtSet Art => CardArtCatalog.Resolve(Card);
+}

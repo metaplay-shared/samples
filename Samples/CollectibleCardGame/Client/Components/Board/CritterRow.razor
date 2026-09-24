@@ -1,0 +1,161 @@
+@namespace Game.Client.Components.Board
+@using Game.Logic
+@using Game.Client.Services
+
+@* One side's critters in six explicit visual sockets around the Den. Board order remains cosmetic: these
+   sockets are presentation only, and nothing the client sends names one. *@
+
+<div class="critter-row @(IsLocal ? "critter-row-mine" : "critter-row-enemy")"
+     data-testid="@(IsLocal ? "critter-row-mine" : "critter-row-enemy")">
+    @{
+        int presentedCount = PresentedCount;
+        BoardVisualCritter? enteringCritter = EnteringCritter;
+        string? entrySlot = EntrySlot;
+    }
+    @for (int cardIndex = 0; cardIndex < Public.Board.Count; cardIndex++)
+    {
+        BoardVisualCritter critter = Public.Board[cardIndex];
+        <div @key="critter.Instance" class="critter-slot critter-slot-@BoardSlotLayout.SlotFor(presentedCount, cardIndex)"
+             data-slot="@BoardSlotLayout.SlotFor(presentedCount, cardIndex)">
+            <Critter @key="critter.Instance"
+                     View="@critter"
+                     Seat="@Seat"
+                     Card="@CardOf(critter)"
+                     RankMax="@(Config?.Global.RankMax ?? 5)"
+                     IsSelectable="@SelectableIds.Contains(critter.Instance)"
+                     IsTargetable="@TargetableIds.Contains(critter.Instance)"
+                     IsSelected="@(SelectedInstance.HasValue && SelectedInstance.Value == critter.Instance)"
+                     IsInspectionDisabled="@IsTargeting"
+                     IsDimmed="@IsLeftOut(critter.Instance)"
+                     TargetingKind="@TargetingKind"
+                     Beat="@Beat"
+                     Tag="@TagFor(critter.Instance)"
+                     Delta="@(Deltas.TryGetValue(critter.Instance, out TargetDelta? delta) ? delta : null)"
+                     TagAmount="@AmountFor(critter.Instance)"
+                     IsHoverTag="@(!IsLocal)"
+                     Tone="@(IsLocal ? CardFace.TagTone.Good : CardFace.TagTone.Neutral)"
+                     OnClick="OnCritterClick" />
+        </div>
+    }
+    @if (entrySlot != null && Beat != null)
+    {
+        <div class="critter-slot critter-slot-@entrySlot critter-slot-entry @(enteringCritter != null ? "critter-slot-arriving" : "")"
+             data-testid="critter-entry-slot"
+             data-entry-instance="@Beat.Source.Value"
+             data-slot="@entrySlot">
+            @if (enteringCritter != null)
+            {
+                <Critter @key="enteringCritter.Instance"
+                         View="@enteringCritter"
+                         Seat="@Seat"
+                         Card="@CardOf(enteringCritter)"
+                         RankMax="@(Config?.Global.RankMax ?? 5)"
+                         IsEntering="true"
+                         IsReady="@SelectableIds.Contains(enteringCritter.Instance)"
+                         IsInspectionDisabled="true"
+                         Beat="@Beat"
+                         OnClick="OnCritterClick" />
+            }
+        </div>
+    }
+    @if (Public.Board.Count == 0)
+    {
+        <div class="critter-row-empty" aria-hidden="true"></div>
+    }
+</div>
+
+@code {
+    [Parameter] public Dictionary<CardInstanceId, TargetDelta> Deltas { get; set; } = new Dictionary<CardInstanceId, TargetDelta>();
+    [Parameter, EditorRequired] public int Seat { get; set; }
+    [Parameter, EditorRequired] public BoardVisualSeat Public { get; set; } = default!;
+    [Parameter] public bool IsLocal { get; set; }
+    [Parameter] public HashSet<CardInstanceId> SelectableIds { get; set; } = new HashSet<CardInstanceId>();
+    [Parameter] public HashSet<CardInstanceId> TargetableIds { get; set; } = new HashSet<CardInstanceId>();
+    [Parameter] public CardInstanceId? SelectedInstance { get; set; }
+
+    /// <summary> Whether a selection is live and choosing its target, which is when non-targets go quiet. </summary>
+    [Parameter] public bool IsTargeting { get; set; }
+    [Parameter] public TargetingLayer.TargetingKind TargetingKind { get; set; }
+    [Parameter] public BoardBeat? Beat { get; set; }
+
+    [Parameter] public EventCallback<CardInstanceId> OnCritterClick { get; set; }
+
+    /// <summary>
+    /// What aiming at each critter would do, keyed by instance. Filled by the page from public state plus
+    /// the card in hand, which is all either side needs to compute it.
+    /// </summary>
+    [Parameter] public Dictionary<CardInstanceId, string> Tags { get; set; } = new Dictionary<CardInstanceId, string>();
+
+    /// <summary>
+    /// The number inside a heal tag, keyed the same way — so a fixture reads the amount as a value instead
+    /// of parsing the copy around it. A consequence tag carries none.
+    /// </summary>
+    [Parameter] public Dictionary<CardInstanceId, int> TagAmounts { get; set; } = new Dictionary<CardInstanceId, int>();
+
+    /// <summary>
+    /// What a critter in play is. Everything on a board is public, so its own registry entry names the card —
+    /// which is why this reads the entry directly rather than going through the accessor that can also answer
+    /// for a hidden one.
+    /// </summary>
+    [Parameter] public SharedGameConfig? Config { get; set; }
+    [Parameter] public Dictionary<CardInstanceId, BoardVisualCard> KnownCards { get; set; } =
+        new Dictionary<CardInstanceId, BoardVisualCard>();
+
+    CardInfo? CardOf(BoardVisualCritter critter)
+        => critter.Card != null && Config != null && Config.Cards.TryGetValue(critter.Card, out CardInfo card)
+            ? card
+            : null;
+
+    /// <summary>
+    /// Whether the live selection has left this critter out: not a legal target, not the selection itself,
+    /// and not something the player could select instead.
+    /// </summary>
+    bool IsLeftOut(CardInstanceId id)
+        => IsTargeting
+           && !TargetableIds.Contains(id)
+           && !SelectableIds.Contains(id)
+           && !(SelectedInstance.HasValue && SelectedInstance.Value == id);
+
+    string? TagFor(CardInstanceId id) => Tags.TryGetValue(id, out string? tag) ? tag : null;
+
+    int? AmountFor(CardInstanceId id) => TagAmounts.TryGetValue(id, out int amount) ? amount : null;
+
+    bool IsEntryBeat
+        => Public.Board.Count < BoardSlotLayout.Capacity
+           && (Beat?.Event is CritterEnteredPlayEvent entered && entered.Seat == Seat
+               || Beat?.Event is CardPlayedEvent played
+               && played.Seat == Seat
+               && Config != null
+               && Config.Cards.TryGetValue(played.Card, out CardInfo playedCard)
+               && playedCard.Type == CardType.Critter);
+
+    int PresentedCount => Public.Board.Count + (IsEntryBeat ? 1 : 0);
+
+    string? EntrySlot
+        => IsEntryBeat ? BoardSlotLayout.SlotFor(PresentedCount, Public.Board.Count) : null;
+
+    BoardVisualCritter? EnteringCritter
+    {
+        get
+        {
+            if (Beat?.EnteringCritter is BoardVisualCritter arriving && arriving.Owner == Seat)
+                return arriving;
+            if (Beat?.Event is not CritterEnteredPlayEvent entered || entered.Seat != Seat)
+                return null;
+
+            int rank = KnownCards.TryGetValue(entered.Instance, out BoardVisualCard known) ? known.Rank : 0;
+            return new BoardVisualCritter(
+                entered.Instance,
+                entered.Card,
+                rank,
+                entered.Seat,
+                entered.Attack,
+                entered.MaxHealth,
+                0,
+                entered.Keywords,
+                entered.IsSleepy,
+                false,
+                (entered.Keywords & KeywordFlags.Bubble) != 0);
+        }
+    }
+}

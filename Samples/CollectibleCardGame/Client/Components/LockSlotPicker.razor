@@ -1,0 +1,68 @@
+@namespace Game.Client.Components
+@using Game.Logic
+@using Game.Client.Services
+@inject CollectionService Collection
+
+@* "Which lock do I move?" — the question a press gets when every slot is taken, rather than the press being
+   refused. One instance per screen, hoisted out of the card tiles that raise it: forty-five identical modals
+   inside a scrolling grid is both wasteful and fragile, and the answer is the same question every time. *@
+
+<MetagameDialog IsOpen="@(CardId != null)" Title="Which lock to move?" OnClose="OnClose" Size="small">
+    <div class="flex flex-col gap-2" data-testid="lock-slot-picker">
+        <p class="text-xs" style="color: var(--text-secondary);">
+            Every lock slot is taken. Choose the one @CardName should take over — the card that gives up its
+            slot goes back to gaining and losing ranks.
+        </p>
+        @for (int slot = 0; slot < Collection.LockSlotCount; slot++)
+        {
+            int slotIndex = slot;
+            CardId occupant = Collection.LockedIn(slotIndex);
+            <button class="flex items-center gap-2 px-3 py-2 rounded-lg text-left"
+                    style="background: var(--bg-hover); color: var(--text-primary);"
+                    data-testid="lock-slot-pick"
+                    data-slot="@slotIndex"
+                    @onclick="() => ChooseSlot(slotIndex)">
+                @if (occupant != null)
+                {
+                    <CardPortrait Card="@Collection.GetCard(occupant)" />
+                }
+                else
+                {
+                    <span class="text-base" aria-hidden="true">＋</span>
+                }
+                <span class="text-xs flex-1">@(occupant != null ? Collection.GetCard(occupant)?.DisplayName : "Empty slot")</span>
+                <span class="text-[10px]" style="color: var(--text-muted);">Slot @(slotIndex + 1)</span>
+            </button>
+        }
+
+        @if (_refusal != null)
+        {
+            <p class="text-[10px]" style="color: var(--accent-red);" data-testid="lock-slot-refusal">@_refusal</p>
+        }
+    </div>
+</MetagameDialog>
+
+@code {
+    /// <summary> The card waiting for a slot, or null when the picker is closed. </summary>
+    [Parameter]
+    public CardId CardId { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    string CardName => CardId != null ? Collection.GetCard(CardId)?.DisplayName ?? "this card" : "";
+
+    string _refusal;
+
+    /// <summary>
+    /// Take the slot, or say why not. The refusal is shown rather than dropped: the shared rules can refuse
+    /// this press (a card below <c>Global.MinLockRank</c>, a slot the account no longer has), and a modal that
+    /// closed on a refusal would leave the player believing a lock they do not have.
+    /// </summary>
+    async Task ChooseSlot(int slotIndex)
+    {
+        _refusal = Collection.SetLockSlot(slotIndex, CardId);
+        if (_refusal == null)
+            await OnClose.InvokeAsync();
+    }
+}

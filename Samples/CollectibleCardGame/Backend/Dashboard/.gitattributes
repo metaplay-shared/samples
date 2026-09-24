@@ -1,0 +1,4 @@
+# Disable LFS in public/
+# Server is often built on CIs with no LFS enabled. We want
+# server building to be simple and not require LFS.
+public/** filter= diff= merge=

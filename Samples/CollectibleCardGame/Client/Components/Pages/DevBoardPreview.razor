@@ -1,0 +1,201 @@
+@page "/dev/board"
+@using Game.Client.Components.Board
+@using Game.Client.Dev
+@using Game.ClientBase.Configuration
+@using Game.ClientBase.Utilities
+@using Game.Logic
+@using Game.Client.Services
+@using Metaplay.Core
+@inject MetaplayClientService MetaplayService
+@inject CollectionService Collection
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Sticky Paws — board preview</PageTitle>
+
+@* The board in a named state, with no server and no match.
+
+   A development page: nothing links to it, and it refuses to draw outside a local or offline environment.
+   Its whole reason is that the board is the densest screen in the sample and iterating on how it *looks*
+   against a live server means playing a real game to a real mid-game state on every pass. A scene is a
+   seeded deal driven by the shared rules, so it is a state the game could genuinely be in — and it is
+   deterministic, which is what makes two screenshots of one scene comparable.
+
+   It renders BoardView, the same component the live board is, from the same BoardViewState. There is no
+   second board layout here to keep in step. *@
+
+@if (!IsAllowedHere)
+{
+    <div class="board-waiting" data-testid="dev-preview-refused">
+        <h3>Not available in this environment</h3>
+        <p>The board preview is a development page. Open the app with <code>?env=offline</code>, or against a
+           local server, to use it.</p>
+    </div>
+}
+else if (_scene == null)
+{
+    <div class="board-waiting" data-testid="dev-preview-waiting">
+        <h3>@(_failure ?? "Building the scene…")</h3>
+        <p>@(_failure == null ? $"Playing out '{SceneName}' from a seeded deal." : "Pick one of: " + string.Join(", ", BoardScenes.All))</p>
+    </div>
+}
+else
+{
+    <BoardView State="@_scene.State" />
+    <div class="dev-scene-label" data-testid="dev-scene-label" data-scene="@_scene.Name">
+        @_scene.Name · @_scene.Caption
+    </div>
+    @if (_scene.Name == BoardScenes.Play)
+    {
+        <button data-testid="preview-play" class="overlay-secondary"
+                style="position:fixed;left:12px;top:12px;z-index:100"
+                disabled="@(_replaying || BoardScenes.FindPlayableCritter(_scene.Match) == null)"
+                @onclick="ReplayPlayAsync">Play a critter</button>
+    }
+}
+
+@code {
+    /// <summary>
+    /// Which scene to draw, from <c>?scene=</c>. Defaults to the mid-turn board, which is the state the
+    /// screen spends its life in.
+    /// </summary>
+    [SupplyParameterFromQuery(Name = "scene")]
+    public string? Scene { get; set; }
+
+    /// <summary> Optional resolution beat to hold over the scene for animation review and browser tests. </summary>
+    [SupplyParameterFromQuery(Name = "animation")]
+    public string? Animation { get; set; }
+
+    string SceneName => string.IsNullOrEmpty(Scene) ? BoardScenes.MidTurn : Scene!;
+
+    BoardScene? _scene;
+    string? _failure;
+    bool _replaying;
+    bool _disposed;
+
+    /// <summary>
+    /// Whether this build may draw the preview at all. Gated on the environment the app booted into rather
+    /// than on a compile symbol, because the client is built once in Release and served from the game server
+    /// in the deployed shape — so the check that matters is the one a deployed page fails. "localhost" and
+    /// "offline" are the two environments a developer runs; "cloud" is refused.
+    /// </summary>
+    static bool IsAllowedHere
+        => StaticEnvironmentConfigProvider.ActiveEnvironmentId is "localhost" or "offline";
+
+    protected override void OnParametersSet() => BuildSceneIfPossible();
+
+    /// <summary>
+    /// Build the scene once the content has arrived. The connection raises a state change when the session
+    /// starts, which is what brings this back with a config to build from.
+    /// </summary>
+    void BuildSceneIfPossible()
+    {
+        if (!IsAllowedHere || _scene != null)
+            return;
+
+        if (!BoardScenes.IsKnown(SceneName))
+        {
+            _failure = $"There is no scene called '{SceneName}'.";
+            return;
+        }
+
+        SharedGameConfig? config = Collection.GameConfig;
+        if (config == null)
+            return;
+
+        _scene   = BoardScenes.Build(SceneName, config);
+        _failure = _scene == null ? $"'{SceneName}' could not be built." : null;
+
+        if (_scene != null)
+        {
+            _scene.State.OnClearSelection = EventCallback.Factory.Create(this, ClearPreviewSelection);
+            _scene.State.OnDenClick = EventCallback.Factory.Create<int>(this, ResolvePreviewDen);
+            _scene.State.OnToggleFeed = EventCallback.Factory.Create(this, () => _scene.State.IsFeedExpanded = !_scene.State.IsFeedExpanded);
+            _scene.State.OnLeave = EventCallback.Factory.Create(this, () => EnvironmentLink.NavigateTo(Navigation, "/"));
+        }
+
+        if (_scene != null && !string.IsNullOrEmpty(Animation) && !BoardScenes.PoseAnimation(_scene, Animation))
+        {
+            _scene = null;
+            _failure = $"There is no '{Animation}' animation pose for '{SceneName}'.";
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        MetaplayService.OnStateChanged += OnStateChanged;
+    }
+
+    void OnStateChanged()
+    {
+        BuildSceneIfPossible();
+        InvokeAsync(StateHasChanged);
+    }
+
+    void ClearPreviewSelection()
+    {
+        if (_scene == null)
+            return;
+
+        _scene.State.SelectedCard = null;
+        _scene.State.SelectedAttacker = null;
+        _scene.State.TargetingState = TargetingLayer.TargetingKind.None;
+        _scene.State.TargetableCritters.Clear();
+        _scene.State.TargetableDens.Clear();
+        _scene.State.CritterDeltas.Clear();
+        _scene.State.DenDeltas.Clear();
+    }
+
+    void ResolvePreviewDen(int seat)
+    {
+        if (_scene == null || !_scene.State.TargetableDens.Contains(seat))
+            return;
+
+        ClearPreviewSelection();
+    }
+
+    async Task ReplayPlayAsync()
+    {
+        if (_scene == null || _replaying)
+            return;
+        BoardViewState state = _scene.State;
+        BoardPresentation presentation = new BoardPresentation(new BoardPresentationTuning());
+        presentation.SnapTo(state.Visual, new List<MatchEvent>(_scene.Match.History));
+        int historyStart = _scene.Match.History.Count;
+        if (!BoardScenes.PlayCritter(_scene))
+            return;
+        presentation.EnqueueStep(_scene.Match.Rules.ActionCount,
+            _scene.Match.History.GetRange(historyStart, _scene.Match.History.Count - historyStart),
+            BoardVisualState.FromRules(_scene.Match.Rules));
+        _replaying = true;
+        state.IsBusy = true;
+        ClearPreviewSelection();
+        try
+        {
+            do
+            {
+                presentation.Update(new AuthoritativeTime(MetaTime.Now));
+                state.Visual = presentation.VisualState!;
+                state.Beat = presentation.CurrentBeat;
+                state.History = presentation.PresentedHistory;
+                state.IsTrailing = presentation.IsTrailing;
+                state.QueueLength = presentation.QueueLength;
+                if (!presentation.IsTrailing)
+                    state.HandCards = SecretOps.HandOf(_scene.Match, state.LocalSeat);
+                await InvokeAsync(StateHasChanged);
+                await Task.Delay(16);
+            } while (!_disposed && presentation.IsTrailing);
+        }
+        finally
+        {
+            state.IsBusy = false;
+            _replaying = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        MetaplayService.OnStateChanged -= OnStateChanged;
+    }
+}

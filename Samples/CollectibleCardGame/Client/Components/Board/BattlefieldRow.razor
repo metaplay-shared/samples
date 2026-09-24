@@ -1,0 +1,72 @@
+@namespace Game.Client.Components.Board
+@using Game.Logic
+@using Game.Client.Services
+
+<section class="battlefield-row @(IsLocal ? "battlefield-row-mine" : "battlefield-row-enemy")"
+         data-testid="@(IsLocal ? "battlefield-mine" : "battlefield-enemy")">
+    <ZoneInspector Seat="@Seat" Public="@Public" IsLocal="@IsLocal" OnOpen="OnOpenPile" />
+
+    <CritterRow Seat="@Seat"
+                Public="@Public"
+                Config="@Config"
+                KnownCards="@KnownCards"
+                IsLocal="@IsLocal"
+                SelectableIds="@SelectableIds"
+                TargetableIds="@TargetableIds"
+                SelectedInstance="@SelectedInstance"
+                Tags="@Tags"
+                Deltas="@Deltas"
+                TagAmounts="@TagAmounts"
+                IsTargeting="@IsTargeting"
+                TargetingKind="@TargetingKind"
+                Beat="@Beat"
+                OnCritterClick="OnCritterClick" />
+
+    <DenDoor Seat="@Seat"
+             Roster="@Roster"
+             Public="@Public"
+             IsLocal="@IsLocal"
+             MaxHp="@MaxDenHp"
+             IsTargetable="@IsDenTargetable"
+             Tag="@DenTag"
+             Delta="@DenDelta"
+             TagAmount="@DenTagAmount"
+             TargetingKind="@TargetingKind"
+             Beat="@Beat"
+             OnClick="OnDenClick" />
+</section>
+
+@code {
+    [Parameter] public Dictionary<CardInstanceId, TargetDelta> Deltas { get; set; } = new Dictionary<CardInstanceId, TargetDelta>();
+    [Parameter] public TargetDelta? DenDelta { get; set; }
+    [Parameter, EditorRequired] public int Seat { get; set; }
+    [Parameter, EditorRequired] public MatchSeat Roster { get; set; } = default!;
+    [Parameter, EditorRequired] public BoardVisualSeat Public { get; set; } = default!;
+    [Parameter] public SharedGameConfig? Config { get; set; }
+    [Parameter] public Dictionary<CardInstanceId, BoardVisualCard> KnownCards { get; set; } =
+        new Dictionary<CardInstanceId, BoardVisualCard>();
+    [Parameter] public bool IsLocal { get; set; }
+    [Parameter] public int MaxDenHp { get; set; }
+    [Parameter] public bool IsDenTargetable { get; set; }
+    [Parameter] public bool IsTargeting { get; set; }
+    [Parameter] public TargetingLayer.TargetingKind TargetingKind { get; set; }
+    [Parameter] public BoardBeat? Beat { get; set; }
+    [Parameter] public string? DenTag { get; set; }
+
+    /// <summary> The number inside the Den's heal tag, or null when it carries none. </summary>
+    [Parameter] public int? DenTagAmount { get; set; }
+    [Parameter] public HashSet<CardInstanceId> SelectableIds { get; set; } = new HashSet<CardInstanceId>();
+    [Parameter] public HashSet<CardInstanceId> TargetableIds { get; set; } = new HashSet<CardInstanceId>();
+    [Parameter] public CardInstanceId? SelectedInstance { get; set; }
+    [Parameter] public Dictionary<CardInstanceId, string> Tags { get; set; } = new Dictionary<CardInstanceId, string>();
+
+    /// <summary>
+    /// The number inside each critter's heal tag, keyed the same way as <see cref="Tags"/> — so a fixture
+    /// reads the amount as a value instead of parsing the copy around it.
+    /// </summary>
+    [Parameter] public Dictionary<CardInstanceId, int> TagAmounts { get; set; } = new Dictionary<CardInstanceId, int>();
+    [Parameter] public EventCallback<CardInstanceId> OnCritterClick { get; set; }
+    [Parameter] public EventCallback<int> OnDenClick { get; set; }
+    [Parameter] public EventCallback<(int Seat, ZoneInspector.PileKind Kind)> OnOpenPile { get; set; }
+
+}

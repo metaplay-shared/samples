@@ -1,0 +1,44 @@
+@namespace Game.Client.Components.Board
+@using Game.Logic
+@using Game.Client.Components
+@using Game.Client.Services
+
+@* Graveyard and unseen pool, stacked at the far left of one battlefield row.
+
+   Both are open information for both sides, which is only true if reading them is cheap — so the panel sits
+   over the board, is dismissed by any board action, and the turn clock stays visible over it. A player who
+   lost their turn to reading a graveyard would be right to blame the interface.
+
+   The deck counter doubles as the Tuckered Out clock and needs no separate one. *@
+
+<div class="piles @(IsLocal ? "piles-mine" : "piles-enemy")" data-testid="@(IsLocal ? "piles-mine" : "piles-enemy")">
+    <button class="pile pile-grave" data-testid="graveyard-count" data-seat="@Seat.ToString()"
+            data-count="@Public.Graveyard.Count" @onclick="() => Open(PileKind.Graveyard)">
+        <img src="art/icon-graveyard.webp" alt="" aria-hidden="true" draggable="false" />
+        <span><small>PUBLIC</small><b>GRAVE</b></span>
+        <strong>@Public.Graveyard.Count</strong>
+    </button>
+    <button class="pile pile-unseen" data-testid="pool-count" data-seat="@Seat.ToString()"
+            data-count="@Public.UnseenCount" title="@TuckeredOutHint" @onclick="() => Open(PileKind.Pool)">
+        <img src="art/icon-unseen-pool.webp" alt="" aria-hidden="true" draggable="false" />
+        <span><small>DECK + HAND</small><b>UNSEEN</b></span>
+        <strong>@Public.UnseenCount</strong>
+    </button>
+    <span class="pile-deck" data-testid="deck-count" data-seat="@Seat.ToString()" data-count="@Public.DeckCount"
+          title="@TuckeredOutHint">deck @Public.DeckCount</span>
+</div>
+
+@code {
+    public enum PileKind { Graveyard, Pool }
+
+    [Parameter, EditorRequired] public int Seat { get; set; }
+    [Parameter, EditorRequired] public BoardVisualSeat Public { get; set; } = default!;
+    [Parameter] public bool IsLocal { get; set; }
+    [Parameter] public EventCallback<(int Seat, PileKind Kind)> OnOpen { get; set; }
+
+    string TuckeredOutHint => Public.DeckCount == 0
+        ? $"Tuckered Out: this seat has taken {Public.TuckeredOutTicks} escalating hits"
+        : "The deck counter is also the Tuckered Out clock";
+
+    Task Open(PileKind kind) => OnOpen.HasDelegate ? OnOpen.InvokeAsync((Seat, kind)) : Task.CompletedTask;
+}

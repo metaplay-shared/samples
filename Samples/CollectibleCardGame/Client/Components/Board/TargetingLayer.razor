@@ -1,0 +1,167 @@
+@namespace Game.Client.Components.Board
+@using Game.Logic
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@* The banner that says what a live selection is waiting for, and the surface that cancels it.
+
+   Selecting an attacker or lifting a targeted trick highlights every legal target from the same source — the
+   shared legality functions — so a Guard on the far side dims the enemy Den and leaves every critter
+   attackable, which teaches Guard's exact rule without a line of text. A selection with nothing sent yet is
+   cancelled by tapping away or with Escape, and nothing has left the client. *@
+
+<svg @ref="_arrow" class="targeting-arrow" data-testid="targeting-arrow" data-kind="@Kind"
+     aria-hidden="true" focusable="false" hidden>
+    <path class="targeting-arrow-shadow" />
+    <path class="targeting-arrow-body" />
+    <path class="targeting-arrow-thread" />
+    <path class="targeting-arrow-head" />
+    <circle class="targeting-arrow-origin" r="5" />
+    <g class="targeting-counter" data-testid="counter-damage-preview" hidden>
+        <rect x="-26" y="-14" width="52" height="28" rx="9" />
+        <text class="targeting-counter-value" text-anchor="middle" dominant-baseline="central" />
+        <g class="targeting-counter-mark">
+            <path class="targeting-counter-shield" d="M -5 -6 L 0 -8 L 5 -6 L 5 0 Q 5 5 0 8 Q -5 5 -5 0 Z" />
+            <text class="targeting-counter-lethal" text-anchor="middle" dominant-baseline="central">☠</text>
+        </g>
+    </g>
+</svg>
+
+@if (IsActive)
+{
+    <div class="targeting-layer"
+         data-testid="targeting-layer"
+         data-kind="@Kind"
+         role="button"
+         tabindex="-1"
+         aria-label="Cancel targeting"
+         @ref="_cancelSurface"
+         @onclick="Cancel"></div>
+    @if (State?.SelectedCard != null && State.TargetableCritters.Count == 0 && State.TargetableDens.Count == 0)
+    {
+        <div class="touch-play-zone" role="status">Release here to play</div>
+    }
+    @if (Kind != TargetingKind.Heal)
+    {
+        <div class="targeting-banner" data-testid="targeting-banner" data-kind="@Kind" role="status">
+            @Prompt
+            <small class="targeting-mouse-help">Escape or tap away to cancel</small>
+            <small class="targeting-touch-help">Release on a target · drag away to cancel</small>
+        </div>
+    }
+}
+
+@code {
+    public enum TargetingKind { None, Play, Attack, Heal }
+
+    [Parameter] public BoardViewState? State { get; set; }
+    [Parameter] public TargetingKind Kind { get; set; } = TargetingKind.None;
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    ElementReference _cancelSurface;
+    ElementReference _arrow;
+    DotNetObjectReference<TargetingLayer>? _reference;
+    bool _wasActive;
+    bool _focusOnRender;
+
+    bool IsActive => Kind != TargetingKind.None;
+
+    protected override void OnParametersSet()
+    {
+        _focusOnRender = IsActive && !_wasActive;
+        _wasActive = IsActive;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        _reference ??= DotNetObjectReference.Create(this);
+        try
+        {
+            // JSException rather than only JSDisconnectedException: the arrow is a flourish, and a board
+            // without one beats an app that will not draw at all.
+            await JS.InvokeVoidAsync("stickyPawsTargeting.update", _arrow, Kind.ToString(), _reference);
+        }
+        catch (JSException)
+        {
+        }
+
+        if (!_focusOnRender)
+            return;
+
+        _focusOnRender = false;
+        await _cancelSurface.FocusAsync(preventScroll: true);
+    }
+
+    string Prompt => Kind switch
+    {
+        TargetingKind.Play   => "Pick what this card is aimed at",
+        TargetingKind.Attack => "Pick what to attack",
+        TargetingKind.Heal   => "",
+        _                    => "",
+    };
+
+    Task Cancel() => OnCancel.HasDelegate ? OnCancel.InvokeAsync() : Task.CompletedTask;
+
+    [JSInvokable]
+    public Task CancelFromKeyboard() => IsActive ? Cancel() : Task.CompletedTask;
+
+    CardInstanceId? _dragSource;
+    bool _dragFromHand;
+
+    [JSInvokable]
+    public async Task<bool> BeginDrag(bool fromHand, int instance)
+    {
+        if (State == null || State.IsBusy || State.IsMulliganOpen || State.PendingChoice != null)
+            return false;
+        CardInstanceId id = new CardInstanceId(instance);
+        if (!(fromHand ? State.PlayableCards : State.Attackers).Contains(id))
+            return false;
+        _dragSource = id;
+        _dragFromHand = fromHand;
+        await State.OnClearSelection.InvokeAsync();
+        if (fromHand)
+            await State.OnHandCardDragStart.InvokeAsync(id);
+        else
+            await State.OnCritterClick.InvokeAsync(id);
+        return true;
+    }
+
+    [JSInvokable]
+    public async Task EndDrag(string targetKind, int targetId)
+    {
+        CardInstanceId? source = _dragSource;
+        _dragSource = null;
+        if (State == null || !source.HasValue)
+            return;
+        // A deadline, animation or authoritative update may invalidate the gesture while the finger moves.
+        if (State.IsBusy || (_dragFromHand ? State.SelectedCard : State.SelectedAttacker) != source)
+        {
+            await Cancel();
+            return;
+        }
+        CardInstanceId target = new CardInstanceId(targetId);
+        if (targetKind == "critter" && State.TargetableCritters.Contains(target))
+            await State.OnCritterClick.InvokeAsync(target);
+        else if (targetKind == "den" && State.TargetableDens.Contains(targetId))
+            await State.OnDenClick.InvokeAsync(targetId);
+        else if (targetKind == "board" && _dragFromHand && State.TargetableCritters.Count == 0
+                 && State.TargetableDens.Count == 0 && State.PlayableCards.Contains(source.Value))
+            await State.OnHandCardClick.InvokeAsync(source.Value);
+        else
+            await Cancel();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("stickyPawsTargeting.dispose", _arrow);
+        }
+        catch (JSException)
+        {
+        }
+        _reference?.Dispose();
+    }
+}

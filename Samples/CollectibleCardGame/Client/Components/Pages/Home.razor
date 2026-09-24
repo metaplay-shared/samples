@@ -1,0 +1,452 @@
+@page "/"
+@using Game.Logic
+@using Game.ClientBase.Configuration
+@using Game.ClientBase.Services
+@using Game.Client.Components.Matchmaking
+@inject MetaplayClientService MetaplayService
+@inject CollectionService Collection
+@inject MatchService Match
+@inject MatchmakingService Matchmaking
+@inject ClientConfig Config
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>@Config.AppTitle</PageTitle>
+<MetagameShell Active="home">
+<ConnectionStateContainer IsReady="Player != null">
+    @if (Match.MatchGoneUnseen)
+    {
+        <div class="dark-panel notice" data-testid="match-gone-notice">
+            <p>Your last match ended early — the table it was on went away. Nothing was recorded.</p>
+            <button class="btn small" data-testid="match-gone-dismiss" @onclick="OnDismissMatchGone">OK</button>
+        </div>
+    }
+    <div class="home-grid">
+        <div>
+            <section class="welcome">
+                <div class="eyebrow">Welcome to the neighbourhood</div>
+                <h1>Small paws.<br /><em>Big mischief.</em></h1>
+                <p>Gather your favourite troublemakers.<br />There's a little glory in every heist.</p>
+                <img class="mascot" src="art/cards/raccoon-ringleader.webp" alt="" />
+            </section>
+            <section class="paper play-panel">
+                <div class="play-title"><h2>Pick your pack</h2><small>One deck. Plenty of possibilities.</small></div>
+                <div class="deck-pick-heading">
+                    <label for="home-deck">Your deck</label>
+                    <div class="deck-power" title="The sum of this deck's card ranks, used for matchmaking and stakes.">
+                        <span>Deck power</span>
+                        <strong data-testid="selected-deck-power" aria-live="polite">@Collection.PowerScore(SelectedDeckCards)</strong>
+                    </div>
+                </div>
+                <div class="deck-pick">
+                    <div class="deck-crests" data-testid="selected-deck-clans">
+                        @foreach (ClanInfo clan in SelectedDeckClans)
+                        {
+                            <img class="crest" src="@($"art/clan-symbol-{CardArtCatalog.ClanSymbolSlug(clan.ClanId.Value)}.webp")"
+                                 alt="@clan.DisplayName" title="@clan.DisplayName" />
+                        }
+                    </div>
+                    <select id="home-deck" data-testid="practice-deck"
+                        value="@SelectedDeckKey" @onchange="OnPracticeDeckChanged">
+                    <optgroup label="Starter decks" data-testid="starter-deck-group">
+                        @foreach (StarterDeckInfo starter in Collection.StarterDecks)
+                        {
+                            <option value="starter:@starter.StarterDeckId.Value" data-testid="deck-option"
+                                    data-kind="starter" data-deck="@starter.StarterDeckId.Value">
+                                @starter.DisplayName
+                            </option>
+                        }
+                    </optgroup>
+                    @if (Collection.DeckCount > 0)
+                    {
+                        <optgroup label="Your decks" data-testid="saved-deck-group">
+                            @foreach ((int deckId, PlayerDeck deck) in Collection.Decks)
+                            {
+                                <option value="saved:@deckId" data-testid="deck-option"
+                                        data-kind="saved" data-deck="@deckId">
+                                    @deck.Name
+                                </option>
+                            }
+                        </optgroup>
+                    }
+                </select>
+
+                </div>
+                <p class="deck-description" data-testid="deck-description">@(SelectedDeckDescription.Length > 0 ? SelectedDeckDescription : "Your own hand-picked band of troublemakers.")</p>
+                <CommunityPanel ActivityOnly="true" />
+                <div class="play-actions">
+                    <div class="play-mode">
+                        <button class="btn gold" disabled="@(IsOffline || !CanQueue)" @onclick="OnRanked" data-testid="queue-ranked">Ranked</button>
+                        <small>@(IsOffline ? "Needs the server" : "Play for keeps")</small>
+                    </div>
+                    <div class="play-mode">
+                        <button class="btn" disabled="@_practicePending" @onclick="OnPractice" data-testid="queue-practice">Practice</button>
+                        <small>All the fun. Nothing at stake.</small>
+                    </div>
+                </div>
+                <div class="difficulty"><label for="home-difficulty">Practice opponent</label>
+                    <select id="home-difficulty" data-testid="practice-difficulty"
+                        value="@_practiceProfile" @onchange="OnPracticeProfileChanged">
+                    @* Weakest first. A profile is the same policy with a seeded mistake rate on top — Sloppy departs
+                       from the best line on 60 % of decisions and by up to 12 mana of value, Casual 30 % and 6,
+                       Practiced 12 % and 2, Strongest never — so the list reads as a difficulty ladder and the
+                       default sits one step below the top. StrictlyDeterministic is Strongest under another name,
+                       for the pinned-decision tests, and is not offered. *@
+                    <option value="@BotProfileId.Sloppy">Sloppy — easiest</option>
+                    <option value="@BotProfileId.Casual">Casual — easy</option>
+                    <option value="@BotProfileId.Practiced">Practiced — hard</option>
+                    <option value="@BotProfileId.Strongest">Strongest — never errs</option>
+                </select>
+
+                </div>
+                @if (_showDevShield)
+                {
+                    <button class="btn small" data-testid="dev-waive-shield" @onclick="OnWaiveShield">Dev: waive the newcomer shield</button>
+                }
+            </section>
+            <CommunityPanel />
+            <div class="home-foot">
+                <img src="art/clan-symbol-hearth-knot.webp" alt="" />
+                <p>Ranked winners take a rank from a card their opponent played. Locks and the newcomer shield keep cards safe.</p>
+            </div>
+        </div>
+        <aside class="home-aside">
+            <section class="dark-panel account">
+                <div class="account-head">
+                    <img class="avatar" src="art/cards/meadow-mouse.webp" alt="" />
+                    <div><div class="eyebrow">Playing as</div><h2 data-testid="display-name">@MetaplayService.DisplayName</h2></div>
+                    <button class="icon-button" aria-label="Change name" data-testid="display-name-edit" @onclick="OpenNameEditor">✎</button>
+                </div>
+                <div class="record" data-testid="record-summary" data-rating="@Record.Rating">
+                    <div><b data-testid="ranked-wins">@Record.RankedWins</b><small>WINS</small></div>
+                    <div><b data-testid="ranked-losses">@Record.RankedLosses</b><small>LOSSES</small></div>
+                    <div><b data-testid="ranked-draws">@Record.RankedDraws</b><small>DRAWS</small></div>
+                </div>
+                <div class="account-rating"><span>Ranked rating</span><strong data-testid="ranked-rating">@Record.Rating</strong></div>
+                <div class="account-rating"><span>Practice matches</span><strong data-testid="practice-played">@Record.UnrankedMatchesPlayed</strong></div>
+            </section>
+            <section class="paper cabinet">
+                <div class="eyebrow">Little faces. Big plans.</div><h2>Your collection</h2>
+                <p>@Collection.OwnedCount of @Collection.AllCards.Count cards found.<br />Every card has a story.</p>
+                <a class="btn small" href="@Link("collection")">Browse cards →</a>
+                <img class="dog" src="art/cards/longdog-lookout.webp" alt="" />
+            </section>
+            <a class="dark-panel deck-shortcut" href="@Link("decks")"><strong>Your decks</strong><span>@Collection.DeckCount saved packs →</span></a>
+        </aside>
+    </div>
+</ConnectionStateContainer>
+<div class="metagame-search"><SearchingDialog Matchmaking="@Matchmaking" MetagameArt="true" /></div>
+<MetagameDialog IsOpen="@_nameEditorOpen" Title="Change name" OnClose="CloseNameEditor" Size="small">
+    <div class="flex flex-col gap-2" data-testid="change-name-modal">
+        @* The label the inline block used to carry has to come with it: inside the modal the input's only
+           accessible name would otherwise be its placeholder. *@
+        <label for="display-name-input" class="text-xs uppercase tracking-widest" style="color: var(--text-muted);">
+            New name
+        </label>
+        <input id="display-name-input"
+               data-testid="display-name-input"
+               class="w-full px-3 py-2 rounded-lg text-sm"
+               minlength="@PlayerModel.MinDisplayNameLength"
+               maxlength="@PlayerModel.MaxDisplayNameLength"
+               placeholder="Your name"
+               value="@_nameInput"
+               @oninput="OnNameInput" />
+        <p class="text-xs" style="color: var(--text-muted);">
+            Choose a name with @PlayerModel.MinDisplayNameLength to @PlayerModel.MaxDisplayNameLength characters,
+            without control characters or semicolons.
+        </p>
+    </div>
+<div class="dialog-buttons">@NameEditorFooter</div>
+</MetagameDialog>
+
+</MetagameShell>
+
+@code {
+    string _nameInput = "";
+    bool _nameEditorOpen;
+
+    /// <summary> The deck both entries use: a starter deck or one of the account's saved decks. </summary>
+    DeckChoice? _deckChoice;
+
+    BotProfileId _practiceProfile = BotProfileId.Practiced;
+
+    /// <summary> Whether a practice start is in flight, so a second press cannot send a second entry. </summary>
+    bool _practicePending;
+
+    /// <summary>
+    /// Whether Home draws its development-only shield waiver, read once from <c>?dev=shield</c>. Two fresh
+    /// accounts are both inside the newcomer shield and a shield on either seat shields the match, so without
+    /// it no pair of accounts a test or a playtest can make ever reaches a stakes tier that moves a rank.
+    /// </summary>
+    bool _showDevShield;
+
+    /// <summary> Offline mode has no matchmaker: the queue is a server entity and there is no server. </summary>
+    bool IsOffline => StaticEnvironmentConfigProvider.IsOfflineMode;
+
+    /// <summary>
+    /// Whether Ranked is live: a deck to queue with, and no search already up. The null case is only "the
+    /// config carries no starter decks and this account has none saved", which the config build refuses — so
+    /// it is a defensive check rather than a state the screen has to explain.
+    /// </summary>
+    bool CanQueue => _deckChoice != null && !Matchmaking.IsSearching;
+
+    /// <summary> The picker's current option value. Empty when there is nothing to name. </summary>
+    string SelectedDeckKey => _deckChoice?.ToKey() ?? "";
+
+    IReadOnlyList<CardId> SelectedDeckCards
+    {
+        get
+        {
+            if (_deckChoice?.IsStarter == true)
+                return Collection.StarterDecks.FirstOrDefault(deck => deck.StarterDeckId == _deckChoice.StarterDeckId)
+                    ?.ToCardIds() ?? new List<CardId>();
+            if (_deckChoice != null && Collection.Decks.TryGetValue(_deckChoice.SavedDeckId, out PlayerDeck deck))
+                return deck.Cards;
+            return Array.Empty<CardId>();
+        }
+    }
+
+    IEnumerable<ClanInfo> SelectedDeckClans
+    {
+        get
+        {
+            List<ClanInfo> clans = SelectedDeckCards.Select(id => Collection.GetCard(id)?.Clan?.Ref)
+                .Where(clan => clan != null && clan.CountsTowardClanLimit)
+                .DistinctBy(clan => clan.ClanId).OrderBy(clan => clan.ClanId.Value, StringComparer.Ordinal).ToList();
+            return clans.Count > 0 ? clans : Collection.AllClans.Where(clan => !clan.CountsTowardClanLimit);
+        }
+    }
+
+    /// <summary> The one line about the selected deck. Only a starter deck has one; a saved deck is named. </summary>
+    string SelectedDeckDescription
+    {
+        get
+        {
+            if (_deckChoice == null || !_deckChoice.IsStarter)
+                return "";
+
+            foreach (StarterDeckInfo starter in Collection.StarterDecks)
+            {
+                if (starter.StarterDeckId == _deckChoice.StarterDeckId)
+                    return starter.Description ?? "";
+            }
+
+            return "";
+        }
+    }
+
+    /// <summary> An in-app link that keeps the ?env= override (offline mode) across a later reload. </summary>
+    string Link(string path) => EnvironmentLink.Href(Navigation, path);
+
+    PlayerModel Player => MetaplayService.PlayerModel;
+
+    PlayerRecord Record => Collection.Record ?? new PlayerRecord();
+
+
+    // Compared the way the action stores it — trimmed — so Save is not offered for a change that would
+    // come back as the name already shown.
+    string TrimmedNameInput => _nameInput.Trim();
+
+    bool CanSaveName =>
+        TrimmedNameInput.Length >= PlayerModel.MinDisplayNameLength
+        && TrimmedNameInput.Length <= PlayerModel.MaxDisplayNameLength
+        && TrimmedNameInput != MetaplayService.DisplayName;
+
+    protected override void OnInitialized()
+    {
+        // Every entry to Home is a fresh component, and on all but the first the collection is already there
+        // and raises nothing — so the picker is seeded here as well as on every later change.
+        SeedPracticeDeck();
+
+        // Read once, the way the collection reads its own ?dev=ranks and the board reads its test knobs.
+        _showDevShield = new Uri(Navigation.Uri).Query.Contains("dev=shield");
+
+        MetaplayService.OnStateChanged += OnStateChanged;
+
+        // Home draws collection state (the card and deck counts), so it observes the collection like every
+        // other screen that does. Nothing repaints this page on a timer.
+        Collection.OnCollectionChanged += OnStateChanged;
+
+        // The page turns exactly once, at the moment there is a board to draw. The signal is the sub-client
+        // becoming active — which is also the signal for a player who was already at a table when the
+        // session started, so a reconnect lands on the board without a second mechanism.
+        Match.OnMatchAttachmentChanged += OnMatchAttachmentChanged;
+
+        // The searching dialog. It counts down against the server's own stamp, so it also needs the frame the
+        // board's loop supplies on the match screen — see RunSearchTickAsync.
+        Matchmaking.OnSearchChanged += OnSearchChanged;
+    }
+
+    /// <summary> The modal's two answers. Save is offered only for a name the shared rule would accept. </summary>
+    RenderFragment NameEditorFooter => @<div class="flex gap-2">
+        <Button Variant="Button.ButtonVariant.Secondary" OnClick="CloseNameEditor" data-testid="cancel-name">Cancel</Button>
+        <Button Variant="Button.ButtonVariant.Primary" Disabled="@(!CanSaveName)" OnClick="OnSaveName" data-testid="save-name">Save</Button>
+    </div>;
+
+    /// <summary> Opens on the name as it stands, so a small edit is an edit rather than a retype. </summary>
+    void OpenNameEditor()
+    {
+        _nameInput = MetaplayService.DisplayName;
+        _nameEditorOpen = true;
+    }
+
+    void CloseNameEditor() => _nameEditorOpen = false;
+
+    void OnNameInput(ChangeEventArgs args)
+    {
+        _nameInput = args.Value?.ToString() ?? "";
+    }
+
+    void OnSaveName()
+    {
+        MetaplayService.SetDisplayName(_nameInput);
+
+        // Closed on the press, not on the model coming back: the rename is predicted on the client, so the
+        // new name is already on the line behind the modal.
+        _nameEditorOpen = false;
+    }
+
+    void OnStateChanged()
+    {
+        SeedPracticeDeck();
+        InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Point the deck picker at the deck the player last played, or at the first starter deck. Run on entry
+    /// and on every state change: a deck deleted from the Decks screen must not leave the picker naming it.
+    /// </summary>
+    void SeedPracticeDeck()
+    {
+        _deckChoice = PracticeDeckPick.Choose(
+            _deckChoice,
+            Collection.LastPlayedDeck,
+            Collection.Decks.Keys,
+            Collection.StarterDecks.Select(starter => starter.StarterDeckId));
+    }
+
+    void OnMatchAttachmentChanged()
+    {
+        if (Match.HasMatch)
+            InvokeAsync(() => EnvironmentLink.NavigateTo(Navigation, "match"));
+        else
+            InvokeAsync(StateHasChanged);
+    }
+
+    void OnPracticeDeckChanged(ChangeEventArgs args)
+    {
+        if (DeckChoice.TryParseKey(args.Value?.ToString(), out DeckChoice choice))
+            _deckChoice = choice;
+    }
+
+    void OnPracticeProfileChanged(ChangeEventArgs args)
+    {
+        if (Enum.TryParse(args.Value?.ToString(), out BotProfileId profile))
+            _practiceProfile = profile;
+    }
+
+    void OnDismissMatchGone()
+    {
+        Match.DismissMatchGone();
+    }
+
+    /// <summary>
+    /// How long the Practice button stays disabled after a press. Long enough that a double press cannot send
+    /// twice, and bounded rather than held until an answer: the server's refusal of a second entry is
+    /// <em>invisible</em> on the meta screens — the model simply does not change, and the SDK has no route for
+    /// an action's result — so a lock waiting for one would leave Home's own entry point dead.
+    /// </summary>
+    const int PracticeLockMs = 2000;
+
+    async Task OnPractice()
+    {
+        if (_deckChoice == null || _practicePending)
+            return;
+
+        _practicePending = true;
+
+        // No screen change here: the action is sent, the server mints the table, and the association
+        // arriving on the match slot is what turns the page.
+        Match.StartPracticeMatch(_deckChoice, _practiceProfile);
+
+        await Task.Delay(PracticeLockMs);
+
+        _practicePending = false;
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// Enter the ranked queue. No screen change and no page turn: the dialog goes up over this screen on the
+    /// tap, and the page turns exactly once, when there is a board to draw.
+    /// <para>
+    /// The in-flight lock is the dialog itself rather than a bounded timer, which is what separates this entry
+    /// from Practice's. A refusal on the meta screens is invisible — the model simply does not change — so
+    /// Practice's lock has to be released by a clock; the ranked entry is answered, by a status push or by a
+    /// refusal, so its lock is held until one of them lands. The service's own five-second guard is what
+    /// covers a request that reached nowhere at all.
+    /// </para>
+    /// </summary>
+    async Task OnRanked()
+    {
+        if (!CanQueue)
+            return;
+
+        await Matchmaking.EnterRankedQueueAsync(_deckChoice);
+    }
+
+    /// <summary>
+    /// Lift this account's own shield. It applies from the next queue entry, because the flag is frozen onto
+    /// the ticket at enqueue — so a waiver pressed while a search is already up changes nothing about the
+    /// match that search forms.
+    /// </summary>
+    void OnWaiveShield() => Matchmaking.DevWaiveNewcomerShield();
+
+    /// <summary>
+    /// The dialog's countdown is time rather than state, so it needs a frame of its own — the shell's own
+    /// pump deliberately raises only what nothing else can see. The loop runs only while a search is up,
+    /// which is the difference between this and the board's: Home is a static screen the rest of the time.
+    /// </summary>
+    void OnSearchChanged()
+    {
+        if (Matchmaking.IsSearching && !_searchTicking)
+            _ = RunSearchTickAsync();
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    bool _searchTicking;
+
+    async Task RunSearchTickAsync()
+    {
+        _searchTicking = true;
+
+        try
+        {
+            while (_running && Matchmaking.IsSearching)
+            {
+                await Task.Delay(SearchTickMs);
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        finally
+        {
+            _searchTicking = false;
+        }
+    }
+
+    /// <summary> How often the countdown is redrawn. It counts whole seconds, so a quarter of one is plenty. </summary>
+    const int SearchTickMs = 250;
+
+    /// <summary> Whether this component is still on screen, so the countdown loop stops when it is not. </summary>
+    bool _running = true;
+
+    public void Dispose()
+    {
+        _running = false;
+
+        MetaplayService.OnStateChanged -= OnStateChanged;
+        Collection.OnCollectionChanged -= OnStateChanged;
+        Match.OnMatchAttachmentChanged -= OnMatchAttachmentChanged;
+        Matchmaking.OnSearchChanged -= OnSearchChanged;
+    }
+}

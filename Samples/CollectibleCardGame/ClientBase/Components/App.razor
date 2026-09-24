@@ -1,0 +1,17 @@
+@using System.Reflection
+
+<Router AppAssembly="Assembly.GetEntryAssembly()"
+        AdditionalAssemblies="new[] { typeof(App).Assembly }">
+    <Found Context="routeData">
+        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <LayoutView Layout="typeof(Layout.MainLayout)">
+            <div class="p-6 text-center">
+                <h1 class="text-xl font-semibold mb-2" style="color: var(--text-primary);">Page Not Found</h1>
+                <p style="color: var(--text-secondary);">The page you're looking for doesn't exist.</p>
+            </div>
+        </LayoutView>
+    </NotFound>
+</Router>

@@ -1,0 +1,1 @@
+import{a as e,c as t,l as n,s as r}from"./src-D_s7tMpl.js";function i(){return{permission:`api.notifications.view`,pollingPolicy:e(5e3),fetcherPolicy:n(`/notifications`),cacheRetentionPolicy:r()}}function a(r){return{permission:`api.notifications.view`,pollingPolicy:e(5e3),fetcherPolicy:n(`/notifications/${r}`),cacheRetentionPolicy:t(1e4)}}export{a as n,i as t};

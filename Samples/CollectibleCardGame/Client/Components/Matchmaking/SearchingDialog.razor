@@ -1,0 +1,80 @@
+@namespace Game.Client.Components.Matchmaking
+@using Game.Client.Services
+@using Game.ClientBase.Components.UI
+
+@* The wait, as a dialog over whatever the player tapped Play on rather than a screen of its own. Nothing is
+   torn down for a wait of under a minute, and the only screen change a match start makes is the one that puts
+   the board up (Docs/client.md).
+
+   It shows which of the two waits is running and it counts down. The number is the server's own bound rather
+   than something the client invented, and there is deliberately NO population count and NO band state: a
+   count invites the player to model the queue and read a small number as a dead game, and a visibly widening
+   band reads as "the match you are being offered is getting worse the longer you wait" — which is true, and
+   is not something to put in front of somebody who cannot act on it. The honesty the player is owed is about
+   the wager, and it is paid in full one screen later.
+
+   It sits on the shared Modal, the same primitive the change-name modal and the card detail use. There is no
+   backdrop dismissal and no close button: the only two ways out are Cancel and a board.
+
+   AND IT ANSWERS. A search that ends with no board — refused, the seat lost, the mint failed, or the client's
+   own backstop — closes the dialog, and without a word in its place the player is left looking at whatever
+   screen they pressed Play on with no idea whether they are queued. So the notice lives here rather than on
+   the screen behind it: there are two mounts now, Home and the finished match, and a notice that belonged to
+   one of them would be missing from the other (Docs/client.md, "a search the server refuses says so
+   there"). *@
+
+<Modal IsOpen="@(IsOpen || HasNotice)" Title="@Title" Icon="🔎" Size="Modal.ModalSize.Small"
+       ShowCloseButton="false" CloseOnBackdropClick="false">
+    @if (HasNotice)
+    {
+        <div class="flex flex-col items-center gap-3 text-center" data-testid="search-ended-notice">
+            @if (MetagameArt) { <img class="search-mascot" src="art/cards/pebble-collector.webp" alt="" /> }
+            else { <div class="text-4xl" aria-hidden="true">🐾</div> }
+            <p class="text-sm" style="color: var(--text-primary);">@Matchmaking.EndedNotice</p>
+            <Button Variant="Button.ButtonVariant.Secondary" OnClick="DismissNotice" data-testid="search-ended-dismiss">
+                OK
+            </Button>
+        </div>
+    }
+    else
+    {
+    <div class="flex flex-col items-center gap-3 text-center" data-testid="searching-dialog"
+         data-state="@Matchmaking.State.ToString()">
+        @if (MetagameArt) { <img class="search-mascot" src="art/cards/pebble-collector.webp" alt="" /> }
+        else { <div class="text-4xl animate-float" aria-hidden="true">🐾</div> }
+
+        <p class="text-sm" style="color: var(--text-secondary);" data-testid="searching-countdown">
+            @Matchmaking.Countdown
+        </p>
+
+        <p class="text-[11px]" style="color: var(--text-muted);">
+            Ranked puts your deck's ranks on the table. If nobody suitable turns up, you play a computer
+            opponent at practice stakes instead — rating moves, ranks do not.
+        </p>
+
+        @if (Matchmaking.ShowsCancel)
+        {
+            <Button Variant="Button.ButtonVariant.Secondary" OnClick="Cancel" data-testid="searching-cancel">
+                Cancel
+            </Button>
+        }
+    </div>
+    }
+</Modal>
+
+@code {
+    [Parameter] public bool MetagameArt { get; set; }
+    [Parameter, EditorRequired] public MatchmakingService Matchmaking { get; set; } = default!;
+
+    bool IsOpen => Matchmaking.IsSearching;
+
+    /// <summary> Whether the last search left something to say. A cancel deliberately leaves nothing. </summary>
+    bool HasNotice => Matchmaking.EndedNotice.Length > 0;
+
+    /// <summary> Which of the two waits is running, or what the last one came to. </summary>
+    string Title => HasNotice ? "The search ended" : Matchmaking.Headline;
+
+    void Cancel() => Matchmaking.Cancel();
+
+    void DismissNotice() => Matchmaking.DismissNotice();
+}

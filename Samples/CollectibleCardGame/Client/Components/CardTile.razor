@@ -1,0 +1,173 @@
+@namespace Game.Client.Components
+@using Game.Logic
+
+@* One card, drawn the same way everywhere it appears. The mockup's four hand-authored treatments collapse
+   into this one component with a size variant, so a change to how a card reads happens once.
+
+   Locks ride the frame, per the design's "locks are open information" rule, and an unowned card is dimmed
+   rather than hidden — an unowned card is a card worth heisting. *@
+
+@if (Variant == TileVariant.Row)
+{
+    <div class="@RootClass flex items-center gap-2 px-2 py-1.5 rounded-lg w-full text-left"
+         style="background: var(--bg-card); border-left: 3px solid @ClanColor; @DimStyle"
+         data-testid="@TestId"
+         data-card-id="@Card.CardId.Value"
+         data-owned="@Owned.ToString().ToLowerInvariant()"
+         data-rank="@Rank"
+         data-locked="@Locked.ToString().ToLowerInvariant()"
+         @onclick="Clicked">
+        <span class="w-5 h-5 shrink-0 rounded-full flex items-center justify-center text-[10px] font-semibold"
+              style="background: var(--accent-blue); color: #2a1a00;">@Card.Cost</span>
+        <CardPortrait Card="@Card" />
+        <span class="flex-1 truncate text-xs" style="color: var(--text-primary);">@Card.DisplayName</span>
+        @if (Locked)
+        {
+            <span class="text-[10px]" title="Locked" data-testid="lock-mark">🔒</span>
+        }
+        @if (Card.Type == CardType.Critter)
+        {
+            <span class="text-[10px] tabular-nums" style="color: var(--text-secondary);">@Stats.Attack/@Stats.Health</span>
+        }
+        else
+        {
+            <span class="text-[10px]" style="color: var(--text-muted);">Trick</span>
+        }
+        <span class="text-[10px] tabular-nums" style="color: var(--accent-gold);" data-testid="rank-stars">@RankStars</span>
+    </div>
+}
+else
+{
+    <div class="@RootClass relative flex flex-col items-center gap-0.5 p-2 rounded-xl border"
+         style="background: var(--bg-card); border-color: @ClanColor; @DimStyle"
+         data-testid="@TestId"
+         data-card-id="@Card.CardId.Value"
+         data-owned="@Owned.ToString().ToLowerInvariant()"
+         data-rank="@Rank"
+         data-locked="@Locked.ToString().ToLowerInvariant()"
+         @onclick="Clicked">
+
+        @* Cost, top-left on the frame — the one number that decides whether a card is playable. *@
+        <span class="absolute top-1 left-1 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold"
+              style="background: var(--accent-blue); color: #2a1a00; z-index: 1;">@Card.Cost</span>
+
+        @* An unowned card can never be locked, so the corner says so; otherwise the screen's own control
+           (the collection's padlock) takes the corner, falling back to a plain locked mark. *@
+        @if (!Owned)
+        {
+            <span class="absolute top-1 right-1 text-[9px] px-1 rounded"
+                  style="background: var(--bg-hover); color: var(--text-muted);">Unowned</span>
+        }
+        else if (Corner != null)
+        {
+            <div class="absolute top-1 right-1">@Corner</div>
+        }
+        else if (Locked)
+        {
+            <span class="absolute top-1 right-1 text-[11px]" title="Locked" data-testid="lock-mark">🔒</span>
+        }
+
+        <CardPortrait Card="@Card" Size="CardPortrait.PortraitSize.Grid" />
+        <span class="text-[10px] text-center leading-tight w-full truncate" style="color: var(--text-primary);">@Card.DisplayName</span>
+
+        <div class="flex items-center justify-between w-full mt-0.5">
+            @if (Card.Type == CardType.Critter)
+            {
+                <span class="text-[10px] tabular-nums" style="color: var(--text-secondary);">@Stats.Attack/@Stats.Health</span>
+            }
+            else
+            {
+                <span class="text-[10px]" style="color: var(--text-muted);">Trick</span>
+            }
+            <span class="text-[9px] tabular-nums" style="color: var(--accent-gold);" data-testid="rank-stars">@RankStars</span>
+        </div>
+
+        @if (Badge != null)
+        {
+            <span class="absolute -bottom-1 left-1/2 -translate-x-1/2 text-[9px] px-1.5 py-0.5 rounded-full"
+                  data-testid="card-badge"
+                  style="background: var(--accent-blue); color: #2a1a00;">@Badge</span>
+        }
+    </div>
+}
+
+@code {
+    public enum TileVariant
+    {
+        /// <summary> The collection grid and the deckbuilder's picker. </summary>
+        Grid,
+        /// <summary> One line in a deck list. </summary>
+        Row,
+    }
+
+    /// <summary> The card to draw. </summary>
+    [Parameter, EditorRequired]
+    public CardInfo Card { get; set; } = default!;
+
+    /// <summary> This account's rank for the card, or 0 when it owns none. </summary>
+    [Parameter]
+    public int Rank { get; set; }
+
+    /// <summary> Whether the account owns a copy. </summary>
+    [Parameter]
+    public bool Owned { get; set; }
+
+    /// <summary> Whether the card sits in one of the account's lock slots. </summary>
+    [Parameter]
+    public bool Locked { get; set; }
+
+    /// <summary> Draws the tile as unavailable (already in the deck, or not offerable). </summary>
+    [Parameter]
+    public bool Dimmed { get; set; }
+
+    /// <summary> Optional short label under the tile, e.g. the pick affordance's hint. </summary>
+    [Parameter]
+    public string? Badge { get; set; }
+
+    /// <summary>
+    /// Optional control in the tile's top-right corner, replacing the plain locked/unowned mark. The
+    /// collection puts its padlock here so locking a card does not mean opening it first.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? Corner { get; set; }
+
+    /// <summary> The rank ceiling, for the hollow half of the star row. From <c>Global.RankMax</c>. </summary>
+    [Parameter]
+    public int RankMax { get; set; } = 5;
+
+    [Parameter]
+    public TileVariant Variant { get; set; } = TileVariant.Grid;
+
+    [Parameter]
+    public EventCallback<CardId> OnClick { get; set; }
+
+    /// <summary>
+    /// The tile's <c>data-testid</c>. Defaulted, and overridden where two sets of cards share a screen — the
+    /// deckbuilder's picker and the deck it is filling — so a test can name one of them.
+    /// </summary>
+    [Parameter]
+    public string TestId { get; set; } = "card-tile";
+
+    /// <summary> The card's numbers at this account's rank, which is what a player actually fields. </summary>
+    CardStats Stats => Card.GetStatsAtRank(Owned ? Rank : 1);
+
+    string ClanColor => Card.Clan?.Ref?.ColorHex ?? "var(--border-color)";
+
+    string RootClass => OnClick.HasDelegate ? "cursor-pointer transition-transform active:scale-95" : "";
+
+    string DimStyle => (!Owned || Dimmed) ? "opacity: 0.42;" : "";
+
+    /// <summary> Filled stars up to the rank, hollow to the ceiling. Unowned cards show none. </summary>
+    string RankStars
+    {
+        get
+        {
+            if (!Owned)
+                return "";
+
+            return new string('★', Rank) + new string('☆', Math.Max(0, RankMax - Rank));
+        }
+    }
+
+    Task Clicked() => OnClick.HasDelegate ? OnClick.InvokeAsync(Card.CardId) : Task.CompletedTask;
+}

@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Build-time tool that builds the game config archives from the local sources in GameConfigSource/.
+
+    Needs the server-side SDK (Metaplay.Cloud) for the config builder, so it references Backend/SharedCode
+    rather than GameLogic. Run it from the sample root; see Program.cs for the command.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <LangVersion>Latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <Version>0.1.0.0</Version>
+    <!-- Run with the caller's working directory (the sample root) so the relative paths below resolve
+         where the user expects, rather than against the project directory. -->
+    <RunWorkingDirectory>$(MSBuildStartupDirectory)</RunWorkingDirectory>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\MetaplaySDK\Backend\CodeAnalyzers\Metaplay.CodeAnalyzers.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\..\MetaplaySDK\Backend\CodeAnalyzers.Shared\Metaplay.CodeAnalyzers.Shared.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Backend\SharedCode\SharedCode.csproj" />
+  </ItemGroup>
+
+</Project>

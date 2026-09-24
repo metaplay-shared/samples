@@ -1,0 +1,65 @@
+@namespace Game.Client.Components.Board
+@using Game.Logic
+
+@* The Weather, at the top of the right-side turn-control group.
+
+   It is a rules modifier in force for the whole match, so it is never a notification and never scrolls away
+   — but a banner spelling it out across the top centre spent the room the opponent's card backs needed. The
+   decided answer: an icon above the match mode and End Turn, with the name and the effect on hover, and the description
+   held *open* during the mulligan, because mulliganing around the Weather is the entire reason it is public.
+
+   One icon per Weather, from the kit. A Weather with no art falls back to its config emoji rather than
+   asking for a file that is not there — which is what keeps adding a Weather a content change. *@
+
+<div class="weather @(IsHeldOpen ? "weather-open" : "")"
+     data-testid="weather-banner"
+     data-weather="@(Weather?.WeatherId.Value ?? "")"
+     tabindex="0">
+    @if (IconSlug != null)
+    {
+        <img class="weather-icon" src="art/weather-@(IconSlug).webp" alt="" aria-hidden="true" draggable="false" />
+    }
+    else
+    {
+        <span class="weather-icon weather-icon-emoji" aria-hidden="true">@(Weather?.ArtEmoji ?? "🌤️")</span>
+    }
+
+    @* The name and the effect are in the DOM whether or not they are shown, so a screen reader and a
+       keyboard user reach them without a hover. CSS reveals them on hover, on focus, and all the time while
+       the mulligan is open. *@
+    <div class="weather-detail">
+        <small>Weather</small>
+        <b>@Name</b>
+        @if (!string.IsNullOrEmpty(Weather?.Description))
+        {
+            <span>@Weather!.Description</span>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public WeatherInfo? Weather { get; set; }
+
+    /// <summary>
+    /// Whether the description stays open rather than waiting for a hover. True during the mulligan, which
+    /// is the one moment the player has to read it to decide anything.
+    /// </summary>
+    [Parameter] public bool IsHeldOpen { get; set; }
+
+    string Name => Weather?.DisplayName ?? "Clear skies";
+
+    /// <summary>
+    /// Which icon this Weather wears. Mapped explicitly rather than derived from the id, so a Weather added
+    /// to the sheet before its art exists degrades to the emoji instead of a missing image.
+    /// </summary>
+    string? IconSlug => Weather?.WeatherId.Value switch
+    {
+        "AcornRain"   => "acorn-rain",
+        "HarvestMoon" => "harvest-moon",
+        "PicnicDay"   => "picnic-day",
+        "SugarRush"   => "sugar-rush",
+        "LongShadows" => "long-shadows",
+        "BubbleBath"  => "bubble-bath",
+        _             => null,
+    };
+}

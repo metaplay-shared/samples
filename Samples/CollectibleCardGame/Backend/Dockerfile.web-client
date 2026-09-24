@@ -1,0 +1,5 @@
+# Add the published Blazor client to the standard SDK server image.
+# Build context is assembled by Tools/build-cloud-image.sh; it contains only public static files.
+ARG SERVER_IMAGE
+FROM ${SERVER_IMAGE}
+COPY --chown=1654:1654 publicwebapp/ /gameserver/publicwebapp/

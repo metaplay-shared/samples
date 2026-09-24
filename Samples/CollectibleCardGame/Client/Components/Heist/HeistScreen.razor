@@ -1,0 +1,202 @@
+@namespace Game.Client.Components.Heist
+@using Game.Logic
+@using Game.Client.Components.Board
+@using Game.Client.Services
+@using Metaplay.Core
+
+@* The signature moment: the raccoon-mascot screen the whole game is named after.
+
+   The board has already settled by the time it appears — it inherits the terminal-phase rule from the branch
+   that mounts it, exactly as the plain result panel does.
+
+   ONLY THE WINNER HAS ANYTHING TO DO. There is no stash step and nothing is asked of the loser: whatever they
+   protected, they protected in their collection, before they ever queued. The losing client shows the result,
+   shows what was taken once the pick lands, and offers a way out — a player who wants to leave at that point
+   is holding nothing up (Docs/client.md, "The Heist").
+
+   It is a presentation of a server-side transaction and never a place ranks are computed. The pick is sent as
+   a seat intent, the two player actors apply the transfer independently, and what this screen draws afterwards
+   is the collection it was given back. *@
+
+<div class="board-overlay heist-screen" data-testid="heist-screen"
+     data-stage="@State.Stage.ToString()"
+     data-picks-owed="@State.PicksOwed"
+     data-picks-taken="@State.Picks.Count"
+     data-winner="@(State.IsWinner ? "true" : "false")">
+
+    <div class="overlay-panel heist-panel">
+        <div class="heist-mascot" aria-hidden="true">🦝</div>
+
+        <h3 data-testid="heist-headline">@Headline</h3>
+        <p data-testid="heist-tier">@HeistPresentation.TierLine(State.Stakes, State.Result, State.IsWinner)</p>
+
+        <PickLineup Rows="@State.Lineup"
+                    Config="@State.Config"
+                    CanPick="@(State.Stage == HeistStage.Picking)"
+                    IsWinner="@State.IsWinner"
+                    RankMax="@State.RankMax"
+                    SelectedCard="@_selected"
+                    OnPick="OnTileClicked" />
+
+        @if (State.Stage == HeistStage.Picking && _selected != null && State.Global != null)
+        {
+            <TransferSummary Card="@_selected"
+                             Mine="@State.MyMoveFor(_selected)"
+                             Theirs="@HeistPresentation.Theirs(FrozenRankOf(_selected), State.Global)"
+                             IsWinner="@State.IsWinner" />
+        }
+
+        @* What each pick actually did, on BOTH screens. The loser is asked for nothing here and can never
+           select a tile, so without this the only thing their screen ever said about the card was the rank it
+           was frozen at — the transfer read by both players is the point of the screen, and the loser seeing
+           exactly what left their collection is the half that carries it. *@
+        @if (State.Stage != HeistStage.Picking && State.Global != null)
+        {
+            @foreach (CardId taken in State.Picks)
+            {
+                <TransferSummary Card="@taken"
+                                 Theirs="@HeistPresentation.Theirs(FrozenRankOf(taken), State.Global)"
+                                 MyRankNow="@State.MyRankFor(taken)"
+                                 IsWinner="@State.IsWinner"
+                                 Settled="true" />
+            }
+        }
+
+        @* A refused pick is said out loud rather than absorbed: "a refusal is an explicit message, not a
+           timeout", and a pick that vanished would leave the winner looking at a lineup with no idea whether
+           the table heard them. *@
+        @if (State.RefusalText.Length > 0)
+        {
+            <p class="heist-refusal" data-testid="heist-refusal">@State.RefusalText</p>
+        }
+
+        @if (State.Stage == HeistStage.Picking)
+        {
+            @* The winner's own clock, and the screen's only one. It appears earlier than a turn's ring does:
+               this is the one deadline whose whole screen is the decision, so a ring that stayed invisible for
+               the first twenty-five seconds of it would be a clock nobody was warned about. The ring carries
+               no text of its own — the board keeps its readout beside the End turn button — so on a screen
+               with nothing else to read it, the count goes inside the dial. *@
+            <div class="heist-clock">
+                <div class="heist-clock-dial">
+                    <DeadlineRing DeadlineAt="@State.DeadlineAt"
+                                  Now="@State.Now"
+                                  AppearsWithin="@RingWindow" />
+                    <span class="heist-clock-seconds" data-testid="heist-clock">@SecondsLeft</span>
+                </div>
+            </div>
+
+            @* And a way off the screen, which is the same way out the plain result panel offers and for the
+               same reason: nobody is held here. What it costs is on the button, because for the winner it is
+               a real cost — the slot they walk away from is filled by the deadline's own default, which is
+               what an absent winner gets anyway. *@
+            <div class="overlay-actions">
+                <button class="overlay-confirm" data-testid="heist-snatch"
+                        disabled="@(_selected == null)" @onclick="Snatch">Snatch it!</button>
+                <button class="overlay-secondary" data-testid="leave-match" @onclick="Leave">Leave — take the default</button>
+            </div>
+        }
+        else if (State.Stage == HeistStage.Watching)
+        {
+            <p class="overlay-note" data-testid="heist-waiting">
+                They are choosing. Nothing is asked of you here — what you protected, you protected before you
+                queued.
+            </p>
+
+            @* The loser owes nothing and is holding nothing up, so they are not kept here while somebody else
+               decides. The result still reaches their account: the table delivers it to the seat, not to the
+               screen. *@
+            <div class="overlay-actions">
+                <button class="overlay-secondary" data-testid="leave-match" @onclick="Leave">Leave</button>
+            </div>
+        }
+        else
+        {
+            @if (State.AnyAutoDefaulted)
+            {
+                @* Informational rather than a disclosure: the default is a deterministic function of state both
+                   players watched, so it is a choice the other player could have predicted. *@
+                <p class="overlay-note" data-testid="heist-auto-defaulted">
+                    The clock ran out, so the strongest pick was taken automatically.
+                </p>
+            }
+
+            @if (!State.AllSeatsAcked)
+            {
+                <p class="overlay-note" data-testid="heist-recording">Recording the transfer…</p>
+            }
+
+            <div class="overlay-actions">
+                <button class="overlay-confirm" data-testid="play-again"
+                        disabled="@(!State.AllSeatsAcked)" @onclick="PlayAgain">Play again</button>
+                <button class="overlay-secondary" data-testid="leave-match" @onclick="Leave">Leave</button>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public HeistViewState State { get; set; } = default!;
+
+    /// <summary>
+    /// How close the pick clock has to be before its ring appears. Wider than the board's twenty seconds
+    /// because the whole screen is this one decision: a ring that showed up with twenty seconds left on a
+    /// forty-five-second clock would arrive without warning on a screen that has nothing else moving.
+    /// </summary>
+    static readonly MetaDuration RingWindow = MetaDuration.FromSeconds(45);
+
+    /// <summary> The tile under consideration. Local feedback: nothing is committed until Snatch. </summary>
+    CardId? _selected;
+
+    /// <summary>
+    /// Whole seconds left on the pick, rounded the way the ring rounds its own: a clock that read zero while
+    /// a fraction of a second was still on it would be a clock that lied about the last press.
+    /// </summary>
+    int SecondsLeft
+    {
+        get
+        {
+            if (!State.DeadlineAt.HasValue)
+                return 0;
+
+            long remaining = (State.DeadlineAt.Value - State.Now).Milliseconds;
+            return remaining <= 0 ? 0 : (int)((remaining + 999) / 1000);
+        }
+    }
+
+    string Headline => State.Stage switch
+    {
+        HeistStage.Picking  => State.PicksOwed - State.Picks.Count > 1 ? "Take two." : "Take one.",
+        HeistStage.Watching => "They are taking one.",
+        _                   => State.IsWinner ? "Taken." : "They took it.",
+    };
+
+    /// <summary> The rank the loser brought this card at, off the lineup row that carries it. </summary>
+    int FrozenRankOf(CardId card)
+    {
+        foreach (HeistLootRow row in State.Lineup)
+        {
+            if (row.Card == card)
+                return row.OwnedRank;
+        }
+
+        return 0;
+    }
+
+    void OnTileClicked(CardId card) => _selected = card;
+
+    Task Snatch()
+    {
+        if (_selected == null)
+            return Task.CompletedTask;
+
+        CardId picked = _selected;
+        _selected = null;
+
+        return State.OnPick.InvokeAsync(picked);
+    }
+
+    Task PlayAgain() => State.OnPlayAgain.HasDelegate ? State.OnPlayAgain.InvokeAsync() : Task.CompletedTask;
+
+    Task Leave() => State.OnLeave.HasDelegate ? State.OnLeave.InvokeAsync() : Task.CompletedTask;
+}

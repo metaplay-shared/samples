@@ -1,0 +1,1878 @@
+/* Game-owned metagame chrome: Home, Collection, Decks and the Deckbuilder. */
+.metagame {
+    --ink:#38283f;
+    --muted:#796875;
+    --paper:#f5e8c9;
+    --gold:#f3cb79;
+    --plum:#281e3a;
+    --line:#baa079;
+    --card-w:112px;
+    color-scheme:dark
+}
+
+.metagame * {
+    box-sizing:border-box
+}
+
+.metagame {
+    margin:0;
+    background:#15192e url('art/match-background-rooftop.webp') center top/cover fixed;
+    color:#fff2d4;
+    font:14px/1.5 Inter,system-ui,sans-serif
+}
+
+.metagame button, .metagame input, .metagame select {
+    font:inherit
+}
+
+.metagame button, .metagame a, .metagame input, .metagame select {
+    touch-action:manipulation
+}
+
+.metagame button, .metagame a {
+     -webkit-tap-highlight-color:transparent
+}
+
+.metagame a {
+    color:inherit;
+    text-decoration:none
+}
+
+.metagame button {
+    cursor:pointer
+}
+
+.metagame button:disabled {
+    cursor:not-allowed;
+    opacity:.48
+}
+
+.metagame button:focus-visible, .metagame a:focus-visible, .metagame input:focus-visible, .metagame select:focus-visible {
+    outline:3px solid #6bdacd;
+    outline-offset:4px
+}
+
+.metagame button {
+    color:inherit
+}
+
+/* Focus and browser caret navigation must not draw a text caret in static game UI. */
+.metagame { caret-color: transparent; }
+.metagame input, .metagame textarea, .metagame [contenteditable]:not([contenteditable="false"]) {
+    caret-color: auto;
+}
+
+.metagame h1, .metagame h2, .metagame h3, .metagame p {
+    margin:0
+}
+
+.metagame h1, .metagame h2, .metagame h3, .metagame .display {
+    font-family:'Lilita One',system-ui;
+    font-weight:400;
+    line-height:1.12
+}
+
+.metagame h1 {
+    font-size:42px
+}
+
+.metagame h2 {
+    font-size:28px
+}
+
+.metagame h3 {
+    font-size:22px
+}
+
+.metagame small {
+    font-size:12px
+}
+
+.metagame img {
+    max-width:100%
+}
+
+.metagame .skip {
+    position:fixed;
+    top:-80px;
+    z-index:1000;
+    background:var(--paper);
+    color:var(--ink);
+    padding:12px
+}
+
+.metagame .skip:focus {
+    top:0
+}
+
+.metagame .eyebrow {
+    text-transform:uppercase;
+    letter-spacing:.17em;
+    font-size:10px;
+    font-weight:800;
+    color:var(--gold)
+}
+
+.metagame .muted {
+    color:var(--muted)
+}
+
+.metagame .shell {
+    max-width:1480px;
+    margin:auto;
+    padding:0 36px 66px
+}
+
+.metagame .topbar {
+    height:92px;
+    display:flex;
+    align-items:center;
+    gap:36px;
+    border-bottom:1px solid #edd49533;
+    margin-bottom:26px
+}
+
+.metagame .brand {
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-family:'Lilita One';
+    font-size:29px;
+    line-height:.9;
+    transform:rotate(-3deg);
+    color:#f9dc91;
+    text-shadow:0 3px #683b29,0 5px 10px #0009
+}
+
+.metagame .brand img {
+    width:47px;
+    height:47px;
+    object-fit:contain
+}
+
+.metagame .brand small {
+    display:block;
+    font:8px Inter;
+    letter-spacing:.3em;
+    margin-top:8px;
+    color:#eee0c5
+}
+
+.metagame .nav {
+    display:flex;
+    gap:8px;
+    margin:auto
+}
+
+.metagame .nav a {
+    padding:11px 23px;
+    font-weight:700;
+    color:#e0d5dc;
+    border-radius:10px;
+    position:relative
+}
+
+.metagame .nav a.active {
+    color:#ffe5a2;
+    background:linear-gradient(#71523170,#69423330);
+    box-shadow:inset 0 -3px #e5b66a
+}
+
+.metagame .nav a:hover {
+    background:#ffe0a215
+}
+
+.metagame .identity {
+    display:flex;
+    align-items:center;
+    gap:12px
+}
+
+.metagame .identity img {
+    height:39px;
+    width:39px;
+    border-radius:50%;
+    background:#534260;
+    border:1px solid #d2ad6c
+}
+
+.metagame .identity span {
+    display:block;
+    font-size:12px
+}
+
+.metagame .connection {
+    color:#9de6c0;
+    font-size:10px!important
+}
+
+.metagame .connection:before {
+    content:'●';
+    font-size:8px;
+    margin-right:5px
+}
+
+.metagame .heading {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:24px;
+    gap:18px
+}
+
+.metagame .heading p {
+    color:#d0c7ce;
+    margin-top:7px
+}
+
+.metagame .heading .eyebrow {
+    margin-bottom:7px
+}
+
+.metagame .btn {
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    padding:12px 22px;
+    border:1px solid #f5d38c88;
+    border-radius:10px;
+    background:linear-gradient(#504157,#30283b);
+    box-shadow:0 4px 0 #171321,0 5px 12px #0003;
+    font-weight:800;
+    color:#f9eccf;
+    transition:transform .15s,filter .15s
+}
+
+.metagame .btn:hover:not(:disabled) {
+    filter:brightness(1.12);
+    transform:translateY(-2px)
+}
+
+.metagame .btn.gold {
+    background:linear-gradient(#ffe3a0,#e6b75e);
+    color:#4c3029;
+    border-color:#ffe8b0;
+    box-shadow:0 4px 0 #815232,0 8px 20px #0003
+}
+
+.metagame .btn.ghost {
+    background:transparent;
+    border-color:#b59c7c66;
+    box-shadow:none;
+    color:inherit
+}
+
+.metagame .btn.small {
+    padding:8px 12px;
+    font-size:12px
+}
+
+.metagame .paper {
+    position:relative;
+    color:var(--ink);
+    background:radial-gradient(ellipse at top left,#fff8df88,transparent 65%),linear-gradient(120deg,#f7eccf,#ecd8b4);
+    border:2px solid #bb9260;
+    border-radius:16px;
+    box-shadow:inset 0 0 0 4px #fff5da88,inset 0 0 32px #805e2e14,0 12px 24px #07091460
+}
+
+.metagame .paper:before {
+    content:'';
+    position:absolute;
+    inset:7px;
+    border:1px solid #b8946160;
+    border-radius:9px;
+    pointer-events:none
+}
+
+.metagame .dark-panel {
+    background:linear-gradient(135deg,#302b42ed,#211d31f5);
+    border:1px solid #c5a46a66;
+    border-radius:15px;
+    box-shadow:inset 0 0 0 4px #e5cb7910,0 10px 25px #0003
+}
+
+.metagame .pill {
+    font-size:11px;
+    border:1px solid #d9bd8344;
+    border-radius:50px;
+    padding:5px 10px;
+    display:inline-flex;
+    align-items:center;
+    gap:7px;
+    color:#e9dbbe;
+    background:#34293ccc
+}
+
+.metagame .crest {
+    width:26px;
+    height:26px;
+    object-fit:contain
+}
+
+.metagame .home-grid {
+    display:grid;
+    grid-template-columns:minmax(0,1fr) 330px;
+    gap:28px
+}
+
+.metagame .welcome {
+    height:266px;
+    position:relative;
+    padding:20px 0
+}
+
+.metagame .welcome h1 {
+    font-size:64px;
+    max-width:460px;
+    text-shadow:0 3px 0 #392235,0 5px 24px #0008;
+    line-height:1.02;
+    margin:12px 0
+}
+
+.metagame .welcome h1 em {
+    color:#f2c87a;
+    font-style:normal
+}
+
+.metagame .welcome p {
+    max-width:350px;
+    color:#ded2df;
+    line-height:1.65
+}
+
+.metagame .welcome .mascot {
+    position:absolute;
+    width:285px;
+    height:310px;
+    object-fit:contain;
+    right:-8px;
+    bottom:-35px;
+    transform:rotate(6deg);
+    filter:drop-shadow(0 15px 12px #080811a0);
+    pointer-events:none;
+    z-index:2
+}
+
+.metagame .play-panel {
+    padding:26px 28px;
+    z-index:3
+}
+
+.metagame .play-title {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:20px
+}
+
+.metagame .play-title small {
+    color:#796052
+}
+
+.metagame .play-panel label {
+    display:block;
+    font-size:10px;
+    font-weight:800;
+    text-transform:uppercase;
+    letter-spacing:.1em;
+    margin-bottom:7px
+}
+
+.metagame .play-panel select, .metagame .paper input, .metagame .paper select {
+    color-scheme:light;
+    color:var(--ink);
+    background:#fffae9;
+    border:1px solid #ad8a5d;
+    border-radius:7px;
+    padding:11px 12px;
+    width:100%;
+    min-width:0
+}
+
+.metagame .deck-pick {
+    display:grid;
+    grid-template-columns:56px 1fr;
+    gap:12px;
+    align-items:center
+}
+
+.metagame .deck-pick-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px; }
+.metagame .deck-pick-heading label { margin:0; }
+.metagame .deck-power { display:flex; align-items:center; gap:8px; padding:3px 12px; border:1px solid #bc8d3e; border-radius:12px; background:#f4d68f; color:#563718; }
+.metagame .deck-power span { font-size:12px; font-weight:600; }
+.metagame .deck-power strong { font-family:"Lilita One",system-ui; font-size:26px; font-weight:400; line-height:1.15; }
+
+.metagame .deck-pick .crest {
+    height:47px;
+    width:47px
+}
+
+.metagame .deck-crests { display:flex; align-items:center; }
+.metagame .deck-crests:has(img + img) .crest { width:34px; height:34px; }
+.metagame .deck-crests img + img { margin-left:-10px; }
+
+.metagame .deck-description {
+    font-size:12px;
+    color:#786151;
+    margin:9px 0 20px 68px;
+    min-height:18px
+}
+
+.metagame .play-actions {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:16px
+}
+
+.metagame .play-mode {
+    display:flex;
+    flex-direction:column;
+    gap:8px
+}
+
+.metagame .play-mode .btn {
+    font-family:'Lilita One';
+    font-weight:400;
+    font-size:23px;
+    min-height:56px
+}
+
+.metagame .play-mode small {
+    font-size:11px;
+    text-align:center;
+    color:#796553
+}
+
+.metagame .difficulty {
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    gap:6px;
+    margin-top:12px
+}
+
+.metagame .difficulty label {
+    font-size:10px;
+    margin:0
+}
+
+.metagame .difficulty select {
+    padding:5px 9px;
+    width:128px;
+    font-size:11px
+}
+
+.metagame .home-aside {
+    display:flex;
+    flex-direction:column;
+    gap:20px;
+    padding-top:20px
+}
+
+.metagame .account {
+    padding:25px
+}
+
+.metagame .account-head {
+    display:flex;
+    gap:14px;
+    align-items:center
+}
+
+.metagame .avatar {
+    width:72px;
+    height:72px;
+    border-radius:50%;
+    background:#675179;
+    border:2px solid #ecc47b;
+    object-fit:contain
+}
+
+.metagame .account-head h2 {
+    font-size:27px
+}
+
+.metagame .icon-button {
+    background:none;
+    border:0;
+    padding:6px;
+    color:inherit
+}
+
+.metagame .record {
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:6px;
+    text-align:center;
+    border-top:1px solid #fff2c222;
+    margin-top:23px;
+    padding-top:20px
+}
+
+.metagame .record b {
+    font-family:'Lilita One';
+    font-size:28px;
+    font-weight:400;
+    display:block;
+    color:#f5d394
+}
+
+.metagame .record small {
+    font-size:10px;
+    color:#d6c7d8
+}
+
+.metagame .account-rating {
+    display:flex;
+    justify-content:space-between;
+    border-top:1px solid #fff2c222;
+    margin-top:18px;
+    padding-top:14px;
+    font-size:12px;
+    color:#d4c8db
+}
+
+.metagame .cabinet {
+    padding:24px;
+    min-height:180px;
+    overflow:hidden
+}
+
+.metagame .cabinet h2 {
+    font-size:27px
+}
+
+.metagame .cabinet p {
+    font-size:12px;
+    max-width:170px;
+    margin:10px 0 16px;
+    color:#725e54
+}
+
+.metagame .cabinet .dog {
+    position:absolute;
+    width:180px;
+    right:0;
+    bottom:-26px;
+    transform:rotate(-8deg);
+    pointer-events:none
+}
+
+.metagame .cabinet .btn {
+    position:relative;
+    z-index:2
+}
+
+.metagame .home-foot {
+    display:flex;
+    gap:18px;
+    margin-top:22px;
+    align-items:center;
+    color:#d8c8d8;
+    font-size:12px
+}
+
+.metagame .home-foot img {
+    width:36px
+}
+
+.metagame .workspace {
+    display:grid;
+    grid-template-columns:205px minmax(0,1fr);
+    height:calc(100dvh - 292px);
+    min-height:420px;
+    gap:24px
+}
+
+.metagame .rail {
+    overflow-y:auto;
+    padding:8px 2px 20px
+}
+
+.metagame .rail h2 {
+    font:10px Inter;
+    font-weight:800;
+    letter-spacing:.15em;
+    text-transform:uppercase;
+    color:#c9b5ce;
+    margin:0 0 13px
+}
+
+.metagame .clan-list {
+    display:flex;
+    flex-direction:column;
+    gap:5px
+}
+
+.metagame .clan-button {
+    border:1px solid transparent;
+    background:transparent;
+    border-radius:10px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    color:#ded1e2;
+    text-align:left;
+    padding:9px 10px;
+    font-size:12px;
+    width:100%
+}
+
+.metagame .clan-button img {
+    width:32px;
+    height:32px;
+    object-fit:contain
+}
+
+.metagame .clan-button.active {
+    background:linear-gradient(90deg,#d8a55733,#e8b7790c);
+    border-color:#d7b2718c;
+    color:#ffdf9e
+}
+
+.metagame .clan-button .all-icon {
+    width:32px;
+    text-align:center;
+    font-size:23px
+}
+
+.metagame .clan-button small {
+    margin-left:auto;
+    color:#bcaac2
+}
+
+.metagame .rail-section {
+    border-top:1px solid #dbbf8b26;
+    margin-top:20px;
+    padding-top:18px
+}
+
+.metagame .rail .filters {
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px
+}
+
+.metagame .chip {
+    border:1px solid #ccb7844d;
+    border-radius:7px;
+    background:#262136;
+    color:#cfbfd5;
+    padding:6px 10px;
+    font-size:11px
+}
+
+.metagame .chip.active {
+    background:#f0d292;
+    color:#493224;
+    border-color:#e4c184
+}
+
+.metagame .lock-note {
+    padding:14px;
+    font-size:11px;
+    margin-top:22px
+}
+
+.metagame .lock-note h3 {
+    font-family:Inter;
+    font-size:12px;
+    font-weight:800;
+    margin-bottom:8px
+}
+
+.metagame .lock-note p {
+    color:#c8b4cd
+}
+
+.metagame .catalog {
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden
+}
+
+.metagame .catalog-tools {
+    display:flex;
+    gap:12px;
+    align-items:center;
+    border-bottom:1px solid #b5976b77;
+    padding:17px 22px;
+    z-index:1;
+    flex-shrink:0
+}
+
+.metagame .search {
+    flex:1;
+    min-width:80px
+}
+
+.metagame .catalog-tools input {
+    padding:8px 12px
+}
+
+.metagame .catalog-tools select {
+    width:132px;
+    padding:8px;
+    font-size:12px
+}
+
+.metagame .catalog-tools small {
+    white-space:nowrap
+}
+
+.metagame .card-grid {
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(112px,1fr));
+    gap:20px 18px;
+    padding:26px;
+    align-content:start;
+    overflow-y:auto;
+    scrollbar-color:#ac8861 #ead8b9;
+    flex:1
+}
+
+.metagame .card-item {
+    padding:4px 0 0;
+    background:none;
+    border:0;
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:10px;
+    min-width:0;
+    color:#513c36
+}
+
+.metagame .card-item .card-face {
+    transition:transform .16s
+}
+
+.metagame .card-item:hover .card-face, .metagame .card-item:focus-visible .card-face {
+    transform:translateY(-5px) scale(1.04);
+    z-index:11
+}
+
+.metagame .card-item.unowned .card-face {
+    filter:grayscale(.65) saturate(.45) opacity(.74)
+}
+
+.metagame .rank-label {
+    font-size:10px;
+    letter-spacing:2px;
+    color:#795528;
+    font-weight:700
+}
+
+.metagame .rank-label.unowned-label {
+    letter-spacing:0;
+    color:#71646e
+}
+
+.metagame .card-item.in-deck {
+    opacity:.48
+}
+
+.metagame .card-item .added {
+    position:absolute;
+    top:35%;
+    left:5%;
+    right:5%;
+    z-index:20;
+    background:#234f47e8;
+    border:1px solid #95d6a5;
+    border-radius:5px;
+    padding:5px;
+    color:white;
+    font-size:11px
+}
+
+.metagame .empty-message {
+    grid-column:1/-1;
+    text-align:center;
+    padding:45px 20px;
+    color:#755e5e
+}
+
+.metagame .empty-message .btn {
+    margin-top:20px
+}
+
+.metagame .deck-shelf {
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:26px
+}
+
+.metagame .deck-box {
+    overflow:hidden;
+    position:relative
+}
+
+.metagame .deck-box>a {
+    display:block
+}
+
+.metagame .deck-art {
+    height:205px;
+    position:relative;
+    overflow:hidden;
+    background:radial-gradient(ellipse at 50% 95%,var(--deck-color,#544768),#252237);
+    border-bottom:2px solid #bb9260
+}
+
+.metagame .deck-art:after {
+    content:'';
+    position:absolute;
+    inset:0;
+    background:linear-gradient(0deg,#1c192a66,transparent 60%)
+}
+
+.metagame .deck-art img {
+    position:absolute;
+    width:200px;
+    height:210px;
+    object-fit:contain;
+    bottom:-12px;
+    left:0;
+    filter:drop-shadow(0 7px 8px #0008);
+    transform:rotate(-9deg)
+}
+
+.metagame .deck-art img+img {
+    left:auto;
+    right:-8px;
+    transform:rotate(9deg)
+}
+
+.metagame .deck-art .pill {
+    position:absolute;
+    top:14px;
+    left:15px;
+    z-index:2
+}
+
+.metagame .deck-copy {
+    padding:22px
+}
+
+.metagame .deck-copy h2 {
+    margin-bottom:14px
+}
+
+.metagame .deck-line {
+    display:flex;
+    gap:6px;
+    align-items:center;
+    font-size:12px;
+    color:#796353
+}
+
+.metagame .deck-meta {
+    display:flex;
+    justify-content:space-between;
+    border-top:1px solid #b995654f;
+    margin-top:16px;
+    padding-top:14px;
+    font-size:12px
+}
+
+.metagame .delete {
+    position:absolute;
+    bottom:15px;
+    right:16px;
+    background:none;
+    border:0;
+    color:#795653;
+    font-size:11px;
+    padding:8px
+}
+
+.metagame .deck-meta span:last-child {
+    margin-right:47px
+}
+
+.metagame .new-deck-tile {
+    min-height:356px;
+    border:2px dashed #c6ab7077;
+    border-radius:16px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:12px;
+    color:#dfc491;
+    background:#241f3655
+}
+
+.metagame .new-deck-tile b {
+    font:48px 'Lilita One'
+}
+
+.metagame .new-deck-tile p {
+    font-size:12px;
+    max-width:180px;
+    text-align:center;
+    color:#c5b5cd
+}
+
+.metagame .deck-bottom {
+    margin-top:24px;
+    display:flex;
+    gap:20px;
+    justify-content:space-between;
+    align-items:center;
+    font-size:12px;
+    color:#d3c4d4
+}
+
+.metagame .empty-decks {
+    max-width:760px;
+    min-height:420px;
+    margin:30px auto;
+    padding:70px 40px;
+    text-align:center;
+    position:relative
+}
+
+.metagame .empty-decks img {
+    width:190px;
+    display:block;
+    margin:-30px auto 10px
+}
+
+.metagame .empty-decks p {
+    margin:16px auto 25px;
+    max-width:400px
+}
+
+.metagame .editor-top {
+    display:flex;
+    align-items:center;
+    gap:24px;
+    margin-bottom:18px
+}
+
+.metagame .editor-top input {
+    font:30px 'Lilita One';
+    background:transparent;
+    border:0;
+    border-bottom:1px solid #c2a17166;
+    padding:8px 0;
+    color:#fff1d0;
+    max-width:360px;
+    width:100%;
+    min-width:0
+}
+
+.metagame .editor-layout {
+    display:grid;
+    grid-template-columns:minmax(0,1fr) 315px;
+    gap:24px;
+    height:calc(100dvh - 233px);
+    min-height:450px
+}
+
+.metagame .editor-picker {
+    display:flex;
+    flex-direction:column;
+    min-width:0;
+    min-height:0
+}
+
+.metagame .clan-picker {
+    display:flex;
+    gap:6px;
+    align-items:center;
+    margin-bottom:16px;
+    flex-wrap:wrap
+}
+
+.metagame .clan-picker .clan-button {
+    width:auto;
+    padding:7px 10px
+}
+
+.metagame .clan-picker .clan-button img {
+    width:27px;
+    height:27px
+}
+
+.metagame .clan-picker>small {
+    margin-left:auto;
+    color:#cbbbcb;
+    font-size:10px
+}
+
+.metagame .editor-picker .catalog {
+    flex:1
+}
+
+.metagame .editor-deck {
+    display:flex;
+    flex-direction:column;
+    min-height:0
+}
+
+.metagame .deck-summary {
+    padding:20px 22px 16px;
+    border-bottom:1px solid #d9bd8433
+}
+
+.metagame .deck-summary .count-line {
+    display:flex;
+    justify-content:space-between;
+    align-items:center
+}
+
+.metagame .count-line h2 {
+    font-size:32px
+}
+
+.metagame .count-line h2 small {
+    font:16px Inter;
+    color:#b9a9c2
+}
+
+.metagame .legality {
+    font-size:12px;
+    margin:8px 0 14px;
+    color:#e0c794
+}
+
+.metagame .legality.valid {
+    color:#a5e1b7
+}
+
+.metagame .deck-summary .btn {
+    width:100%
+}
+
+.metagame .deck-rows {
+    overflow-y:auto;
+    padding:10px 12px;
+    flex:1;
+    scrollbar-color:#887397 #282035
+}
+
+.metagame .deck-row {
+    width:100%;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    border:0;
+    border-bottom:1px solid #e5d1ab19;
+    background:none;
+    color:#ece0d9;
+    padding:6px 4px;
+    text-align:left;
+    font-size:11px
+}
+
+.metagame .deck-row:hover {
+    background:#e7c68a14
+}
+
+.metagame .deck-row img {
+    width:30px;
+    height:30px;
+    object-fit:contain;
+    background:#64516d;
+    border-radius:5px
+}
+
+.metagame .deck-row .mana {
+    width:20px;
+    height:20px;
+    border-radius:50%;
+    background:#796344;
+    color:#ffe8ab;
+    text-align:center;
+    font-weight:800;
+    line-height:20px
+}
+
+.metagame .deck-row .row-name {
+    flex:1
+}
+
+.metagame .deck-row .minus {
+    font-size:16px;
+    color:#c5abc4
+}
+
+.metagame .curve {
+    display:flex;
+    align-items:end;
+    justify-content:center;
+    gap:10px;
+    height:64px;
+    padding:5px 20px 0
+}
+
+.metagame .curve>div {
+    flex:1;
+    max-width:26px;
+    text-align:center;
+    font-size:9px;
+    color:#b9a8c1
+}
+
+.metagame .curve i {
+    display:block;
+    min-height:2px;
+    background:linear-gradient(#e9cf91,#866444);
+    border-radius:3px 3px 0 0
+}
+
+.metagame .curve-label {
+    font-size:10px;
+    text-align:center;
+    color:#c6b4cd;
+    padding:8px 0 13px
+}
+
+.metagame .detail-layout {
+    display:grid;
+    grid-template-columns:230px 1fr;
+    gap:35px;
+    align-items:center;
+    padding:20px 5px
+}
+
+.metagame .detail-art {
+    --card-w:220px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:24px
+}
+
+.metagame .detail-copy h2 {
+    font-size:35px;
+    margin:10px 0 14px
+}
+
+.metagame .detail-copy .eyebrow {
+    color:#7c553f
+}
+
+.metagame .detail-copy .rules {
+    font-size:15px;
+    line-height:1.6;
+    border-top:1px solid #b7936677;
+    padding-top:15px
+}
+
+.metagame .detail-copy blockquote {
+    font-style:italic;
+    color:#85675b;
+    margin:16px 0;
+    font-size:12px
+}
+
+.metagame .detail-ranks {
+    padding:12px 0;
+    border-top:1px solid #b7936677;
+    color:#725744;
+    font-size:12px
+}
+
+.metagame .detail-ranks strong {
+    display:block;
+    margin-bottom:4px
+}
+
+
+
+
+
+.metagame .good {
+    color:#386d51
+}
+
+@media(min-width:1440px) {
+.metagame {
+    --card-w:125px
+}
+
+.metagame .card-grid {
+    grid-template-columns:repeat(auto-fill,minmax(125px,1fr))
+}
+
+.metagame .welcome .mascot {
+    right:22px;
+    width:320px
+}
+
+.metagame .welcome h1 {
+    font-size:72px
+}
+}
+
+@media(max-width:1100px) {
+.metagame .shell {
+    padding:0 24px 62px
+}
+
+.metagame .home-grid {
+    grid-template-columns:minmax(0,1fr) 285px;
+    gap:22px
+}
+
+.metagame .welcome h1 {
+    font-size:54px;
+    max-width:320px
+}
+
+.metagame .welcome .mascot {
+    width:215px;
+    right:-12px;
+    bottom:-20px
+}
+
+.metagame .welcome p {
+    max-width:290px;
+    font-size:12px
+}
+
+.metagame .identity {
+    display:none
+}
+
+.metagame .workspace {
+    grid-template-columns:175px minmax(0,1fr);
+    gap:16px
+}
+
+.metagame .editor-layout {
+    grid-template-columns:minmax(0,1fr) 280px;
+    gap:15px
+}
+
+.metagame .clan-picker .clan-button span {
+    display:none
+}
+
+.metagame .deck-art img {
+    width:155px
+}
+
+.metagame .deck-shelf {
+    gap:18px
+}
+
+.metagame .deck-copy {
+    padding:18px
+}
+
+.metagame .deck-copy h2 {
+    font-size:24px
+}
+}
+
+@media(max-width:760px) {
+.metagame .shell {
+    padding:0 16px 82px
+}
+
+.metagame .topbar {
+    height:76px;
+    gap:14px;
+    margin-bottom:20px
+}
+
+.metagame .brand {
+    font-size:22px
+}
+
+.metagame .brand img {
+    width:30px
+}
+
+.metagame .brand small {
+    font-size:6px
+}
+
+.metagame .nav {
+    gap:2px;
+    margin:0 0 0 auto
+}
+
+.metagame .nav a {
+    font-size:12px;
+    padding:10px
+}
+
+.metagame .home-grid {
+    display:flex;
+    flex-direction:column
+}
+
+.metagame .welcome {
+    height:235px
+}
+
+.metagame .welcome h1 {
+    font-size:51px;
+    max-width:280px
+}
+
+.metagame .welcome .mascot {
+    width:200px;
+    right:0;
+    opacity:.9
+}
+
+.metagame .welcome p {
+    max-width:240px
+}
+
+.metagame .home-aside {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    padding:0
+}
+
+.metagame .account, .metagame .cabinet {
+    padding:19px
+}
+
+.metagame .account-head {
+    gap:8px
+}
+
+.metagame .account-head h2 {
+    font-size:23px
+}
+
+.metagame .avatar {
+    width:45px;
+    height:45px
+}
+
+.metagame .record b {
+    font-size:23px
+}
+
+.metagame .cabinet .dog {
+    width:155px;
+    right:-50px;
+    opacity:.75
+}
+
+.metagame .cabinet h2 {
+    font-size:24px
+}
+
+.metagame .play-panel {
+    padding:22px
+}
+
+.metagame .home-foot {
+    margin-bottom:4px
+}
+
+.metagame .heading {
+    margin-bottom:18px;
+    align-items:flex-start
+}
+
+.metagame h1 {
+    font-size:34px
+}
+
+.metagame .heading p {
+    font-size:12px
+}
+
+.metagame .heading .btn {
+    padding:10px;
+    font-size:12px
+}
+
+.metagame .workspace {
+    height:auto;
+    min-height:0;
+    display:flex;
+    flex-direction:column;
+    gap:14px
+}
+
+.metagame .rail {
+    overflow:visible;
+    padding:0
+}
+
+.metagame .rail h2, .metagame .rail .lock-note {
+    display:none
+}
+
+.metagame .clan-list {
+    flex-direction:row;
+    overflow:auto;
+    gap:5px
+}
+
+.metagame .clan-button {
+    width:auto;
+    flex-shrink:0;
+    padding:7px
+}
+
+.metagame .clan-button span:not(.all-icon), .metagame .clan-button small {
+    display:none
+}
+
+.metagame .rail-section {
+    display:inline-flex;
+    margin:10px 12px 0 0;
+    padding:0;
+    border:0
+}
+
+.metagame .catalog {
+    min-height:380px
+}
+
+.metagame .card-grid {
+    grid-template-columns:repeat(auto-fill,minmax(100px,1fr));
+    gap:21px 12px;
+    padding:22px 15px;
+    overflow:visible
+}
+
+.metagame .card-item {
+    --card-w:100px
+}
+
+.metagame .catalog-tools {
+    padding:12px;
+    gap:8px;
+    flex-wrap:wrap
+}
+
+.metagame .catalog-tools small {
+    display:none
+}
+
+.metagame .catalog-tools select {
+    width:110px
+}
+
+.metagame .deck-shelf {
+    grid-template-columns:1fr 1fr;
+    gap:16px
+}
+
+.metagame .deck-art {
+    height:160px
+}
+
+.metagame .deck-art img {
+    height:170px;
+    width:145px
+}
+
+.metagame .deck-copy {
+    padding:16px
+}
+
+.metagame .deck-line {
+    font-size:10px
+}
+
+.metagame .deck-meta {
+    font-size:10px
+}
+
+.metagame .deck-meta span:last-child {
+    margin-right:32px
+}
+
+.metagame .deck-bottom {
+    align-items:flex-start;
+    flex-direction:column
+}
+
+.metagame .new-deck-tile {
+    min-height:310px
+}
+
+.metagame .editor-top {
+    gap:15px
+}
+
+.metagame .editor-top input {
+    font-size:26px
+}
+
+.metagame .editor-layout {
+    display:flex;
+    flex-direction:column;
+    height:auto;
+    gap:18px
+}
+
+.metagame .editor-deck {
+    order:-1;
+    position:sticky;
+    top:0;
+    z-index:25;
+    border-radius:10px;
+    display:grid;
+    grid-template-columns:1fr auto
+}
+
+.metagame .deck-summary {
+    padding:12px 16px;
+    border:0;
+    min-width:0
+}
+
+.metagame .deck-summary .count-line h2 {
+    font-size:24px
+}
+
+.metagame .deck-summary .btn {
+    padding:7px;
+    font-size:12px;
+    max-width:170px
+}
+
+.metagame .legality {
+    margin:2px 0 8px
+}
+
+.metagame .editor-deck .deck-rows {
+    max-height:150px;
+    width:155px;
+    padding:8px 6px
+}
+
+.metagame .deck-row {
+    font-size:9px
+}
+
+.metagame .deck-row img, .metagame .deck-row .mana {
+    display:none
+}
+
+.metagame .editor-deck .curve, .metagame .editor-deck .curve-label {
+    display:none
+}
+
+.metagame .clan-picker .clan-button span {
+    display:none
+}
+
+.metagame .clan-picker>small {
+    margin-left:0
+}
+
+.metagame .detail-layout {
+    grid-template-columns:1fr;
+    gap:20px;
+    padding:10px 0
+}
+
+.metagame .detail-art {
+    --card-w:150px;
+    gap:14px
+}
+
+.metagame .detail-copy h2 {
+    font-size:30px
+}
+
+.metagame .detail-copy .rules {
+    font-size:13px
+}
+
+.metagame .detail-copy blockquote {
+    margin:12px 0
+}
+
+.metagame .empty-decks {
+    padding:40px 20px
+}
+}
+
+@media(max-width:430px) {
+.metagame .welcome h1 {
+    font-size:43px;
+    max-width:235px
+}
+
+.metagame .welcome .mascot {
+    width:160px;
+    right:-15px;
+    bottom:-18px
+}
+
+.metagame .welcome p {
+    max-width:205px;
+    font-size:11px
+}
+
+.metagame .welcome {
+    height:225px
+}
+
+.metagame .home-aside {
+    grid-template-columns:1fr
+}
+
+.metagame .home-aside .cabinet {
+    min-height:160px
+}
+
+.metagame .cabinet .dog {
+    width:200px;
+    right:0
+}
+
+.metagame .play-actions {
+    gap:10px
+}
+
+.metagame .play-mode .btn {
+    font-size:20px;
+    padding:12px
+}
+
+.metagame .deck-description {
+    margin-left:0
+}
+
+.metagame .deck-shelf {
+    grid-template-columns:1fr
+}
+
+.metagame .deck-art img {
+    width:200px
+}
+
+.metagame .heading .pill {
+    display:none
+}
+
+.metagame .card-grid {
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:18px 10px
+}
+
+.metagame .card-item {
+    --card-w:88px
+}
+
+.metagame .brand small {
+    display:none
+}
+
+.metagame .brand {
+    font-size:20px
+}
+
+.metagame .nav a {
+    padding:9px 8px
+}
+
+.metagame .topbar {
+    gap:7px
+}
+
+.metagame .editor-deck .deck-rows {
+    width:127px
+}
+}
+
+@media(prefers-reduced-motion:reduce) {
+.metagame *, .metagame *:before, .metagame *:after {
+    animation:none!important;
+    transition:none!important;
+    scroll-behavior:auto!important
+}
+}
+
+.metagame .catalog-tools .type-select, .metagame .catalog-tools .rarity-select {
+    width:104px
+}
+
+.metagame .sr-only {
+    position:absolute;
+    width:1px;
+    height:1px;
+    overflow:hidden;
+    clip-path:inset(50%);
+    white-space:nowrap
+}
+
+@media(max-width:760px) {
+.metagame .catalog-tools .type-select, .metagame .catalog-tools .rarity-select {
+    width:95px;
+    font-size:11px
+}
+}
+
+@media(max-width:430px) {
+.metagame .welcome .mascot {
+    width:120px;
+    height:150px;
+    right:3px;
+    bottom:0;
+    transform:rotate(3deg)
+}
+
+.metagame .welcome h1 {
+    font-size:40px
+}
+
+.metagame .play-mode .btn {
+    padding:12px 8px
+}
+
+.metagame .play-mode .btn span {
+    display:none
+}
+
+.metagame .play-title h2 {
+    font-size:26px
+}
+
+.metagame .play-title small {
+    font-size:10px;
+    max-width:110px;
+    text-align:right
+}
+}
+
+.metagame {
+    position: fixed;
+    inset: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding-top: env(safe-area-inset-top);
+    background: linear-gradient(90deg, #101329bd, #19152e66),
+        linear-gradient(0deg, #14172bf0, transparent 70%),
+        #15192e url('art/match-background-rooftop.webp') center top / cover fixed;
+}
+.metagame .brand span, .metagame h1 em { font-family: inherit; }
+.metagame .shell { padding-bottom: max(32px, env(safe-area-inset-bottom)); }
+.metagame .workspace { height: calc(100dvh - 272px); }
+.metagame .editor-layout { height: calc(100dvh - 210px); }
+.metagame .paper { --text-primary: #38283f; --text-secondary: #725e54; --text-muted: #796553; }
+.metagame .account-head h2 { overflow-wrap: anywhere; }
+.metagame .session-menu { position: relative; font-size: 11px; }
+.metagame .session-menu summary { cursor: pointer; color: #dfccaa; }
+.metagame .session-menu[open] > div { position: absolute; right: 0; top: 30px; width: 245px; padding: 18px; z-index: 45; }
+.metagame .session-menu button { margin-top: 10px; }
+.metagame .session-menu p { overflow-wrap: anywhere; }
+.metagame .notice { padding: 15px; margin-bottom: 15px; }
+.metagame .rail select { width: 100%; background: #30283b; padding: 9px; border: 1px solid #ccb7844d; border-radius: 7px; margin-bottom: 8px; }
+.metagame .lock-slot { display: flex; align-items: center; gap: 7px; margin-top: 10px; font-size: 10px; }
+.metagame .lock-slot span { flex: 1; min-width: 0; }
+.metagame .lock-slot button { background: transparent; color: #f3cb79; }
+.metagame .filter-label { display: block; font-size: 10px; margin-bottom: 6px; }
+.metagame .deck-row .card-portrait { width: 28px; height: 28px; }
+.metagame .deck-row .row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.metagame .editor-deck .deck-legality { background: none; padding: 0; border: 0; }
+.metagame .editor-deck .deck-legality span { color: inherit; }
+.metagame .editor-deck .deck-summary > .btn { margin-top: 12px; }
+.metagame .undo-notice { padding: 10px; display: flex; gap: 12px; align-items: center; font-size: 11px; }
+.metagame .undo-notice button { color: #a5e1b7; text-decoration: underline; }
+.metagame .meta-dialog { position: relative; max-width: 740px; max-height: calc(100dvh - 40px); width: 100%; overflow: auto; padding: 30px; }
+.metagame .meta-dialog > header { display: flex; justify-content: space-between; align-items: center; gap: 15px; }
+.metagame .meta-dialog > header button { background: none; color: #705a59; font-size: 22px; padding: 8px; }
+.metagame .meta-dialog.small { max-width: 440px; }
+.metagame .dialog-buttons { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
+.metagame .detail-layout { display: grid; grid-template-columns: 220px 1fr; gap: 30px; align-items: center; padding: 24px 0; }
+.metagame .detail-art { --card-w: 220px; display: flex; flex-direction: column; align-items: center; gap: 20px; }
+.metagame .detail-copy { display: flex; flex-direction: column; gap: 16px; }
+.metagame .detail-copy .rules { font-size: 15px; line-height: 1.6; }
+.metagame .detail-copy blockquote { font-size: 12px; font-style: italic; color: #85675b; }
+.metagame .detail-ranks { border-top: 1px solid #b7936677; padding-top: 14px; font-size: 12px; }
+.metagame .detail-ranks strong { display: block; margin-bottom: 6px; }
+.metagame .detail-copy [data-testid="lock-hint"] { color: #725e54 !important; }
+@media (max-width: 760px) {
+    .metagame .workspace, .metagame .editor-layout { height: auto; }
+    .metagame .session-menu { position: absolute; right: 16px; top: 76px; z-index: 40; }
+    .metagame .heading { padding-top: 12px; }
+    .metagame .rail .lock-note { display: block; margin-top: 10px; }
+    .metagame .lock-slots { display: flex; gap: 20px; }
+    .metagame .detail-layout { grid-template-columns: 1fr; gap: 24px; }
+    .metagame .detail-art { --card-w: 150px; }
+    .metagame .meta-dialog { padding: 22px; }
+    .metagame .editor-deck .deck-rows { max-height: 190px; }
+    .metagame .editor-deck .deck-row .card-portrait { display: none; }
+}
+
+.metagame dialog.meta-dialog { margin: auto; color: var(--ink); }
+.metagame dialog::backdrop { background: #0c1026c9; backdrop-filter: blur(6px); }
+.metagame .deck-shortcut { display: flex; justify-content: space-between; padding: 20px; font-size: 12px; gap: 15px; }
+.metagame .deck-shortcut span { color: #d3c4d4; }
+.metagame .record b, .metagame .record small { display: block; }
+.metagame .paper .eyebrow { color: #7c553f; }
+.metagame .deck-count-number { font: 32px 'Lilita One'; }
+.metagame .editor-deck .count-line { display: flex; justify-content: space-between; align-items: baseline; font-size: 11px; gap: 8px; }
+.metagame .editor-deck [data-testid="deck-legality"] { color: #e0c794 !important; margin-top: 8px; }
+.metagame .editor-deck [data-error="None"] { color: #a5e1b7 !important; }
+.metagame .editor-deck .empty-message { color: #cfbfd5; font-size: 12px; padding: 30px 16px; }
+@media (max-width: 760px) {
+    .metagame .rail-section { display: flex; gap: 8px; flex-wrap: wrap; }
+    .metagame .rail-section .filter-label { display: none; }
+    .metagame .rail-section select { width: auto; flex: 1; min-width: 85px; font-size: 11px; }
+    .metagame .deck-count-number { font-size: 26px; }
+    .metagame .editor-deck .empty-message { padding: 20px 10px; }
+    .metagame .catalog-tools .search { flex-basis: 100%; }
+}
+.metagame .metagame-search > div > div {
+    background: linear-gradient(120deg, #fff0cf, #e6d1ad) !important;
+    border: 2px solid #ba935e !important;
+    --text-primary: #38283f;
+    --text-secondary: #725e54;
+    --text-muted: #796553;
+    --bg-hover: #d8bf91;
+    max-width: 440px;
+    padding: 30px;
+}
+.metagame .search-mascot { width: 150px; height: 150px; object-fit: contain; }
+
+.metagame .card-gift { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 14px 20px; margin: 0 0 22px; }
+.metagame .card-gift p { margin: 4px 0 0; font-size: 12px; }
+.metagame .card-gift-meter { flex: 0 0 190px; font-size: 12px; color: #eddaaa; }
+.metagame .card-gift progress { display: block; width: 100%; height: 8px; margin-top: 7px; accent-color: #edc35b; }
+.metagame .card-gift-reveal { justify-content: flex-start; }
+.metagame .card-gift-reveal > .card-face { --card-w: 100px; flex: 0 0 auto; }
+.metagame .card-gift-reveal .btn { margin-top: 12px; }
+@media (max-width: 600px) {
+    .metagame .card-gift { gap: 12px; padding: 12px; }
+    .metagame .card-gift-meter { flex-basis: 110px; }
+    .metagame .card-gift-reveal > .card-face { --card-w: 80px; }
+    .metagame .card-gift h2 { font-size: 23px; }
+}
+
+/* Community panels share the metagame's parchment, crests and ink. */
+.community-activity { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 16px 0; font-size: .85rem; }
+.community-activity span { display: inline-flex; align-items: center; gap: 5px; }
+.online-dot { width: 7px; height: 7px; border-radius: 50%; background: #477a43; }
+.leaderboard { margin-top: 20px; padding: 24px; }
+.leaderboard-heading { display: flex; align-items: center; gap: 12px; }
+.leaderboard-heading img { width: 42px; height: 42px; object-fit: contain; }
+.leaderboard h2 { margin: 0; }
+.leaderboard-caption { display: block; opacity: .75; font-size: .8rem; margin: 10px 0; }
+.leaderboard-own { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 12px;
+    border: 1px solid #ae834d; background: #e4c78f66; border-radius: 8px; margin: 12px 0; }
+.leaderboard-own small { font-weight: normal; }
+.leaderboard-scroll { max-height: 390px; overflow: auto; }
+.leaderboard table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.leaderboard th, .leaderboard td { padding: 10px 7px; text-align: right; border-bottom: 1px solid #79563433; }
+.leaderboard th:nth-child(2), .leaderboard tbody th { text-align: left; overflow-wrap: anywhere; }
+.leaderboard thead th { font-size: .75rem; font-weight: normal; }
+.leaderboard tbody th { font-weight: normal; }
+.leaderboard .is-own { background: #c59a4840; }
+.leaderboard .leaderboard-position { color: #8a521d; font-weight: bold; text-align: center; }
+@media (max-width: 520px) { .leaderboard { padding: 16px 12px; } .leaderboard th, .leaderboard td { padding: 9px 4px; } }

@@ -1,0 +1,213 @@
+@page "/collection"
+@using Game.Logic
+@using Game.ClientBase.Configuration
+@using Game.ClientBase.Services
+@inject MetaplayClientService MetaplayService
+@inject CollectionService Collection
+@inject ClientConfig Config
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Collection · @Config.AppTitle</PageTitle>
+<MetagameShell Active="collection">
+<ConnectionStateContainer IsReady="Collection.HasPlayer">
+    <div class="heading"><div><div class="eyebrow">A cabinet of curiosities</div><h1>Your collection</h1><p>Every little troublemaker, all in one place.</p></div>
+        <span class="pill" data-testid="collection-owned-count">@Collection.OwnedCount / @Collection.AllCards.Count owned</span>
+    </div>
+    <div class="workspace">
+        <aside class="rail" aria-label="Card filters">
+            <h2>Find your clan</h2>
+            <div class="clan-list">
+                <button class="clan-button @(_clanFilter == null ? "active" : "")" aria-pressed="@((_clanFilter == null).ToString().ToLowerInvariant())"
+                        data-testid="filter-clan" data-clan="" @onclick="() => SetClanFilter(null)"><span class="all-icon">✦</span><span>All clans</span></button>
+                @foreach (ClanInfo clan in Collection.AllClans)
+                {
+                    <button class="clan-button @(_clanFilter == clan.ClanId ? "active" : "")" aria-pressed="@((_clanFilter == clan.ClanId).ToString().ToLowerInvariant())"
+                            title="@clan.DisplayName" aria-label="@clan.DisplayName" data-testid="filter-clan" data-clan="@clan.ClanId.Value" @onclick="() => SetClanFilter(clan.ClanId)">
+                        <img src="@($"art/clan-symbol-{CardArtCatalog.ClanSymbolSlug(clan.ClanId.Value)}.webp")" alt="" /><span>@clan.DisplayName</span>
+                    </button>
+                }
+            </div>
+            <div class="rail-section">
+                <label class="filter-label" for="collection-type">Card type</label>
+                <select id="collection-type" data-testid="filter-type" value="@_typeFilter" @onchange="OnTypeChanged"><option value="">All types</option><option value="Critter">Critters</option><option value="Trick">Tricks</option></select>
+                <label class="filter-label" for="collection-rarity">Rarity</label>
+                <select id="collection-rarity" data-testid="filter-rarity" value="@_rarityFilter" @onchange="OnRarityChanged"><option value="">All rarities</option><option value="Common">Common</option><option value="Rare">Rare</option><option value="Epic">Epic</option></select>
+                <label class="filter-label" for="collection-ownership">Ownership</label>
+                <select id="collection-ownership" data-testid="filter-owned" value="@_ownership" @onchange="OnOwnershipChanged"><option value="all">All cards</option><option value="owned">Owned</option><option value="unowned">Not owned</option></select>
+            </div>
+            @if (HasLockableCards)
+            {
+                <section class="dark-panel lock-note"><h3>Safe keeping · @Collection.LockedCount / @Collection.LockSlotCount</h3><p>Locked cards are safe from Heists and stop growing.</p>
+                    <div class="lock-slots">
+                    @for (int slot = 0; slot < Collection.LockSlotCount; slot++)
+                    {
+                        int slotIndex = slot;
+                        CardId occupant = Collection.LockedIn(slotIndex);
+                        <div class="lock-slot" data-testid="lock-slot" data-slot="@slotIndex" data-card-id="@(occupant?.Value ?? "")">
+                            @if (occupant != null)
+                            {
+                                <span>@Collection.GetCard(occupant)?.DisplayName</span><button data-testid="lock-slot-clear" @onclick="() => ClearSlot(slotIndex)">Clear</button>
+                            }
+                            else { <span>Empty slot @(slotIndex + 1)</span> }
+                        </div>
+                    }
+                    </div>
+                </section>
+            }
+        </aside>
+        <section class="paper catalog" aria-label="Card catalogue">
+            <div class="catalog-tools">
+                <input class="search" type="search" aria-label="Search cards" placeholder="Find a familiar face…" data-testid="card-search" value="@_search" @oninput="OnSearchChanged" />
+                <small>@Shown.Count shown</small>
+                <select aria-label="Sort cards" data-testid="card-sort" value="@_sort" @onchange="OnSortChanged"><option value="cost">Mana cost</option><option value="name">Name</option><option value="rank">Rank</option><option value="rarity">Rarity</option></select>
+            </div>
+            <div class="card-grid" data-testid="collection-grid">
+                @if (Shown.Count == 0)
+                {
+                    <div class="empty-message" data-testid="collection-empty"><p>No cards match those filters.</p><button class="btn" @onclick="ClearFilters">Clear filters</button></div>
+                }
+                @foreach (CardInfo card in Shown)
+                {
+                    <MetagameCardTile @key="card.CardId" Card="card" Owned="Collection.Owns(card.CardId)" Rank="Collection.RankOf(card.CardId)"
+                              Locked="Collection.IsLocked(card.CardId)" RankMax="RankMax" OnClick="OpenDetail" />
+                }
+            </div>
+        </section>
+    </div>
+</ConnectionStateContainer>
+<CardDetail Card="_detailCard" OnClose="CloseDetail" OnNeedsSlotChoice="OpenSlotPicker" ShowDevRanks="@_showDevRanks" />
+<LockSlotPicker CardId="_slotPickerCard" OnClose="CloseSlotPicker" />
+</MetagameShell>
+
+@code {
+    string _search = "";
+    string _sort = "cost";
+    string _ownership = "all";
+    bool HasLockableCards => Collection.AllCards.Any(card => Collection.RankOf(card.CardId) >= (Collection.GameConfig?.Global.MinLockRank ?? 2));
+    void OnSearchChanged(ChangeEventArgs args) { _search = args.Value?.ToString() ?? ""; InvalidateShown(); }
+    void OnSortChanged(ChangeEventArgs args) { _sort = args.Value?.ToString() ?? "cost"; InvalidateShown(); }
+    void OnOwnershipChanged(ChangeEventArgs args) { _ownership = args.Value?.ToString() ?? "all"; InvalidateShown(); }
+
+    /// <summary> An in-app link that keeps the ?env= override (offline mode) across a later reload. </summary>
+    string Link(string path) => EnvironmentLink.Href(Navigation, path);
+
+    ClanId _clanFilter;
+    CardType? _typeFilter;
+    CardRarity? _rarityFilter;
+    CardInfo _detailCard;
+    CardId _slotPickerCard;
+    IReadOnlyList<CardInfo> _shown;
+    IReadOnlyList<CardInfo> _shownSource;
+
+    int RankMax => Collection.GameConfig?.Global.RankMax ?? 5;
+
+    /// <summary>
+    /// Whether the card detail draws its development-only rank control, read once from <c>?dev=ranks</c> the
+    /// way the board reads its own test knobs. Nothing in the game moves a rank yet, so a rule that turns on
+    /// rank — <c>Global.MinLockRank</c> — has no other route to a state where it applies.
+    /// </summary>
+    bool _showDevRanks;
+
+    /// <summary>
+    /// The catalogue after the filters, in catalogue order. Built once per filter change rather than per
+    /// access — the markup reads it twice on every render, and the catalogue is 45 cards today and ~100 once
+    /// the pool is complete. Rebuilds when the source list changes identity, which is how a config arriving
+    /// (or being updated) invalidates it.
+    /// </summary>
+    IReadOnlyList<CardInfo> Shown
+    {
+        get
+        {
+            IReadOnlyList<CardInfo> source = Collection.AllCards;
+            if (_shown != null && ReferenceEquals(source, _shownSource))
+                return _shown;
+
+            List<CardInfo> shown = new List<CardInfo>();
+            foreach (CardInfo card in source)
+            {
+                if (_clanFilter != null && card.Clan.Ref.ClanId != _clanFilter)
+                    continue;
+                if (_typeFilter.HasValue && card.Type != _typeFilter.Value)
+                    continue;
+                if (_rarityFilter.HasValue && card.Rarity != _rarityFilter.Value)
+                    continue;
+
+                if (!card.DisplayName.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase)) continue;
+                if (_ownership == "owned" && !Collection.Owns(card.CardId)) continue;
+                if (_ownership == "unowned" && Collection.Owns(card.CardId)) continue;
+                shown.Add(card);
+            }
+
+            _shownSource = source;
+            _shown = (_sort switch
+            {
+                "name" => shown.OrderBy(card => card.DisplayName, StringComparer.Ordinal),
+                "rank" => shown.OrderByDescending(card => Collection.RankOf(card.CardId)),
+                "rarity" => shown.OrderByDescending(card => card.Rarity),
+                _ => shown.OrderBy(card => card.GetStatsAtRank(Math.Max(1, Collection.RankOf(card.CardId))).Cost),
+            }).ThenBy(card => card.DisplayName, StringComparer.Ordinal).ToList();
+            return _shown;
+        }
+    }
+
+    /// <summary> Drop the filtered list so the next read rebuilds it. </summary>
+    void InvalidateShown() => _shown = null;
+
+    void SetClanFilter(ClanId clanId)
+    {
+        _clanFilter = clanId;
+        InvalidateShown();
+    }
+
+    void OnTypeChanged(ChangeEventArgs args)
+    {
+        string value = args.Value?.ToString() ?? "";
+        _typeFilter = EffectVocabulary.TryParseName(value, out CardType type) ? type : (CardType?)null;
+        InvalidateShown();
+    }
+
+    void OnRarityChanged(ChangeEventArgs args)
+    {
+        string value = args.Value?.ToString() ?? "";
+        _rarityFilter = EffectVocabulary.TryParseName(value, out CardRarity rarity) ? rarity : (CardRarity?)null;
+        InvalidateShown();
+    }
+
+    void ClearFilters()
+    {
+        _search = "";
+        _ownership = "all";
+        _clanFilter = null;
+        _typeFilter = null;
+        _rarityFilter = null;
+        InvalidateShown();
+    }
+
+    void OpenDetail(CardId cardId) => _detailCard = Collection.GetCard(cardId);
+
+    void CloseDetail() => _detailCard = null;
+
+    void ClearSlot(int slotIndex) => Collection.SetLockSlot(slotIndex, null);
+
+    void OpenSlotPicker(CardId cardId) => _slotPickerCard = cardId;
+
+    void CloseSlotPicker() => _slotPickerCard = null;
+
+    protected override void OnInitialized()
+    {
+        MetaplayService.OnStateChanged += OnStateChanged;
+        Collection.OnCollectionChanged += OnStateChanged;
+
+        // Read once at startup, like every other query knob in this app.
+        _showDevRanks = new Uri(Navigation.Uri).Query.Contains("dev=ranks");
+    }
+
+    void OnStateChanged() { InvalidateShown(); InvokeAsync(StateHasChanged); }
+
+    public void Dispose()
+    {
+        MetaplayService.OnStateChanged -= OnStateChanged;
+        Collection.OnCollectionChanged -= OnStateChanged;
+    }
+}

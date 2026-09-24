@@ -1,0 +1,181 @@
+@namespace Game.Client.Components.Board
+@using Game.Logic
+@using Game.Client.Components
+@using Game.Client.Services
+
+@* One critter in play: a Summary card face with the board's own states layered over it.
+
+   Everything about a critter is public, and its state is drawn on the frame rather than in a tooltip — a
+   Guard wears gold, a sleepy critter naps, a Sneaky critter wears its live symbol, an intact Bubble
+   shows, and damage is visible on the health it took. These are the states a player must read at a glance to
+   plan a turn; anything they have to hover for is a state they will misplay.
+
+   The face is the same `CardFace` the hand and the collection draw, so a critter on the board and the card
+   that made it cannot look like two different cards. This element keeps the identity the fixtures locate and
+   the press; the face keeps the anatomy.
+
+   The consequence tag — "it dies, yours takes 2" — appears on the hovered target only, which is a CSS reveal
+   rather than component state: hover is not a thing the board re-renders
+   for. A heal preview is shown on every legal target, because choosing where to put a Snack is a comparison
+   between them and hiding all but one would mean hovering each in turn. *@
+
+<div class="critter @(IsSelectable || IsTargetable ? "critter-live" : "") @(IsEntering ? "critter-entering" : "") @(Tag != null && IsHoverTag ? "critter-hover-tag" : "") @(_touchInspecting ? "critter-touch-peek" : "") @BeatClass"
+     data-testid="board-critter"
+     data-instance="@View.Instance.Value"
+     data-card-id="@(Card?.CardId.Value ?? "")"
+     data-seat="@Seat.ToString()"
+     data-selectable="@(IsSelectable.ToString().ToLowerInvariant())"
+     data-targetable="@(IsTargetable.ToString().ToLowerInvariant())"
+     data-selected="@(IsSelected.ToString().ToLowerInvariant())"
+     data-ready="@(IsSelectable.ToString().ToLowerInvariant())"
+     role="@(IsInteractive ? "button" : "group")"
+     tabindex="0"
+     aria-label="@(AccessibleName + (IsTargetable && Delta != null ? ". " + Delta.Description : ""))"
+     @onclick="Clicked"
+     @onkeydown="KeyDown"
+     @onblur="CloseTouchInspect"
+     @onpointerdown="PointerDown">
+
+    <CardFace Card="@Card"
+              Mode="CardFace.FaceMode.Summary"
+              Rank="@View.Rank"
+              Attack="@View.Attack"
+              Health="@View.CurrentHealth"
+              ShowStats="true"
+              IsHurt="@(View.Damage > 0)"
+              IsReady="@(IsReady ?? IsSelectable)"
+              IsSelected="@IsSelected"
+              IsTarget="@IsTargetable"
+              IsHealTarget="@(IsTargetable && TargetingKind == TargetingLayer.TargetingKind.Heal)"
+              IsDimmed="@IsDimmed"
+              IsGuard="@((View.Keywords & KeywordFlags.Guard) != 0)"
+              IsSneaky="@((View.Keywords & KeywordFlags.Sneaky) != 0)"
+              IsSleepy="@View.IsSleepy"
+              HasBubble="@View.BubbleIntact"
+              HasActed="@View.HasAttackedThisTurn"
+              Mark="@Mark"
+              Tag="@(Delta == null ? Tag : null)"
+              TagAmount="@TagAmount"
+              Tone="@Tone"
+              NameTestId="critter-name"
+              AttackTestId="critter-attack"
+              HealthTestId="critter-health"
+              KeywordsTestId="critter-keywords"
+              TagTestId="@TagTestId" />
+
+    @if (IsTargetable && Delta != null)
+    {
+        <DeltaPreview Value="@Delta" />
+    }
+
+    @if (Card != null && !IsInspectionDisabled && Beat?.Source != View.Instance)
+    {
+        <div class="critter-peek">
+            <CardTooltip Card="@Card" Rank="@View.Rank" RankMax="@RankMax" />
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public TargetDelta? Delta { get; set; }
+    [Parameter, EditorRequired] public BoardVisualCritter View { get; set; } = default!;
+    [Parameter, EditorRequired] public int Seat { get; set; }
+    [Parameter] public CardInfo? Card { get; set; }
+    [Parameter] public int RankMax { get; set; } = 5;
+    [Parameter] public bool IsSelectable { get; set; }
+    /// <summary> The arriving face can show its ready state while the flight still owns input. </summary>
+    [Parameter] public bool? IsReady { get; set; }
+    [Parameter] public bool IsTargetable { get; set; }
+    [Parameter] public bool IsSelected { get; set; }
+    [Parameter] public bool IsEntering { get; set; }
+    [Parameter] public bool IsInspectionDisabled { get; set; }
+    [Parameter] public TargetingLayer.TargetingKind TargetingKind { get; set; }
+    [Parameter] public BoardBeat? Beat { get; set; }
+
+    /// <summary>
+    /// Whether a live selection has left this critter out. While a card or an attacker is choosing its
+    /// target, anything that is neither a legal target nor still selectable goes quiet — which is what makes
+    /// "these are the things this can be aimed at" a picture rather than a sentence.
+    /// </summary>
+    [Parameter] public bool IsDimmed { get; set; }
+
+    /// <summary> What aiming here would do: a consequence, or a heal amount. </summary>
+    [Parameter] public string? Tag { get; set; }
+
+    /// <summary> The number inside a heal tag, for a fixture to read rather than parse out of the copy. </summary>
+    [Parameter] public int? TagAmount { get; set; }
+
+    /// <summary> Whether that tag waits for a hover. A consequence does; a heal preview does not. </summary>
+    [Parameter] public bool IsHoverTag { get; set; }
+
+    [Parameter] public CardFace.TagTone Tone { get; set; } = CardFace.TagTone.Neutral;
+
+    [Parameter] public EventCallback<CardInstanceId> OnClick { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (IsInspectionDisabled) CloseTouchInspect();
+    }
+
+    bool IsInteractive => IsSelectable || IsTargetable;
+    bool _lastPointerWasTouch;
+    bool _touchInspecting;
+
+    /// <summary> The one glyph a state stamps on the face. Sleep is the only one a critter in play wears. </summary>
+    string? Mark => View.IsSleepy ? "💤" : null;
+
+    string? TagTestId => IsHoverTag ? "critter-consequence" : "heal-preview";
+
+    string BeatClass
+    {
+        get
+        {
+            if (Beat == null)
+                return "";
+            if (Beat.Kind == BoardBeatKind.Attack && Beat.Source == View.Instance)
+                return "critter-beat-attacker";
+            if (Beat.Kind == BoardBeatKind.Death && Beat.AffectedInstances.Contains(View.Instance))
+                return "critter-beat-death";
+            if (Beat.Kind == BoardBeatKind.CritterEnter && Beat.Source == View.Instance)
+                return "critter-beat-entering";
+            if ((Beat.Kind == BoardBeatKind.Damage || Beat.Kind == BoardBeatKind.Heal)
+                && Beat.Target.IsCritter && Beat.Target.Critter == View.Instance)
+                return Beat.Kind == BoardBeatKind.Heal
+                    ? "critter-beat-heal"
+                    : Beat.SuppressImpact || Beat.Event is DamageDealtEvent { AbsorbedByBubble: true }
+                        ? "" : "critter-beat-damage";
+            return "";
+        }
+    }
+
+    string AccessibleName
+        => Card == null
+            ? $"Unknown critter, {View.Attack} attack, {View.CurrentHealth} health"
+            : $"{Card.DisplayName}, rank {View.Rank}, {View.Attack} attack, {View.CurrentHealth} health";
+
+    void PointerDown(Microsoft.AspNetCore.Components.Web.PointerEventArgs args)
+        => _lastPointerWasTouch = args.PointerType == "touch";
+
+    void CloseTouchInspect()
+    {
+        _touchInspecting = false;
+    }
+
+    Task KeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs args)
+        => IsInteractive && (args.Key is "Enter" or " ") ? InvokeClick() : Task.CompletedTask;
+
+    Task Clicked()
+    {
+        bool wasTouch = _lastPointerWasTouch;
+
+        if (wasTouch && !IsInspectionDisabled)
+        {
+            _touchInspecting = !_touchInspecting;
+            return Task.CompletedTask;
+        }
+
+        return InvokeClick();
+    }
+
+    Task InvokeClick() => OnClick.HasDelegate ? OnClick.InvokeAsync(View.Instance) : Task.CompletedTask;
+}

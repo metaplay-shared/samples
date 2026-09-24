@@ -1,0 +1,48 @@
+@inject IJSRuntime JS
+@inject MetaplayClientService Client
+@implements IAsyncDisposable
+@if (IsOpen)
+{
+    <dialog @ref="_dialog" class="paper meta-dialog @Size" aria-label="@Title" @onclose="OnClose">
+        <header><h2 class="@(HideTitle ? "sr-only" : "")">@Title</h2><button type="button" aria-label="✕" @onclick="CloseDialog">✕</button></header>
+        @ChildContent
+    </dialog>
+}
+@code {
+    [Parameter] public bool HideTitle { get; set; }
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string Size { get; set; } = "";
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    ElementReference _dialog;
+    protected override void OnInitialized() => Client.OnStateChanged += OnConnectionChanged;
+    void OnConnectionChanged()
+    {
+        // Connection recovery must own the screen, even when a native dialog occupied the top layer.
+        if (IsOpen && Client.Trouble.Kind != ConnectionTroubleKind.None)
+            _ = InvokeAsync(async () => await OnClose.InvokeAsync());
+    }
+
+    IJSObjectReference? _module;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (IsOpen)
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./metagame.js");
+            await _module.InvokeVoidAsync("showDialog", _dialog);
+        }
+    }
+    async Task CloseDialog()
+    {
+        // Close before removing the element so the browser restores focus to its opener.
+        if (_module != null)
+            await _module.InvokeVoidAsync("closeDialog", _dialog);
+    }
+    public async ValueTask DisposeAsync()
+    {
+        Client.OnStateChanged -= OnConnectionChanged;
+        if (_module != null)
+            await _module.DisposeAsync();
+    }
+}

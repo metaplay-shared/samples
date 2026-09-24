@@ -1,0 +1,400 @@
+@page "/decks/{DeckIdText}"
+@using Game.Logic
+@using Game.ClientBase.Configuration
+@using Game.ClientBase.Services
+@inject MetaplayClientService MetaplayService
+@inject CollectionService Collection
+@inject ClientConfig Config
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Deckbuilder · @Config.AppTitle</PageTitle>
+<MetagameShell Active="decks">
+<ConnectionStateContainer IsReady="Collection.HasPlayer">
+    <div class="editor-top"><a class="btn small ghost" href="@Link("decks")" data-testid="back-decks">← Decks</a>
+        <h1 class="sr-only">Deckbuilder</h1>
+        <input aria-label="Deck name" data-testid="deck-name-input" maxlength="@PlayerDeck.MaxNameLength" placeholder="Name this deck"
+               value="@_name" @oninput="OnNameInput" @onfocus="OnNameFocus" @onblur="OnNameBlur" />
+    </div>
+    @if (_missingDeck)
+    {
+        <div class="empty-message dark-panel" data-testid="deck-missing">That deck no longer exists.</div>
+    }
+    else
+    {
+        <div class="editor-layout">
+            <section class="editor-picker" aria-label="Choose cards">
+                <div class="clan-picker" aria-label="Deck clans">
+                    @foreach (ClanInfo clan in Collection.AllClans.Where(clan => clan.CountsTowardClanLimit))
+                    {
+                        bool selected = _selectedClans.Contains(clan.ClanId);
+                        <button class="clan-button @(selected ? "active" : "")" aria-label="@clan.DisplayName" title="@clan.DisplayName"
+                                aria-pressed="@selected.ToString().ToLowerInvariant()" disabled="@(!selected && _selectedClans.Count >= MaxClans)"
+                                data-testid="deck-clan" data-clan="@clan.ClanId.Value" @onclick="() => ToggleClan(clan.ClanId)">
+                            <img src="@($"art/clan-symbol-{CardArtCatalog.ClanSymbolSlug(clan.ClanId.Value)}.webp")" alt="" /><span>@clan.DisplayName</span>
+                        </button>
+                    }
+                    <small>Choose up to @MaxClans clans · Wanderers always welcome</small>
+                </div>
+                @if (_undoCards != null)
+                {
+                    <div class="dark-panel undo-notice" role="status" data-testid="clan-undo">Clan removed with its cards.<button @onclick="UndoClan">Undo</button></div>
+                }
+                @if (_pickRefusal != null) { <p class="notice" role="alert" data-testid="pick-refusal" data-reason="@_pickRefusalReason">@_pickRefusal</p> }
+                <div class="paper catalog">
+                    <div class="catalog-tools">
+                        <input class="search" type="search" aria-label="Search cards" placeholder="Find the right accomplice…" data-testid="card-search" value="@_search" @oninput="SearchChanged" />
+                        <select class="type-select" aria-label="Card type" data-testid="filter-type" value="@_type" @onchange="TypeChanged"><option value="">All types</option><option value="Critter">Critters</option><option value="Trick">Tricks</option></select>
+                        <select class="rarity-select" aria-label="Rarity" data-testid="filter-rarity" value="@_rarity" @onchange="RarityChanged"><option value="">All rarities</option><option value="Common">Common</option><option value="Rare">Rare</option><option value="Epic">Epic</option></select>
+                        <select aria-label="Sort cards" data-testid="card-sort" value="@_sort" @onchange="SortChanged"><option value="cost">Mana cost</option><option value="name">Name</option></select>
+                    </div>
+                    <div class="card-grid">
+                        @if (Offerable.Count == 0) { <div class="empty-message">No cards match. Try another search or clan.</div> }
+                        @foreach (CardInfo card in Offerable)
+                        {
+                            <MetagameCardTile @key="card.CardId" Card="card" Owned="true" Rank="Collection.RankOf(card.CardId)" Locked="Collection.IsLocked(card.CardId)"
+                                      RankMax="RankMax" Dimmed="@_cards.Contains(card.CardId)" Badge="@(_cards.Contains(card.CardId) ? "In deck" : null)" TestId="pick-card" OnClick="Add" />
+                        }
+                    </div>
+                </div>
+            </section>
+            <aside class="dark-panel editor-deck" aria-label="Your deck">
+                <div class="deck-summary">
+                    <DeckLegalitySummary Cards="_cards" />
+                    <button class="btn gold" disabled="@(!CanSave)" @onclick="Save" data-testid="save-deck">Save deck</button>
+                    @if (IsExistingDeck) { <button class="btn small ghost" @onclick="() => _deleteOpen = true" data-testid="delete-deck">Delete deck</button> }
+                    @if (_saveRefusal != null) { <p role="alert" data-testid="save-refusal">@_saveRefusal</p> }
+                </div>
+                <div class="deck-rows">
+                    @if (_cards.Count == 0) { <p class="empty-message" data-testid="deck-empty">Tap cards to add them to your pack.</p> }
+                    @foreach (CardId cardId in _cards)
+                    {
+                        CardInfo card = Collection.GetCard(cardId);
+                        if (card != null) { <MetagameCardTile @key="cardId" Card="card" Owned="true" Rank="Collection.RankOf(cardId)" Locked="Collection.IsLocked(cardId)" Variant="MetagameCardTile.TileVariant.Row" TestId="deck-card" OnClick="Remove" /> }
+                    }
+                </div>
+                <div class="curve" role="img" aria-label="@CurveDescription">
+                    @for (int cost = 0; cost <= 7; cost++)
+                    {
+                        int count = CostCount(cost);
+                        <div title="@($"{cost}{(cost == 7 ? "+" : "")} mana: {count} cards")"><i style="height: @(Math.Max(2, count * 5))px"></i>@cost@(cost == 7 ? "+" : "")</div>
+                    }
+                </div>
+                <div class="curve-label">Mana curve · Tap a deck card to remove it</div>
+            </aside>
+        </div>
+    }
+</ConnectionStateContainer>
+<MetagameDialog IsOpen="@_deleteOpen" Title="Retire this pack?" Size="small" OnClose="() => _deleteOpen = false">
+    <p>Your cards stay in your collection. Only this saved deck is removed.</p>
+    <div class="dialog-buttons"><button class="btn" @onclick="() => _deleteOpen = false">Keep deck</button><button class="btn gold" data-testid="confirm-delete-deck" @onclick="Delete">Delete deck</button></div>
+</MetagameDialog>
+</MetagameShell>
+
+@code {
+    readonly HashSet<ClanId> _selectedClans = new HashSet<ClanId>();
+    List<CardId>? _undoCards;
+    HashSet<ClanId>? _undoClans;
+    string _search = "";
+    string _sort = "cost";
+    string _type = "";
+    string _rarity = "";
+    bool _deleteOpen;
+    void SearchChanged(ChangeEventArgs args) { _search = args.Value?.ToString() ?? ""; InvalidateOfferable(); }
+    void SortChanged(ChangeEventArgs args) { _sort = args.Value?.ToString() ?? "cost"; InvalidateOfferable(); }
+    void TypeChanged(ChangeEventArgs args) { _type = args.Value?.ToString() ?? ""; InvalidateOfferable(); }
+    void RarityChanged(ChangeEventArgs args) { _rarity = args.Value?.ToString() ?? ""; InvalidateOfferable(); }
+    void ToggleClan(ClanId clanId)
+    {
+        ClearPickRefusal();
+        if (_selectedClans.Contains(clanId))
+        {
+            _undoCards = new List<CardId>(_cards);
+            _undoClans = new HashSet<ClanId>(_selectedClans);
+            _selectedClans.Remove(clanId);
+            _cards.RemoveAll(id => Collection.GetCard(id)?.Clan?.Ref?.ClanId == clanId);
+        }
+        else if (_selectedClans.Count < MaxClans)
+        {
+            _undoCards = null;
+            _undoClans = null;
+            _selectedClans.Add(clanId);
+        }
+        InvalidateOfferable();
+    }
+    void UndoClan()
+    {
+        if (_undoCards == null || _undoClans == null) return;
+        _cards.Clear();
+        _cards.AddRange(_undoCards);
+        _selectedClans.Clear();
+        _selectedClans.UnionWith(_undoClans);
+        _undoCards = null;
+        _undoClans = null;
+        InvalidateOfferable();
+    }
+    int CostCount(int cost) => _cards.Count(id => Math.Min(7, Collection.GetCard(id)?.GetStatsAtRank(Math.Max(1, Collection.RankOf(id))).Cost ?? 0) == cost);
+    string CurveDescription => "Mana curve: " + string.Join(", ", Enumerable.Range(0, 8).Select(cost => $"{cost}{(cost == 7 ? "+" : "")} mana: {CostCount(cost)} cards"));
+
+    /// <summary> The deck's id, or "new" for a deck that does not exist yet. </summary>
+    [Parameter]
+    public string DeckIdText { get; set; }
+
+    /// <summary> An in-app link that keeps the ?env= override (offline mode) across a later reload. </summary>
+    string Link(string path) => EnvironmentLink.Href(Navigation, path);
+
+    readonly List<CardId> _cards = new List<CardId>();
+    /// <summary> What a new deck's name field is seeded with, until the player touches it. </summary>
+    const string DefaultDeckName = "New deck";
+
+    string _name = "";
+    /// <summary> Whether <see cref="_name"/> is still the untouched seeded default. </summary>
+    bool _nameIsDefault;
+    string _pickRefusal;
+    string _pickRefusalReason;
+    string _saveRefusal;
+    /// <summary> Which deck the working list was loaded from, so a different one reloads it. </summary>
+    string _loadedFor;
+    bool _missingDeck;
+    IReadOnlyList<CardInfo> _offerable;
+    IReadOnlyList<CardInfo> _offerableSource;
+
+    int? DeckId => int.TryParse(DeckIdText, out int id) ? id : (int?)null;
+    bool IsExistingDeck => DeckId.HasValue;
+
+    int DeckSize => Collection.GameConfig?.Global.DeckSize ?? 0;
+    int MaxClans => Collection.GameConfig?.Global.MaxClansPerDeck ?? 0;
+    int RankMax => Collection.GameConfig?.Global.RankMax ?? 5;
+
+    bool CanSave => !string.IsNullOrWhiteSpace(_name) && Collection.ValidateDeck(_cards).IsValid;
+
+    /// <summary>
+    /// Owned collectible cards, after the clan filter. Cards already in the deck stay in place, dimmed, so the
+    /// grid does not reflow under the finger between two picks.
+    /// <para>
+    /// Built once per filter change rather than per access: the markup reads it twice a render and a deck is
+    /// twenty-five presses. Invalidated by a clan filter change and by any collection change, which is what
+    /// covers a card the account did not own a moment ago.
+    /// </para>
+    /// </summary>
+    IReadOnlyList<CardInfo> Offerable
+    {
+        get
+        {
+            IReadOnlyList<CardInfo> source = Collection.AllCards;
+            if (_offerable != null && ReferenceEquals(source, _offerableSource))
+                return _offerable;
+
+            List<CardInfo> offerable = new List<CardInfo>();
+            foreach (CardInfo card in source)
+            {
+                if (!Collection.Owns(card.CardId))
+                    continue;
+                if (card.Clan.Ref.CountsTowardClanLimit && !_selectedClans.Contains(card.Clan.Ref.ClanId))
+                    continue;
+
+                if (!card.DisplayName.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase)) continue;
+                if (_type.Length > 0 && card.Type.ToString() != _type) continue;
+                if (_rarity.Length > 0 && card.Rarity.ToString() != _rarity) continue;
+                offerable.Add(card);
+            }
+
+            _offerableSource = source;
+            _offerable = (_sort == "name"
+                ? offerable.OrderBy(card => card.DisplayName, StringComparer.Ordinal)
+                : offerable.OrderBy(card => card.GetStatsAtRank(Math.Max(1, Collection.RankOf(card.CardId))).Cost))
+                .ThenBy(card => card.DisplayName, StringComparer.Ordinal).ToList();
+            return _offerable;
+        }
+    }
+
+    /// <summary> Drop the picker list so the next read rebuilds it. </summary>
+    void InvalidateOfferable() => _offerable = null;
+
+    /// <summary> The clan-limited clans the working list already draws on. </summary>
+    HashSet<ClanId> DeckClans
+    {
+        get
+        {
+            HashSet<ClanId> clans = new HashSet<ClanId>();
+            foreach (CardId cardId in _cards)
+            {
+                ClanInfo clan = Collection.GetCard(cardId)?.Clan?.Ref;
+                if (clan != null && clan.CountsTowardClanLimit)
+                    clans.Add(clan.ClanId);
+            }
+
+            return clans;
+        }
+    }
+
+    void OnNameInput(ChangeEventArgs args)
+    {
+        _name = args.Value?.ToString() ?? "";
+        _saveRefusal = null;
+
+        // Anything typed is a real name, even a name typed back to the default's own spelling.
+        _nameIsDefault = false;
+    }
+
+    /// <summary>
+    /// Clear an untouched default so the placeholder shows and the player types rather than deletes. Only the
+    /// default is cleared: a saved deck's name, or one already typed, is left alone.
+    /// </summary>
+    void OnNameFocus()
+    {
+        if (_nameIsDefault)
+            _name = "";
+    }
+
+    /// <summary>
+    /// Put the default back when the field is left empty with nothing typed, so a player who never names a
+    /// new deck can still save it — <see cref="CanSave"/> requires a non-whitespace name.
+    /// </summary>
+    void OnNameBlur()
+    {
+        if (_nameIsDefault && string.IsNullOrWhiteSpace(_name))
+            _name = DefaultDeckName;
+    }
+
+    void Add(CardId cardId)
+    {
+        ClearPickRefusal();
+
+        CardInfo card = Collection.GetCard(cardId);
+        if (card == null)
+            return;
+
+        // Singleton is enforced at the moment of the attempt, not caught at save.
+        if (_cards.Contains(cardId))
+        {
+            RefusePick("DuplicateCard", $"{card.DisplayName} is already in the deck — one copy of each.");
+            return;
+        }
+
+        if (_cards.Count >= DeckSize)
+        {
+            RefusePick("DeckFull", $"The deck is already {DeckSize} cards. Remove one first.");
+            return;
+        }
+
+        ClanInfo clan = card.Clan.Ref;
+        HashSet<ClanId> deckClans = DeckClans;
+        if (clan.CountsTowardClanLimit && !deckClans.Contains(clan.ClanId) && deckClans.Count >= MaxClans)
+        {
+            RefusePick("TooManyClans",
+                $"A deck draws on at most {MaxClans} clans. {clan.DisplayName} would be a third. Wanderers are free.");
+            return;
+        }
+
+        _undoCards = null;
+        _undoClans = null;
+        _cards.Add(cardId);
+        _saveRefusal = null;
+    }
+
+    void Remove(CardId cardId)
+    {
+        ClearPickRefusal();
+        _undoCards = null;
+        _undoClans = null;
+        _cards.Remove(cardId);
+        _saveRefusal = null;
+    }
+
+    void RefusePick(string reason, string message)
+    {
+        _pickRefusalReason = reason;
+        _pickRefusal = message;
+    }
+
+    void ClearPickRefusal()
+    {
+        _pickRefusalReason = null;
+        _pickRefusal = null;
+    }
+
+    void Save()
+    {
+        // A refused save says why rather than snapping back: the edit stays exactly as it was.
+        _saveRefusal = Collection.SaveDeck(DeckId, _name, _cards);
+        if (_saveRefusal == null)
+            EnvironmentLink.NavigateTo(Navigation, "decks");
+    }
+
+    void Delete()
+    {
+        if (!DeckId.HasValue)
+            return;
+
+        _saveRefusal = Collection.DeleteDeck(DeckId.Value);
+        if (_saveRefusal == null)
+            EnvironmentLink.NavigateTo(Navigation, "decks");
+    }
+
+    /// <summary>
+    /// Seed the working list from the saved deck, once the model has arrived. A deep link that lands here
+    /// before the session starts runs this on the first render that has a player.
+    /// </summary>
+    void LoadIfNeeded()
+    {
+        if (!Collection.HasPlayer || _loadedFor == DeckIdText)
+            return;
+
+        // Keyed on the route parameter, not a bare flag: the router reuses this component instance when only
+        // the id changes, and a stale working list would then be saved over whichever deck was opened next.
+        _loadedFor = DeckIdText;
+        _missingDeck = false;
+        _saveRefusal = null;
+        ClearPickRefusal();
+        _cards.Clear();
+        _selectedClans.Clear();
+        _undoCards = null;
+        _undoClans = null;
+        _search = _type = _rarity = "";
+        InvalidateOfferable();
+
+        if (!IsExistingDeck)
+        {
+            // Seeded rather than left empty so that a fresh deck is savable without typing, and flagged as
+            // the default so focusing the field can take it back out of the way.
+            _name = DefaultDeckName;
+            _nameIsDefault = true;
+            return;
+        }
+
+        _nameIsDefault = false;
+
+        PlayerDeck deck = Collection.GetDeck(DeckId.Value);
+        if (deck == null)
+        {
+            _missingDeck = true;
+            return;
+        }
+
+        _name = deck.Name;
+        _cards.AddRange(deck.Cards);
+        _selectedClans.UnionWith(DeckClans);
+    }
+
+    protected override void OnInitialized()
+    {
+        MetaplayService.OnStateChanged += OnStateChanged;
+        Collection.OnCollectionChanged += OnStateChanged;
+    }
+
+    protected override void OnParametersSet() => LoadIfNeeded();
+
+    void OnStateChanged()
+    {
+        InvalidateOfferable();
+        LoadIfNeeded();
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        MetaplayService.OnStateChanged -= OnStateChanged;
+        Collection.OnCollectionChanged -= OnStateChanged;
+    }
+}

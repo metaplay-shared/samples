@@ -1,0 +1,38 @@
+# The end-to-end suites' pacing profile, layered over Options.base.yaml and Options.local.yaml. Only the
+# suites load it — `metaplay dev server` sets no METAPLAY_OPTIONS and gets the local pacing instead. Callers:
+# Client.Tests/run-e2e.sh and Client.Tests/GameServerProcess.cs. AGENTS.md §"Tests" has the rest: why
+# METAPLAY_OPTIONS rather than METAPLAY_EXTRA_OPTIONS, and how to read back what a server actually bound.
+#
+# Each value below is either shortened to buy suite time or lengthened so no fixture is overtaken by it.
+# Nothing here is a free knob: the comments say what breaks if you change one.
+
+Match:
+  # Gone. The single biggest cost in the match suites, and pure wall time — the delay is drawn from a
+  # host-side stream rather than the match's seeded RNG, so a game plays out action for action the same at
+  # zero. BotTurnBudget is left alone: a zero floor short-circuits the budget anyway.
+  BotActionDelay: "00:00:00"
+  BotActionDelayJitter: "00:00:00"
+
+  # Shortened, not zeroed: a bound on a stall, since no fixture waits it out. It cannot go much lower — the
+  # stamp is already running while the client attaches and turns its page.
+  MulliganDeadline: "00:00:15"
+
+  # Long on purpose. MatchTests.TheDeadlineRingIsWithheldUntilTheDeadlineCloses reads that there is no ring
+  # early in a turn, and a zero deadline would satisfy it by arming none at all — passing while proving
+  # nothing. MatchStrikeTests needs a short one and brings its own server rather than shortening this.
+  TurnDeadline: "00:05:00"
+
+  # Left at their defaults deliberately, because a profile named "e2e pacing" invites zeroing them:
+  #   JoinWindow (15 s)           — shipped value; lengthening it means no suite ever runs the window.
+  #   PresentationAllowance (3 s) — added to every positive clock above, so they arm three seconds longer.
+  #   EffectChoiceDeadline (20 s) — shorter than the peek helpers' wait would default the choice out.
+  #   DisconnectGrace (30 s)      — MatchAbandonTests holds a transport down for 15 s and asserts no cover.
+  #   TimerPadding (50 ms)        — a punctual timer fires early and the lapse check then no-ops.
+
+Matchmaking:
+  # Shortened, not zeroed. It bounds the SOLO case, which would otherwise cost 45 s a run; the pairing cases
+  # never wait it out. Zero would mean "form on the first waiter", making a two-player seat impossible by
+  # construction and quietly turning the pairing proof into a second solo one. The policy is unit-tested at
+  # zero instead. SearchingBound and SeatedBound are left alone, and
+  # MatchmakingOptionsInvariantTests asserts them against this exact number.
+  FillWait: "00:00:08"

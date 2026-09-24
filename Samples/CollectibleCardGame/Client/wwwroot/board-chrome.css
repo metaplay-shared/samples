@@ -1,0 +1,115 @@
+/* The small plaques use the study's warm edges and ink-purple backing. Dimensions belong to the board. */
+.board-chrome {
+    position: absolute;
+    z-index: 35;
+    top: 1.8cqh;
+    right: 2.2cqw;
+    display: flex;
+    align-items: center;
+    gap: 0.65cqh;
+    font-size: 0.72em;
+}
+.board-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75cqh;
+    min-height: 3.6cqh;
+    padding: 0.65cqh 1.35cqh;
+    border: 1px solid #dbc99080;
+    border-radius: 999px;
+    background: #17132be8;
+    color: #eee6f5;
+    box-shadow: 0 0.6cqh 1.6cqh #05040b66;
+    line-height: 1.2;
+    font: inherit;
+}
+button.board-pill, .board-dev summary { cursor: pointer; }
+button.board-pill:hover, .board-dev summary:hover { background: #33263e; border-color: #ffe5a4; }
+.board-pill:focus-visible, .board-dev-panel button:focus-visible, .event-feed-expand:focus-visible {
+    outline: 2px solid #ffe5a4;
+    outline-offset: 3px;
+}
+.board-connection { max-width: 30cqw; }
+.board-connection > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-connection-dot { width: 0.8cqh; height: 0.8cqh; border-radius: 50%; background: #bca7cd; flex: none; }
+.board-connection[data-connected="true"] .board-connection-dot { background: #65dda2; box-shadow: 0 0 0.8cqh #65dda244; }
+.board-player-name { color: #fff4d0; }
+.board-dev { position: relative; }
+.board-dev summary { list-style: none; font-weight: 800; }
+.board-dev summary::-webkit-details-marker { display: none; }
+.board-dev-panel {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.8cqh);
+    display: flex;
+    flex-direction: column;
+    gap: 1cqh;
+    padding: 1.5cqh;
+    min-width: 24cqw;
+    border: 1px solid #dbc99080;
+    border-radius: 1cqh;
+    background: #17132bf5;
+    box-shadow: 0 1cqh 3cqh #0008;
+    color: #eee6f5;
+}
+.board-dev-panel span { overflow-wrap: anywhere; color: #b9accb; }
+.board-dev-panel button { border: 1px solid #d08e9970; border-radius: 0.6cqh; padding: 0.8cqh; color: #ffbac7; cursor: pointer; }
+
+.mana.mana-plaque {
+    display: flex;
+    align-items: center;
+    gap: 0.6cqh;
+    max-width: 23cqw;
+    padding: 0.8cqh 1cqh;
+    border: 1px solid #dcc67a66;
+    border-radius: 1.8cqh;
+    background: #17132be6;
+    box-shadow: 0 0.6cqh 1.6cqh #05040b66;
+}
+.mana-plaque .acorns { gap: 0.1cqh; max-width: 17cqw; }
+.mana-acorn { position: relative; display: block; width: 3.4cqh; height: 3.2cqh; }
+.mana-acorn img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transition: opacity 260ms ease, filter 260ms ease; }
+.mana-acorn .mana-empty { opacity: 0.58; }
+.mana-acorn .mana-full { opacity: 1; filter: drop-shadow(0 0 0.3cqh #ffe39b44); }
+.mana-acorn-spent .mana-full { opacity: 0; }
+.mana-plaque b { flex: none; color: #fff4d0; font-size: 0.7em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mana-plaque b span { color: #b5a4b5; font-weight: 500; }
+
+.event-feed {
+    padding: 1cqh 1.3cqh;
+    border: 1px solid #d7c27866;
+    border-radius: 1.5cqh;
+    background: #17132be8;
+    box-shadow: 0 0.6cqh 1.6cqh #05040b66;
+    line-height: 1.45;
+    color: #cbbdd7;
+}
+.event-feed-heading { display: block; margin-bottom: 0.45cqh; color: #fff4d0; font-size: 1.08em; }
+.event-lines { gap: 0.3cqh; }
+.event-line { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; animation: feed-arrival 200ms ease-out both; }
+.event-line:last-child { color: #eee6f5; }
+.event-feed-expand { margin-top: 0.6cqh; color: #d8bc82; font-weight: 600; }
+.event-feed-expand:hover { color: #fff4d0; }
+.event-feed-open {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.event-feed-open .event-feed-heading, .event-feed-open .event-feed-expand { flex: none; }
+.event-feed-open .event-feed-expand { align-self: flex-start; }
+.event-feed-open .event-lines {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #d7c27866 transparent;
+}
+.event-feed-open .event-line { flex-shrink: 0; }
+@media (max-width: 720px), (max-height: 460px) {
+    .event-feed-open { display: none; }
+}
+@keyframes feed-arrival { from { opacity: 0; transform: translateY(0.45cqh); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+    .mana-acorn img { transition: none; }
+    .event-line { animation: none; }
+}

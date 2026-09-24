@@ -1,0 +1,62 @@
+@namespace Game.Client.Components.Board
+@using Metaplay.Core
+
+@* The turn's one clock, wrapped around the turn's one irreversible control.
+
+   A ring is only ever drawn for a deadline someone enforces: "no deadline in force" is a state the board
+   carries rather than a deadline of length zero, so the ring is withheld entirely — a ring that drains to
+   nothing and is then not acted on is a lie. It is withheld while the board trails, too, because a ring
+   draining for a turn the player has not been shown yet is worse than no ring.
+
+   Most of a turn shows no ring at all: the quiet readout beside the button counts the whole turn, and the
+   ring appears and reddens as the deadline closes. A clock that nags for a whole minute is worse than no
+   clock; one that appears without warning at the end is worse still. The ring carries no text of its own —
+   the readout is the text, and two numbers for one deadline is one too many. *@
+
+@if (IsVisible)
+{
+    <div class="deadline-ring @(IsUrgent ? "deadline-urgent" : "")"
+         data-testid="deadline-ring"
+         data-remaining-seconds="@RemainingSeconds"
+         aria-hidden="true"
+         style="--ring-progress: @Progress.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);"></div>
+}
+
+@code {
+    /// <summary> When the deadline in force runs out, or null for none. </summary>
+    [Parameter] public MetaTime? DeadlineAt { get; set; }
+
+    /// <summary> The server's clock as this client estimates it. Never the device's. </summary>
+    [Parameter, EditorRequired] public MetaTime Now { get; set; }
+
+    /// <summary> False while the board trails, which withholds the ring however much time is left. </summary>
+    [Parameter] public bool IsAllowed { get; set; } = true;
+
+    /// <summary> How close the deadline has to be before the ring appears. </summary>
+    [Parameter] public MetaDuration AppearsWithin { get; set; } = MetaDuration.FromSeconds(20);
+
+    /// <summary> How close it has to be to read as urgent. </summary>
+    [Parameter] public MetaDuration UrgentWithin { get; set; } = MetaDuration.FromSeconds(5);
+
+    MetaDuration Remaining => DeadlineAt.HasValue ? DeadlineAt.Value - Now : MetaDuration.Zero;
+
+    bool IsVisible => IsAllowed && DeadlineAt.HasValue && Remaining > MetaDuration.Zero && Remaining <= AppearsWithin;
+
+    bool IsUrgent => Remaining <= UrgentWithin;
+
+    int RemainingSeconds => (int)((Remaining.Milliseconds + 999) / 1000);
+
+    /// <summary> How much of the appear-window is left, so the ring drains rather than jumping. </summary>
+    double Progress
+    {
+        get
+        {
+            long window = AppearsWithin.Milliseconds;
+            if (window <= 0)
+                return 0.0;
+
+            double left = (double)Remaining.Milliseconds / window;
+            return left < 0.0 ? 0.0 : (left > 1.0 ? 1.0 : left);
+        }
+    }
+}

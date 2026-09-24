@@ -1,0 +1,135 @@
+@namespace Game.Client.Components.Board
+@using Game.Logic
+
+@* What just happened, bottom-right: the last three lines, with an expander for the rest.
+
+   The history is kept whole on the model, which is also what lets a player who dropped at turn three read
+   the game they missed instead of being permanently blinded by it. Three lines is what a player glances at
+   between moves; the rest is there when they want it, and it expands in place rather than opening a panel,
+   because a feed that covered the board to explain the board would be answering the wrong question.
+
+   The feed sits opposite the mana acorns, so the two things on the board that grow are never on the same
+   side. *@
+
+<div class="event-feed @(IsExpanded ? "event-feed-open" : "")" data-testid="event-feed" data-count="@Lines.Count">
+    <strong class="event-feed-heading">Latest</strong>
+    @ChildContent
+    <div class="event-lines" role="log" aria-label="Match events" aria-live="polite" aria-relevant="additions">
+        @foreach ((int index, string text) in Shown)
+        {
+            <div @key="index" class="event-line" data-testid="event-line">@text</div>
+        }
+    </div>
+
+    @if (Lines.Count > CollapsedLines)
+    {
+        <button type="button" class="event-feed-expand" data-testid="event-feed-expand"
+                aria-expanded="@IsExpanded.ToString().ToLowerInvariant()" @onclick="Toggle">
+            @(IsExpanded ? "▾ fewer" : $"▸ {Lines.Count - CollapsedLines} earlier")
+        </button>
+    }
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public IReadOnlyList<MatchEvent> History { get; set; } = Array.Empty<MatchEvent>();
+    [Parameter] public SharedGameConfig? Config { get; set; }
+    [Parameter] public int LocalSeat { get; set; }
+
+    /// <summary> How many lines the feed keeps at all, expanded. </summary>
+    [Parameter] public int MaxLines { get; set; } = 14;
+
+    /// <summary> Whether the whole tail is showing. </summary>
+    [Parameter] public bool IsExpanded { get; set; }
+
+    [Parameter] public EventCallback OnToggle { get; set; }
+
+    /// <summary> What the feed shows at rest. Three is a glance between moves. </summary>
+    const int CollapsedLines = 3;
+
+    /// <summary> The lines the feed is showing right now, newest last. </summary>
+    List<(int Index, string Text)> Shown
+    {
+        get
+        {
+            List<(int Index, string Text)> lines = Lines;
+            int take = IsExpanded ? lines.Count : Math.Min(CollapsedLines, lines.Count);
+            return lines.GetRange(lines.Count - take, take);
+        }
+    }
+
+    /// <summary> The tail of the history worth a line, oldest first. </summary>
+    List<(int Index, string Text)> Lines
+    {
+        get
+        {
+            List<(int Index, string Text)> newestFirst = new List<(int Index, string Text)>();
+            for (int ndx = History.Count - 1; ndx >= 0 && newestFirst.Count < MaxLines; ndx--)
+            {
+                string? line = Describe(History[ndx], ndx);
+                if (line != null)
+                    newestFirst.Add((ndx, line));
+            }
+
+            newestFirst.Reverse();
+            return newestFirst;
+        }
+    }
+
+    Task Toggle() => OnToggle.HasDelegate ? OnToggle.InvokeAsync() : Task.CompletedTask;
+
+    string Who(int seat) => seat == LocalSeat ? "You" : "They";
+
+    string Card(CardId cardId)
+        => Config != null && Config.Cards.TryGetValue(cardId, out CardInfo card) ? card.DisplayName : cardId.Value;
+
+    /// <summary>
+    /// One line per event worth a line. The events that are bookkeeping rather than happenings — the unseen
+    /// pool being recomputed, stats and keywords being recalculated — are deliberately not narrated.
+    /// <para>
+    /// The index is passed because one line needs its event's neighbours: a mana change carries only the
+    /// state after it, so what it changed is a question about the history around it.
+    /// </para>
+    /// </summary>
+    string? Describe(MatchEvent ev, int index) => ev switch
+    {
+        MatchDealtEvent dealt        => $"The deal: {Card2(dealt.Weather)} weather, {Who(dealt.FirstSeat)} go first.",
+        MulliganResolvedEvent mull   => mull.ReplacedCount > 0 ? $"{Who(mull.Seat)} replaced {mull.ReplacedCount}." : null,
+        TurnStartedEvent started     => $"Turn {started.Turn}: {Who(started.Seat)}.",
+        ManaChangedEvent mana        => DescribeManaChange(mana, index),
+        CardDrawnEvent drawn         => $"{Who(drawn.Seat)} drew a card.",
+        TuckeredOutEvent tuckered    => $"{Who(tuckered.Seat)} is Tuckered Out for {tuckered.Damage}.",
+        CardPlayedEvent played       => $"{Who(played.Seat)} played {Card(played.Card)}.",
+        AttackDeclaredEvent          => "An attack was declared.",
+        CritterDiedEvent died        => $"{Who(died.Seat)} lost a critter.",
+        DenDamagedEvent den          => $"{(den.Seat == LocalSeat ? "Your" : "Their")} Den took {den.Amount}.",
+        BubblePoppedEvent           => "A Bubble popped.",
+        SneakyRevealedEvent         => "A Sneaky critter was revealed.",
+        HealedEvent healed           => healed.Amount > 0 ? $"Healed {healed.Amount}." : null,
+        EffectChoiceRequestedEvent  => "A peek is waiting on a choice.",
+        EffectChoiceResolvedEvent c  => c.WasDefaulted ? "The peek defaulted." : "The peek was answered.",
+        MatchEndedEvent ended        => Outcome(ended),
+        _                            => null,
+    };
+
+    /// <summary>
+    /// A mana change earns a line only when it is a permanent ramp — the one mana change with nothing else on
+    /// the board to show it. The predicate is <see cref="ManaRamp"/>'s, shared with the acorn pop and tested
+    /// there, so the line and the pop cannot come apart.
+    /// </summary>
+    string? DescribeManaChange(ManaChangedEvent mana, int index)
+        => ManaRamp.IsMaxOnlyRamp(History, index, out int previousMax)
+            ? $"{Who(mana.Seat)} gained maximum mana: {previousMax} → {mana.MaxMana}."
+            : null;
+
+    string Card2(WeatherId weatherId)
+        => Config != null && Config.Weathers.TryGetValue(weatherId, out WeatherInfo weather) ? weather.DisplayName : weatherId.Value;
+
+    string Outcome(MatchEndedEvent ended)
+    {
+        if (ended.Result.IsDraw)
+            return "Both Dens fell: a draw.";
+
+        return ended.Result.WinnerSeat == LocalSeat ? "You won." : "They won.";
+    }
+}

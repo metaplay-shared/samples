@@ -1,0 +1,42 @@
+@namespace Game.Client.Components.Board
+
+@* The acorn row, bottom-left and alone there.
+
+   It grows by one every turn and never caps, so the row itself is the ramp made visible. Spent acorns empty
+   rather than vanish, because "what I have left" and "what I will have next turn" are both answers a player
+   needs mid-turn; a row of full acorns alone would lose the second answer.
+
+   A spent acorn is its own asset with the same silhouette and placement, so the row reads as one thing
+   emptying rather than two kinds of acorn.
+
+   A permanent ramp adds an acorn that arrives *spent* — the gain is payable from the next refill — so on its
+   own it is one more empty acorn beside the ones the card itself cost. While that beat runs the new acorn
+   pops, which is the whole of what a 2-mana ramp has to show for itself.
+
+   The acorns sit bottom-left and the event feed bottom-right, so the two things that grow are never on the
+   same side. *@
+
+<div class="mana mana-plaque" data-testid="mana-row" data-mana="@Mana" data-max-mana="@MaxMana"
+     role="img" aria-label="@($"{Mana} of {MaxMana} mana available")">
+    <div class="acorns" aria-hidden="true">
+        @for (int ndx = 0; ndx < MaxMana; ndx++)
+        {
+            bool isRamped = PopNewAcorn && ndx == MaxMana - 1;
+            <span @key="ndx" class="mana-acorn @(ndx < Mana ? "mana-acorn-full" : "mana-acorn-spent") @(isRamped ? "acorn-ramped" : "")"
+                  data-testid="mana-acorn" data-spent="@((ndx >= Mana).ToString().ToLowerInvariant())"
+                  data-ramped="@isRamped.ToString().ToLowerInvariant()">
+                <img class="mana-empty" src="art/mana-acorn-empty.webp" alt="" draggable="false" />
+                <img class="mana-full" src="art/mana-acorn.webp" alt="" draggable="false" />
+            </span>
+        }
+    </div>
+    <b data-testid="mana-readout">@Mana <span>/ @MaxMana</span></b>
+</div>
+
+@code {
+    [Parameter] public int Mana { get; set; }
+    [Parameter] public int MaxMana { get; set; }
+
+    /// <summary> Whether the acorn the maximum just gained is being shown arriving. </summary>
+    [Parameter] public bool PopNewAcorn { get; set; }
+}

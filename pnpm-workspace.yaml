@@ -1,6 +1,7 @@
 packages:
   - Samples/Idler/Backend/Dashboard
   - Samples/HelloNFT/Backend/Dashboard
+  - Samples/CollectibleCardGame/Backend/Dashboard
   - MetaplaySDK/Frontend/*
 
 allowBuilds:

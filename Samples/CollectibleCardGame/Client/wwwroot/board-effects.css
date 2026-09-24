@@ -1,0 +1,65 @@
+.board-impact {
+    --impact-color: #ffbc76;
+    --impact-ink: #fff6dd;
+    --impact-fill: #8c302d;
+    position: fixed;
+    z-index: 1100;
+    pointer-events: none;
+    width: 0;
+    height: 0;
+    user-select: none;
+}
+.board-impact-heal { --impact-color: #99efc5; --impact-fill: #226b54; }
+.board-impact-blocked { --impact-color: #bfddff; --impact-fill: #45547f; }
+.board-impact-pow {
+    position: absolute;
+    left: 0;
+    width: var(--pow-size);
+    height: var(--pow-size);
+    display: grid;
+    place-items: center;
+    color: #42182a;
+    font: 1000 calc(var(--pow-size) * .23)/1 Impact, fantasy;
+    background: radial-gradient(circle, #fff5c1 0 24%, #ffd15f 38%, #ff8146 67%);
+    clip-path: polygon(50% 0, 58% 25%, 79% 7%, 77% 33%, 100% 27%, 85% 49%, 100% 66%,
+        75% 68%, 83% 95%, 59% 79%, 48% 100%, 39% 77%, 15% 95%, 23% 69%, 0 68%,
+        15% 49%, 0 29%, 26% 33%, 20% 7%, 42% 25%);
+    text-shadow: 0 1px #fff9dc;
+}
+.board-impact-value {
+    z-index: 2;
+    position: absolute;
+    display: grid;
+    place-items: center;
+    min-width: var(--impact-size);
+    height: var(--impact-size);
+    padding: 0 .3em;
+    border: 2px solid var(--impact-color);
+    border-radius: 45%;
+    background: var(--impact-fill);
+    color: var(--impact-ink);
+    font: 900 calc(var(--impact-size) * .59)/1 'Nunito', sans-serif;
+    white-space: nowrap;
+    box-shadow: 0 3px 9px #130b24aa, inset 0 1px 0 #ffffff55;
+    transform: translate(-50%, -50%);
+}
+.board-impact-blocked .board-impact-value { font-size: calc(var(--impact-size) * .36); }
+.board-impact-ring {
+    position: absolute;
+    width: var(--impact-size);
+    height: var(--impact-size);
+    border: 2px solid var(--impact-color);
+    border-radius: 50%;
+}
+.board-impact-particle {
+    position: absolute;
+    width: calc(var(--impact-size) * .18);
+    height: calc(var(--impact-size) * .18);
+    border-radius: 2px;
+    background: var(--impact-color);
+    box-shadow: 0 0 5px var(--impact-color);
+}
+.board-impact-heal .board-impact-particle {
+    clip-path: polygon(35% 0, 65% 0, 65% 35%, 100% 35%, 100% 65%, 65% 65%, 65% 100%, 35% 100%, 35% 65%, 0 65%, 0 35%, 35% 35%);
+}
+.board-impact-blocked .board-impact-particle { border-radius: 50%; background: transparent; border: 1px solid var(--impact-color); }

@@ -1,0 +1,55 @@
+@inject MetaplayClientService Client
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<div class="metagame" data-testid="metagame-shell">
+    <div class="shell">
+        <header class="topbar" data-testid="app-header">
+            <a class="brand" href="@Link("")" aria-label="Sticky Paws home">
+                <img src="art/clan-symbol-returning-crescent.webp" alt="" />
+                <span>STICKY<br />PAWS<small>A LITTLE MISCHIEF</small></span>
+            </a>
+            <nav class="nav" aria-label="Main navigation">
+                <a class="@(Active == "home" ? "active" : "")" aria-current="@(Active == "home" ? "page" : null)" href="@Link("")" data-testid="back-home">Home</a>
+                <a class="@(Active == "collection" ? "active" : "")" aria-current="@(Active == "collection" ? "page" : null)" href="@Link("collection")" data-testid="nav-collection">Collection</a>
+                <a class="@(Active == "decks" ? "active" : "")" aria-current="@(Active == "decks" ? "page" : null)" href="@Link("decks")" data-testid="nav-decks">Decks</a>
+            </nav>
+            <div class="identity">
+                <img src="art/cards/meadow-mouse.webp" alt="" />
+                <div><span>@Client.DisplayName</span><span class="connection" data-testid="connection-status">@ConnectionStatusText.Describe(Client.ConnectionStatus)</span></div>
+            </div>
+            <details class="session-menu">
+                <summary>Session</summary>
+                <div class="dark-panel">
+                    <p>@Client.PlayerId</p>
+                    @if (Client.ConnectionStatus == ConnectionStatus.Connected)
+                    {
+                        <button class="btn small" @onclick="Reset">Reset</button>
+                    }
+                </div>
+            </details>
+        </header>
+        <CardGiftPanel />
+        @ChildContent
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Active { get; set; } = "home";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    string Link(string path) => EnvironmentLink.Href(Navigation, path);
+    protected override void OnInitialized()
+    {
+        Client.OnStateChanged += Refresh;
+    }
+    void Refresh() => InvokeAsync(StateHasChanged);
+    void Reset()
+    {
+        if (Client.Reset())
+            EnvironmentLink.NavigateTo(Navigation, "/", forceLoad: true);
+    }
+    public void Dispose()
+    {
+        Client.OnStateChanged -= Refresh;
+    }
+}

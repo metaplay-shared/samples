@@ -1,0 +1,241 @@
+@namespace Game.Client.Components.Board
+@using Game.Logic
+@using Game.Client.Components.Heist
+@using Game.Client.Components.Matchmaking
+@using Game.Client.Services
+@using Metaplay.Core
+
+@* The board, drawn from one object and nothing else.
+
+   Every game value here is a value <see cref="BoardViewState"/> was handed; this component decides nothing. That
+   is what lets the live page and the offline scene preview render the same board — the composition, the
+   layering and every test id live here once, and the two callers differ only in where the state came from.
+
+   The chrome reports connection status; the app shell owns connection recovery over the whole app. *@
+
+<BoardFrame Beat="@State.Beat">
+    <BoardChrome DisplayName="@State.LocalRoster.DisplayName" IsPreview="@State.IsPreview" OnLeave="Leave" />
+    <OpponentHand Count="@State.Seat(State.OpponentSeat).HandCount" />
+
+    <BattlefieldRow Seat="@State.OpponentSeat"
+                    Roster="@State.OpponentRoster"
+                    Public="@State.Seat(State.OpponentSeat)"
+                    Config="@State.Config"
+                    KnownCards="@State.Visual.KnownCards"
+                    IsLocal="false"
+                    MaxDenHp="@State.MaxDenHp"
+                    IsDenTargetable="@State.TargetableDens.Contains(State.OpponentSeat)"
+                    IsTargeting="@IsTargeting"
+                    TargetingKind="@State.TargetingState"
+                    Beat="@State.Beat"
+                    DenTag="@State.DenTag(State.OpponentSeat)"
+                    DenTagAmount="@State.DenTagAmount(State.OpponentSeat)"
+                    TargetableIds="@State.TargetableCritters"
+                    Tags="@State.CritterTags"
+                    TagAmounts="@State.CritterTagAmounts"
+                    Deltas="@State.CritterDeltas"
+                    DenDelta="@State.DenDelta(State.OpponentSeat)"
+                    OnCritterClick="OnCritterClicked"
+                    OnDenClick="OnDenClicked"
+                    OnOpenPile="OpenPile" />
+
+    <BattlefieldRow Seat="@State.LocalSeat"
+                    Roster="@State.LocalRoster"
+                    Public="@State.Seat(State.LocalSeat)"
+                    Config="@State.Config"
+                    KnownCards="@State.Visual.KnownCards"
+                    IsLocal="true"
+                    MaxDenHp="@State.MaxDenHp"
+                    IsDenTargetable="@State.TargetableDens.Contains(State.LocalSeat)"
+                    IsTargeting="@IsTargeting"
+                    TargetingKind="@State.TargetingState"
+                    Beat="@State.Beat"
+                    DenTag="@State.DenTag(State.LocalSeat)"
+                    DenTagAmount="@State.DenTagAmount(State.LocalSeat)"
+                    SelectableIds="@State.Attackers"
+                    TargetableIds="@State.TargetableCritters"
+                    SelectedInstance="@State.SelectedAttacker"
+                    Tags="@State.CritterTags"
+                    TagAmounts="@State.CritterTagAmounts"
+                    Deltas="@State.CritterDeltas"
+                    DenDelta="@State.DenDelta(State.LocalSeat)"
+                    OnCritterClick="OnCritterClicked"
+                    OnDenClick="OnDenClicked"
+                    OnOpenPile="OpenPile" />
+
+    <ManaAcorns Mana="@State.Seat(State.LocalSeat).Mana" MaxMana="@State.Seat(State.LocalSeat).MaxMana"
+                PopNewAcorn="@State.PopNewManaAcorn" />
+
+    <HandFan Cards="@PresentedHandCards"
+             Config="@State.Config"
+             Rules="@State.Rules"
+             Seat="@State.LocalSeat"
+             PlayableIds="@State.PlayableCards"
+             MarkedIds="@State.MulliganMarks"
+             IsMulliganOpen="@State.CanAnswerMulligan"
+             ReplaceableIds="@State.ReplaceableCards"
+             SelectedInstance="@State.SelectedCard"
+             Beat="@State.Beat"
+             IsBusy="@(State.IsBusy || IsTargeting)"
+             OnCardClick="OnHandCardClicked" />
+
+    @* End turn, its own-turn count, its clock and its nudge are one cluster: they are one question asked
+       four ways. *@
+    <aside class="turn-controls">
+        @if (!State.IsMulliganOpen)
+        {
+            <WeatherBanner Weather="@State.Weather" />
+        }
+        <StakesChip Stakes="@State.Stakes" />
+        <EndTurnButton IsEnabled="@State.CanEndTurn"
+                       HasSomethingLeft="@State.HasSomethingLeft"
+                       ActionsLeft="@State.ActionsLeft"
+                       OwnTurnNumber="@State.OwnTurnNumber"
+                       IndicatorState="@State.TurnIndicatorState"
+                       Turn="@State.Visual.Turn"
+                       IsTrailing="@State.IsTrailing"
+                       QueueLength="@State.QueueLength"
+                       DeadlineAt="@State.DeadlineAt"
+                       Now="@State.Now"
+                       RingAllowed="@State.RingAllowed"
+                       OnClick="EndTurn" />
+    </aside>
+
+    <EventFeed History="@State.History"
+               Config="@State.Config"
+               LocalSeat="@State.LocalSeat"
+               IsExpanded="@State.IsFeedExpanded"
+               OnToggle="ToggleFeed">
+        <PlayedTrick State="@State" ShowFlight="false" ShowDetail="true" />
+    </EventFeed>
+
+    @if (State.RefusalReason != null)
+    {
+        <div class="refusal-notice" data-testid="refusal-notice" data-reason="@State.RefusalReason">@State.RefusalText</div>
+    }
+
+    @* The cover of this seat, in whichever stage it is in. One at a time: once a bot has the seat, what the
+       last lapse cost is no longer the sentence that helps. *@
+    @if (State.IsLocalSeatCovered)
+    {
+        <CoveredSeatNotice IsCovered="true" IsReclaimPending="@State.IsLocalSeatReclaimPending" IsOnTurn="@State.IsLocalSeatOnTurn" />
+    }
+    else if (State.ShowsStrikeNotice)
+    {
+        <CoveredSeatNotice IsCovered="false" />
+    }
+
+    <TargetingLayer State="@State" Kind="@State.TargetingState" OnCancel="ClearSelection" />
+    <PlayedTrick State="@State" />
+    <BoardMotionDriver Beat="@State.Beat" LocalSeat="@State.LocalSeat" Epoch="@State.AttachmentEpoch" />
+    <BoardEffects Beat="@State.Beat" />
+
+    @if (State.IsPileOpen)
+    {
+        <div class="board-overlay" data-testid="pile-overlay" @onclick="ClosePile">
+            <div class="overlay-panel" @onclick:stopPropagation="true">
+                <h3>@State.PileTitle</h3>
+                <div class="pile-cards" data-testid="pile-cards" data-count="@State.PileCards.Count">
+                    @foreach (CardId cardId in State.PileCards)
+                    {
+                        <span class="pile-card" data-testid="pile-card" data-card-id="@cardId.Value">@CardName(cardId)</span>
+                    }
+                </div>
+                <div class="overlay-actions">
+                    <button class="overlay-secondary" data-testid="pile-close" @onclick="ClosePile">Close</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* Over the mulligan, not in front of it: it takes no pointer events, so the hand and the confirm below
+       stay live and no clock is spent on reading it. *@
+    @if (State.ShowsPreMatchReveal)
+    {
+        <PreMatchReveal Stakes="@State.Stakes"
+                        LocalRoster="@State.LocalRoster"
+                        OpponentRoster="@State.OpponentRoster"
+                        Weather="@State.Weather"
+                        LocalSeat="@State.LocalSeat"
+                        OpponentSeat="@State.OpponentSeat" />
+    }
+
+    @if (State.IsMulliganOpen)
+    {
+        <MulliganOverlay Selected="@State.MulliganMarks"
+                         Weather="@State.Weather"
+                         IsBusy="@State.IsBusy"
+                         HasAnswered="@(!State.CanAnswerMulligan)"
+                         OnConfirm="MulliganConfirm" />
+    }
+    else if (State.PendingChoice != null)
+    {
+        <PeekOverlay Choice="@State.PendingChoice"
+                     Config="@State.Config"
+                     Rules="@State.Rules"
+                     Seat="@State.LocalSeat"
+                     Kept="@State.PeekKeeps"
+                     IsBusy="@State.IsBusy"
+                     OnToggle="PeekToggle"
+                     OnConfirm="PeekConfirm" />
+    }
+    else if (State.ShowsResultPanel && State.Result != null)
+    {
+        @* One of two screens, and which one is a fact rather than a judgement: a table where a pick actually
+           happens shows the Heist, and everything else — a draw, an unranked game, a tier that moves no ranks,
+           a lineup with nothing pickable in it — shows the plain result and says why. *@
+        @if (State.Heist != null)
+        {
+            <HeistScreen State="@State.Heist" />
+        }
+        else
+        {
+            <MatchEndPanel Result="@State.Result"
+                           Stakes="@State.Stakes"
+                           LocalSeat="@State.LocalSeat"
+                           AllAcked="@State.AllSeatsAcked"
+                           OnPlayAgain="PlayAgain"
+                           OnLeave="Leave" />
+        }
+    }
+</BoardFrame>
+
+@code {
+    [Parameter, EditorRequired] public BoardViewState State { get; set; } = default!;
+
+    /// <summary> Whether something is choosing a target right now. </summary>
+    bool IsTargeting => State.TargetingState != TargetingLayer.TargetingKind.None;
+
+    List<HandCard> PresentedHandCards
+    {
+        get
+        {
+            List<HandCard> cards = new List<HandCard>();
+            foreach (HandCard card in State.HandCards)
+            {
+                if (!State.Visual.KnownCards.TryGetValue(card.Instance, out BoardVisualCard known)
+                    || known.Place is CardPlace.Hand or CardPlace.Unseen)
+                    cards.Add(card);
+            }
+
+            return cards;
+        }
+    }
+
+    string CardName(CardId cardId)
+        => State.Config != null && State.Config.Cards.TryGetValue(cardId, out CardInfo card) ? card.DisplayName : cardId.Value;
+
+    Task OnHandCardClicked(CardInstanceId instance) => State.OnHandCardClick.InvokeAsync(instance);
+    Task OnCritterClicked(CardInstanceId instance) => State.OnCritterClick.InvokeAsync(instance);
+    Task OnDenClicked(int seat) => State.OnDenClick.InvokeAsync(seat);
+    Task EndTurn() => State.OnEndTurn.InvokeAsync();
+    Task MulliganConfirm() => State.OnMulliganConfirm.InvokeAsync();
+    Task PeekToggle(CardInstanceId instance) => State.OnPeekToggle.InvokeAsync(instance);
+    Task PeekConfirm() => State.OnPeekConfirm.InvokeAsync();
+    Task Leave() => State.OnLeave.InvokeAsync();
+    Task PlayAgain() => State.OnPlayAgain.InvokeAsync();
+    Task OpenPile((int Seat, ZoneInspector.PileKind Kind) which) => State.OnOpenPile.InvokeAsync(which);
+    Task ClosePile() => State.OnClosePile.InvokeAsync();
+    Task ClearSelection() => State.OnClearSelection.InvokeAsync();
+    Task ToggleFeed() => State.OnToggleFeed.InvokeAsync();
+}

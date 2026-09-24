@@ -1,0 +1,56 @@
+@namespace Game.Client.Components.Board
+
+@inject NavigationManager Navigation
+
+@* Re-subscribing asks for this player's covered seat back through the server's OnSeatArrived path, as any press
+   from the seat does. The seat is handed back at the next turn boundary, so the notice says so once it is asked. *@
+
+<div class="seat-notice @(IsCovered ? "seat-notice-covered" : "seat-notice-struck")"
+     data-testid="covered-seat-notice"
+     data-stage="@Stage"
+     data-on-turn="@IsOnTurn.ToString().ToLowerInvariant()"
+     role="status">
+    @Copy
+    @if (IsCovered && !IsReclaimPending)
+    {
+        <button type="button" class="seat-reclaim" data-testid="reclaim-seat" @onclick="Reclaim">
+            Take back control
+        </button>
+    }
+</div>
+
+@code {
+    /// <summary> Whether a bot already has the seat, rather than the seat being one lapse away from it. </summary>
+    [Parameter] public bool IsCovered { get; set; }
+
+    /// <summary> Whether the covered seat's owner has asked for it back and takes it at the next turn boundary. </summary>
+    [Parameter] public bool IsReclaimPending { get; set; }
+
+    /// <summary> Whether the table is on this seat's turn, rendered as <c>data-on-turn</c>. </summary>
+    [Parameter] public bool IsOnTurn { get; set; }
+
+    string Stage => !IsCovered ? "struck" : IsReclaimPending ? "reclaiming" : "covered";
+
+    // Keep the full URI, including ?env=. The match actor preserves the match and marks the seat on subscription.
+    void Reclaim() => Navigation.NavigateTo(Navigation.Uri, forceLoad: true);
+
+    /// <summary>
+    /// The struck line names the shipped budget of two in as many words, because "one more" is what a player
+    /// can act on and "one of two" is a statistic. <c>Docs/match.md</c> fixes that count and
+    /// <c>MatchOptionsInvariantTests</c> pins the default, so the sentence and the option cannot drift apart
+    /// without a test saying so.
+    /// </summary>
+    string Copy
+    {
+        get
+        {
+            if (!IsCovered)
+                return "Your turn ran out. One more and a bot takes the seat.";
+
+            if (IsReclaimPending)
+                return "You're back. The bot hands your seat over when the next turn starts.";
+
+            return "A bot is playing your seat.";
+        }
+    }
+}

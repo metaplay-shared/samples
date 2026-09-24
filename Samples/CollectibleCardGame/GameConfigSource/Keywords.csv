@@ -1,0 +1,8 @@
+KeywordId #key,Kind,DisplayName,Description
+Guard,EngineFlag,Guard,"Enemy critters can't attack your Den while you have a Guard they could legally attack instead. Guard never makes a critter unattackable or redirects attacks onto it: it protects the Den, not the team."
+Zoomies,EngineFlag,Zoomies,Can attack the turn it's played.
+Bubble,EngineFlag,Bubble,"Ignores the first damage it would take, then pops."
+Sneaky,EngineFlag,Sneaky,Can't be attacked or targeted by the enemy until it deals damage.
+Snacktime,EngineFlag,Snacktime,Damage this critter deals also heals your Den for the same amount.
+Hello,TriggerLabel,Hello:,Effect when played from hand.
+Goodbye,TriggerLabel,Goodbye:,Effect when destroyed.

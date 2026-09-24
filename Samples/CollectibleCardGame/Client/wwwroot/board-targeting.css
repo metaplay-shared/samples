@@ -1,0 +1,100 @@
+/* Geometry follows the rendered cards, including their lift and fan transforms. */
+.targeting-arrow {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 200;
+    overflow: visible;
+    pointer-events: none;
+    --arrow-color: #ffd277;
+}
+.targeting-arrow[hidden] { display: none; }
+.targeting-arrow[data-kind="Attack"] { --arrow-color: #ff936e; }
+.targeting-arrow[data-kind="Heal"] { --arrow-color: #95efaa; }
+.targeting-arrow path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.targeting-arrow-shadow { stroke: #1a1023; stroke-width: 10; opacity: .8; }
+.targeting-arrow-body { stroke: var(--arrow-color); stroke-width: 6; opacity: .9; }
+.targeting-arrow-thread { stroke: #fff8e2; stroke-width: 1.5; opacity: .75; }
+.targeting-arrow .targeting-arrow-head {
+    fill: var(--arrow-color);
+    stroke: #27192d;
+    stroke-width: 2;
+}
+.targeting-arrow-origin { fill: #fff5d9; stroke: var(--arrow-color); stroke-width: 3; }
+.targeting-arrow[data-snapped="true"] .targeting-arrow-body { opacity: 1; }
+.targeting-counter[hidden] { display: none; }
+.targeting-counter rect { fill: #8c302d; stroke: #ffd8c1; stroke-width: 2; }
+.targeting-counter text { fill: #fff7e7; font: 900 18px 'Inter', sans-serif; }
+.targeting-counter .targeting-counter-shield,
+.targeting-counter .targeting-counter-lethal { display: none; stroke: #fff7e7; stroke-width: 2; }
+.targeting-counter[data-blocked="true"] rect { fill: #315077; stroke: #c5edff; }
+.targeting-counter[data-blocked="true"] .targeting-counter-shield { display: block; }
+.targeting-counter[data-lethal="true"] rect { fill: #121018; stroke: #eee9f4; stroke-width: 2; }
+.targeting-counter[data-lethal="true"] .targeting-counter-lethal { display: block; }
+.targeting-counter .targeting-counter-lethal { fill: #fff7e7; stroke: none; font-size: 14px; }
+
+/* Touch owns card gestures; the browser must not turn a drag into scrolling or native image dragging. */
+.handcard, .critter { touch-action: none; -webkit-user-select: none; user-select: none; }
+.handcard img, .critter img { -webkit-user-drag: none; }
+.board-frame.is-touch-dragging .handcard-peek,
+.board-frame.is-touch-dragging .critter-peek,
+.board-frame.is-targeting .handcard-peek,
+.board-frame.is-targeting .critter-peek {
+    display: none !important;
+    pointer-events: none !important;
+}
+.board-frame.is-touch-dragging .is-drag-source { filter: drop-shadow(0 0 8px #ffd277); }
+/* Native touch hover is sticky. Only an explicit tap should open an inspection on these devices. */
+@media (hover: none) {
+    .critter:not(.critter-touch-peek):not(:focus-visible) .critter-peek { display: none; }
+    .handcard:not(.handcard-peeking):not(.handcard-selected):hover {
+        transform: translate(calc(var(--fan-x) * var(--card-w)), calc(var(--fan-y) * var(--card-w) * -1.4))
+                   rotate(var(--fan-rot));
+    }
+}
+
+.targeting-touch-help { display: none; }
+@media (hover: none) {
+    .is-touch-dragging .targeting-mouse-help { display: none; }
+    .is-touch-dragging .targeting-touch-help { display: block; }
+}
+
+.touch-play-zone { display: none; pointer-events: none; }
+.is-touch-dragging .touch-play-zone {
+    display: grid; place-items: center; position: absolute;
+    left: 15%; right: 15%; top: 35%; height: 25%; z-index: 120;
+    border: 2px dashed #ffd277; border-radius: 20px; background: #30203988;
+    color: #fff5d9; font: 600 clamp(12px, 2.5cqh, 18px) 'Inter', sans-serif;
+}
+.board-frame.is-targeting .critter:not([data-selected="true"]):hover { transform: none; }
+
+/* Inspection needs readable art and text; the smaller lift is reserved for choosing a target. */
+@media (max-width: 720px), (max-height: 460px) {
+    .board-frame:not(.is-targeting):not(.is-touch-dragging) .hand:not(.hand-inert) .handcard-peeking {
+        transform: translate(calc(var(--fan-x) * var(--card-w)), calc(var(--fan-y) * var(--card-w) * -1.4 - 12cqh))
+                   rotate(0deg) scale(2.2);
+        z-index: 90 !important;
+    }
+    .board-frame:not(.is-targeting):not(.is-touch-dragging) .handcard-peeking .handcard-peek {
+        top: 0;
+        bottom: auto;
+        left: calc(100% + 8px);
+        right: auto;
+        transform: scale(0.454545);
+        transform-origin: top left;
+    }
+    .board-frame:not(.is-targeting):not(.is-touch-dragging) .handcard-peeking .handcard-peek-edge {
+        left: auto;
+        right: calc(100% + 8px);
+        transform-origin: top right;
+    }
+    .board-frame .handcard-peeking .card-tooltip { translate: 0 0 !important; }
+    .board-frame:not(.is-targeting):not(.is-touch-dragging):not(.board-beat) .critter-touch-peek {
+        transform: scale(1.8);
+        z-index: 90;
+    }
+    .board-frame:not(.is-targeting):not(.is-touch-dragging) .critter-touch-peek .critter-peek {
+        transform: translateY(-50%) scale(0.555556);
+    }
+}

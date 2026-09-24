@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Build-time tool that emits Metaplay.Generated.Browser.dll for the WebAssembly Client.
+
+    Runs on the full .NET build host (Roslyn + Reflection.Emit available), so it generates the serializer the same
+    way the server does at runtime. It must stay on plain net10.0 rather than net10.0-browser, which would compile
+    out the very generation code it needs — hence GameLogic multi-targets both. It references GameLogic so the
+    generated serializer targets the same game-type assembly identity that the WebAssembly app loads at runtime.
+
+    Invoked by the Client build (the GenerateBrowserSerializer target) with the output directory as its
+    argument; runnable by hand the same way.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <LangVersion>Latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <Version>0.1.0.0</Version>
+    <!-- Run with the caller's working directory (the sample root) so the relative output-dir argument resolves
+         where the user expects, rather than against the project directory. -->
+    <RunWorkingDirectory>$(MSBuildStartupDirectory)</RunWorkingDirectory>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\MetaplaySDK\Backend\CodeAnalyzers\Metaplay.CodeAnalyzers.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\..\MetaplaySDK\Backend\CodeAnalyzers.Shared\Metaplay.CodeAnalyzers.Shared.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <ProjectReference Include="..\..\SharedCode\GameLogic.csproj" />
+  </ItemGroup>
+
+</Project>

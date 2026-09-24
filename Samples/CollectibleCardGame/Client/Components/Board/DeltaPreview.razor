@@ -1,0 +1,26 @@
+@namespace Game.Client.Components.Board
+@using Game.Client.Services
+
+<span class="delta-preview @(Value.Kind == TargetDeltaKind.Heal ? "delta-heal" : "delta-damage") @(Value.IsBlocked ? "delta-blocked" : "") @(Value.IsLethal ? "delta-lethal" : "")"
+      data-testid="@(Value.Kind == TargetDeltaKind.Heal ? "heal-preview" : "damage-preview")"
+      data-amount="@Value.Amount" data-health-after="@Value.HealthAfter"
+      data-blocked="@Value.IsBlocked.ToString().ToLowerInvariant()"
+      data-lethal="@Value.IsLethal.ToString().ToLowerInvariant()"
+      data-counter-amount="@Value.Counter?.Amount"
+      data-counter-blocked="@Value.Counter?.IsBlocked.ToString().ToLowerInvariant()"
+      data-counter-lethal="@Value.Counter?.IsLethal.ToString().ToLowerInvariant()"
+      role="img" aria-label="@Value.Description" title="@Value.Description">
+    <span aria-hidden="true">@(Value.Kind == TargetDeltaKind.Heal ? "+" : Value.Amount > 0 ? "−" : "")@Value.Amount</span>
+    @if (Value.IsBlocked)
+    {
+        <span class="delta-symbol" aria-hidden="true">🫧</span>
+    }
+    else if (Value.IsLethal)
+    {
+        <span class="delta-symbol" aria-hidden="true">☠</span>
+    }
+</span>
+
+@code {
+    [Parameter, EditorRequired] public TargetDelta Value { get; set; } = default!;
+}

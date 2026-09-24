@@ -1,0 +1,17 @@
+<Project>
+ <PropertyGroup>
+   <MetaplaySDKPath>$(MSBuildThisFileDirectory)../../../MetaplaySDK</MetaplaySDKPath>
+   <SharedCodePath>$(MSBuildThisFileDirectory)../SharedCode</SharedCodePath>
+   <MetaplayClientPath>$(MetaplaySDKPath)/Client</MetaplayClientPath>
+   <MetaplayServerPath>$(MetaplaySDKPath)/Backend</MetaplayServerPath>
+ </PropertyGroup>
+ <!-- Make paths relative to project -->
+ <PropertyGroup>
+   <SharedCodePath>$([MSBuild]::MakeRelative($(MSBuildProjectDirectory), $(SharedCodePath)))</SharedCodePath>
+   <MetaplayClientPath>$([MSBuild]::MakeRelative($(MSBuildProjectDirectory), $(MetaplayClientPath)))</MetaplayClientPath>
+   <MetaplayServerPath>$([MSBuild]::MakeRelative($(MSBuildProjectDirectory), $(MetaplayServerPath)))</MetaplayServerPath>
+ </PropertyGroup>
+ <!-- \note No Metaplay.Analyzers.targets import here: this sample builds the SDK projects from source at
+      $(MetaplaySDKPath), so the analyzers come from ProjectReferences to Backend/CodeAnalyzers* instead of the
+      SDK's PrebuiltAnalyzers DLLs. Same as Samples/HelloBlazorWasm. -->
+</Project>

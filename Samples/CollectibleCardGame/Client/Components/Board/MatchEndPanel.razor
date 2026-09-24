@@ -1,0 +1,101 @@
+@namespace Game.Client.Components.Board
+@using Game.Logic
+
+@* The result for every match where no rank moves, and it says plainly why none did.
+
+   The Heist screen takes the tables where a pick actually happens; this one takes the rest, and "the rest" is
+   four different reasons rather than one — so the sentence is the whole content of the panel. A tier that
+   steals nothing has to say so, since a payout with no explanation reads as a bug.
+
+   It is withheld until the finish has played out — the lethal blow lands, the Den's hearts run out, the board
+   settles, and *then* this comes up. Its two ways on are Play again and Leave; a player who wants to leave at
+   that point is holding nothing up. *@
+
+<div class="board-overlay" data-testid="match-result" data-outcome="@Outcome.ToString()">
+    <div class="overlay-panel">
+        <h3 data-testid="match-result-headline">@Headline</h3>
+        <p data-testid="match-result-stakes">@StakesLine</p>
+        @if (!AllAcked)
+        {
+            <p class="overlay-note" data-testid="match-result-recording">Recording the result…</p>
+        }
+        <div class="overlay-actions">
+            <button class="overlay-confirm" data-testid="play-again" disabled="@(!AllAcked)" @onclick="PlayAgain">Play again</button>
+            <button class="overlay-secondary" data-testid="leave-match" @onclick="Leave">Leave</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public MatchOutcomeRecord Result { get; set; } = default!;
+    [Parameter, EditorRequired] public MatchStakes Stakes { get; set; } = default!;
+    [Parameter] public int LocalSeat { get; set; }
+    /// <summary> Whether every account has folded the outcome in, which is when Play again is honest. </summary>
+    [Parameter] public bool AllAcked { get; set; }
+    [Parameter] public EventCallback OnPlayAgain { get; set; }
+    [Parameter] public EventCallback OnLeave { get; set; }
+
+    MatchAccountOutcome Outcome => Result.OutcomeForSeat(LocalSeat);
+
+    string Headline => Outcome switch
+    {
+        MatchAccountOutcome.Win  => "You won.",
+        MatchAccountOutcome.Loss => "You lost.",
+        _                        => "Both Dens fell: a draw.",
+    };
+
+    /// <summary>
+    /// How many picks this match owed the winner. It is derived rather than passed, off the two public facts
+    /// the panel already has — and it is what tells the last case below apart from the others: a pick that was
+    /// owed and never offered means the loser's whole played list was behind a padlock.
+    /// </summary>
+    int PicksOwed => MatchHeistPolicy.PicksOwedForMatch(Stakes, Result);
+
+    /// <summary>
+    /// Why no rank moved, in the one sentence the panel owes. There are five reasons and the player is owed
+    /// the right one: an outcome with no explanation reads as a bug, and this panel is where every match that
+    /// pays nothing lands.
+    /// <para>
+    /// The practice tier says two different things depending on how the table was formed: a Practice-mode game
+    /// moves nothing at all, while a ranked tap the queue could not find a human for moves rating and spares
+    /// only the ranks. Saying "no ranks moved, in either direction" for the second would be true about ranks
+    /// and wrong about the match.
+    /// </para>
+    /// </summary>
+    string StakesLine
+    {
+        get
+        {
+            if (Result.IsDraw)
+                return "Both Dens fell, so neither of you is the loser: no rank moved either way.";
+
+            // A pick was owed and no phase ran, which leaves exactly one explanation — there was nothing on
+            // the menu. The padlocks were visible on the table all match, so this says out loud what they
+            // already implied.
+            if (PicksOwed > 0)
+                return "There was nothing left to take: every card they played this match is behind a padlock.";
+
+            return Stakes.Tier switch
+            {
+                StakesTier.Practice when Stakes.IsRanked => "No opponent turned up in time, so this was a computer player at practice stakes: rating moved, ranks did not.",
+                StakesTier.Practice => "Practice: nothing was at stake. No ranks moved, in either direction.",
+                StakesTier.Shielded => "Newcomer shield: no collection moved, on either side.",
+                StakesTier.Favourite or StakesTier.Underdog => FavouriteLine,
+                _                   => "Nothing was at stake in this match.",
+            };
+        }
+    }
+
+    /// <summary>
+    /// The favourite won, so nothing moved: punching down pays nothing, which is the whole of the asymmetric
+    /// stakes. Framed for the seat reading it — the record is identical on both clients and only "you" moves.
+    /// </summary>
+    string FavouriteLine
+        => Outcome == MatchAccountOutcome.Win
+            ? "You brought the stronger deck, so nothing moved: punching down pays nothing."
+            : "They brought the stronger deck, so nothing of yours moved: punching down pays nothing.";
+
+    Task PlayAgain() => OnPlayAgain.HasDelegate ? OnPlayAgain.InvokeAsync() : Task.CompletedTask;
+
+    Task Leave() => OnLeave.HasDelegate ? OnLeave.InvokeAsync() : Task.CompletedTask;
+}

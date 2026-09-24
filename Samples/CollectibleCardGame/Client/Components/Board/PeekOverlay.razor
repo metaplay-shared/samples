@@ -1,0 +1,71 @@
+@namespace Game.Client.Components.Board
+@using Game.Logic
+@using Game.Client.Components
+
+@* The one interactive resolution: a peek at the top of your own deck, keeping part of it.
+
+   It pauses the effect queue for this seat alone and nobody else may act meanwhile — the queue is held, not
+   abandoned. What was revealed reached this client on its own private channel and is not public: a card shown
+   to one player only never left the unseen pool, and nothing about it appears in any event on the timeline.
+
+   A lapsed choice takes the deterministic default — keep the costliest, ties on canonical card order — which
+   is the same answer a bot would give, so the pause can never stall a table. *@
+
+<div class="board-overlay" data-testid="peek-overlay">
+    <div class="overlay-panel">
+        <h3>Keep @Choice.KeepCount of @Choice.Revealed.Count</h3>
+        <p>The rest go to the bottom of your deck.</p>
+        <div class="peek-cards">
+            @foreach (HandCard card in Choice.Revealed)
+            {
+                CardInfo? info = Catalogue(card.Card);
+                bool kept = Kept.Contains(card.Instance);
+
+                @* The same face the hand draws, so a card revealed by a peek and the card it becomes in
+                   the hand cannot look like two different cards. *@
+                <button class="peek-card"
+                        data-testid="peek-card"
+                        data-instance="@card.Instance.Value"
+                        data-card-id="@card.Card.Value"
+                        data-kept="@kept.ToString().ToLowerInvariant()"
+                        @onclick="() => Toggle(card.Instance)">
+                    <CardFace Card="@info"
+                              Mode="CardFace.FaceMode.Summary"
+                              Rank="@card.Rank"
+                              Cost="@Cost(card)"
+                              ShowStats="@(info != null && info.Type == CardType.Critter)"
+                              IsSelected="@kept"
+                              KeywordsTestId="peek-card-keywords" />
+                </button>
+            }
+        </div>
+        <div class="overlay-actions">
+            <button class="overlay-confirm" data-testid="peek-confirm" disabled="@(IsBusy || Kept.Count > Choice.KeepCount)" @onclick="Confirm">
+                Keep @Kept.Count
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public PendingChoiceView Choice { get; set; } = default!;
+    [Parameter] public SharedGameConfig? Config { get; set; }
+    /// <summary> The public rules state, so a revealed card's price is derived rather than delivered. </summary>
+    [Parameter] public MatchRulesState? Rules { get; set; }
+    [Parameter] public int Seat { get; set; }
+    [Parameter] public HashSet<CardInstanceId> Kept { get; set; } = new HashSet<CardInstanceId>();
+    [Parameter] public bool IsBusy { get; set; }
+    [Parameter] public EventCallback<CardInstanceId> OnToggle { get; set; }
+    [Parameter] public EventCallback OnConfirm { get; set; }
+
+    /// <summary> What a revealed card would cost this seat. Derived from public state; see HandCard. </summary>
+    int Cost(HandCard card)
+        => Config == null || Rules == null ? 0 : ManaRules.CostToPlay(Config, Rules, Seat, card);
+
+    CardInfo? Catalogue(CardId cardId)
+        => Config != null && Config.Cards.TryGetValue(cardId, out CardInfo card) ? card : null;
+
+    Task Toggle(CardInstanceId instance) => OnToggle.HasDelegate ? OnToggle.InvokeAsync(instance) : Task.CompletedTask;
+
+    Task Confirm() => OnConfirm.HasDelegate ? OnConfirm.InvokeAsync() : Task.CompletedTask;
+}

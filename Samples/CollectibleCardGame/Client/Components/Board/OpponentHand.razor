@@ -1,0 +1,20 @@
+@namespace Game.Client.Components.Board
+
+@* The opponent's hand: card backs at the top centre, one per card, with the count beside them.
+
+   The count is public and a count is all the client has. Drawing the backs rather than only the number is
+   what makes the screen a table rather than one player and a scoreboard — and the room the Weather vacated
+   when it became a left-side icon is what pays for them. *@
+
+<div class="enemy-hand" data-testid="opponent-hand" data-count="@Count">
+    @for (int ndx = 0; ndx < Count; ndx++)
+    {
+        <img class="enemy-card" src="art/card-back.webp" alt="" aria-hidden="true" draggable="false"
+             style="z-index: @(Count - ndx);" />
+    }
+    <span class="enemy-hand-count" data-testid="opponent-hand-count">@Count</span>
+</div>
+
+@code {
+    [Parameter] public int Count { get; set; }
+}

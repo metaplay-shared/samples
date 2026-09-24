@@ -1,0 +1,163 @@
+@namespace Game.ClientBase.Components
+@using Game.ClientBase.Configuration
+@using Game.ClientBase.Services
+@inject IMetaplayConnectionService MetaplayService
+@inject ClientConfig Config
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@* ---------------- The connection shell ----------------
+   A server-authoritative game is dangerous when the connection dies, because the board stays on screen
+   looking interactive while every tap goes nowhere. This closes that at the app shell: it renders over the
+   whole app, so no screen has to check connection state, and it distinguishes the four cases that are not
+   the same event (see ConnectionTroublePolicy for the four cases). *@
+
+@if (Trouble.Kind != ConnectionTroubleKind.None)
+{
+    @if (Trouble.IsQuiet)
+    {
+        @* A tab that was away, or has only just come back. The link often lapses through nobody's fault and
+           heals a beat later, so this says what is happening and stays out of the way. *@
+        <div class="mp-conn-pill animate-fade-in" role="status" data-testid="connection-pill">
+            <span class="mp-conn-pill__dot" aria-hidden="true"></span>
+            <span>Reconnecting…</span>
+        </div>
+    }
+    else
+    {
+        <div class="mp-conn-scrim animate-fade-in"
+             role="alertdialog"
+             aria-modal="true"
+             aria-labelledby="mp-conn-title"
+             aria-describedby="mp-conn-body"
+             data-testid="connection-modal">
+            <div class="mp-conn-card animate-pop-in">
+                @if (Trouble.IsRetrying)
+                {
+                    <div class="mp-conn-spinner" aria-hidden="true"></div>
+                }
+                <h2 id="mp-conn-title" class="mp-conn-card__title font-display" data-testid="connection-modal-title">@Title</h2>
+                <p id="mp-conn-body" class="mp-conn-card__body" data-testid="connection-modal-body">@Body</p>
+                @if (ActionLabel != null)
+                {
+                    <button type="button" class="mp-conn-card__button" data-testid="connection-modal-action" @onclick="OnAction">
+                        @ActionLabel
+                    </button>
+                }
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private DotNetObjectReference<ConnectionShell>? _selfRef;
+    private IJSObjectReference? _module;
+
+    private ConnectionTrouble Trouble => MetaplayService.Trouble;
+
+    /// <summary>
+    /// The heading. Each case gets its own words: a desync is not a network fault, and a second tab is not an
+    /// outage, so neither is allowed to read as one.
+    /// </summary>
+    private string Title => Trouble.Kind switch
+    {
+        ConnectionTroubleKind.SessionSuperseded => "Opened in another tab",
+        ConnectionTroubleKind.Desync            => Trouble.IsRetrying ? "Re-syncing your game" : "Couldn't re-sync your game",
+        _                                       => Trouble.IsRetrying ? "Connection lost" : "Can't reach the server",
+    };
+
+    /// <summary>
+    /// The explanation. A desync is a bug and its member-level detail belongs in the incident report the SDK
+    /// files, never in the player's face, so this says only what it means for them.
+    /// </summary>
+    private string Body => Trouble.Kind switch
+    {
+        ConnectionTroubleKind.SessionSuperseded =>
+            $"{Config.AppTitle} is running in a newer tab, and only one of them can be connected. Use that tab instead.",
+        ConnectionTroubleKind.Desync when Trouble.IsRetrying =>
+            "Your game got out of step with the server. Fetching a fresh copy…",
+        ConnectionTroubleKind.Desync =>
+            "Your game got out of step with the server and we could not get a fresh copy.",
+        // The attempt count is only meaningful once the client has started counting. The first stretch is the
+        // SDK's own silent resume, which is not an attempt in this loop's sense.
+        _ when Trouble.IsRetrying && Trouble.Attempt > 0 =>
+            $"Trying to get you back in… (attempt {Trouble.Attempt} of {Trouble.MaxAttempts})",
+        _ when Trouble.IsRetrying =>
+            "Trying to get you back in…",
+        // The client has stopped. Whatever the SDK said about why — out of retries, a maintenance break, a
+        // client too old — is more specific than anything this could say instead.
+        _ =>
+            MetaplayService.ErrorMessage is { Length: > 0 } reason
+                ? reason
+                : "We tried and could not get back to the server. Check your connection.",
+    };
+
+    /// <summary>
+    /// The one control, or none while the client is still working. A superseded tab always offers one: the
+    /// newer tab may already be closed, and a player left with a dead page and no way on is worse than a
+    /// player who deliberately takes the session back.
+    /// </summary>
+    private string? ActionLabel => Trouble.Kind switch
+    {
+        ConnectionTroubleKind.SessionSuperseded => "Play in this tab instead",
+        _ when Trouble.IsRetrying               => null,
+        _                                       => "Try again",
+    };
+
+    private void OnAction() => MetaplayService.RetryNow();
+
+    protected override void OnInitialized()
+    {
+        MetaplayService.OnStateChanged += OnStateChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        try
+        {
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/ClientBase/js/connection-shell.js");
+            _selfRef = DotNetObjectReference.Create(this);
+            await _module.InvokeVoidAsync("subscribe", _selfRef);
+        }
+        catch (Exception ex)
+        {
+            // Without the page's visibility the shell still works; it just cannot tell a tab switch from an
+            // outage, and reports both as an outage.
+            Console.WriteLine($"[ConnectionShell] Page visibility unavailable: {ex.Message}");
+        }
+    }
+
+    /// <summary>Called from the page whenever the tab is shown or hidden.</summary>
+    [JSInvokable]
+    public void OnPageVisibilityChanged(bool isVisible)
+    {
+        MetaplayService.NotifyPageVisibilityChanged(isVisible);
+    }
+
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    public async ValueTask DisposeAsync()
+    {
+        MetaplayService.OnStateChanged -= OnStateChanged;
+
+        if (_module != null)
+        {
+            try
+            {
+                await _module.InvokeVoidAsync("unsubscribe");
+                await _module.DisposeAsync();
+            }
+            catch (Exception)
+            {
+                // The page is going away; there is nothing left to unsubscribe from.
+            }
+            _module = null;
+        }
+
+        _selfRef?.Dispose();
+        _selfRef = null;
+    }
+}

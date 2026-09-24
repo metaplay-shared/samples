@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="utf-8" />
+    <!-- Full-screen, app-like behavior while preserving browser zoom for accessibility. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Minimal browser chrome when launched/added to home screen. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Sticky Paws" />
+    <meta name="theme-color" content="#0d0a12" />
+    <!-- PWA manifest: enables standalone (chrome-free) launch from the home screen. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- Home-screen icon on iOS. Absolute paths so they resolve to the site root regardless of the
+         current SPA route (a relative path can resolve against a sub-route and 404 / hit the SPA
+         fallback, which makes iOS fall back to the generated "M" tile). -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+    <base href="/" />
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- Inter and Lilita One are served from this app, not from fonts.googleapis.com: the two faces decide the
+         width of every line the board measures, and a client that fetches them over the public internet draws in
+         whatever substitute the platform has whenever that fetch fails, silently. See wwwroot/fonts/README.md. -->
+    <link rel="stylesheet" href="fonts.css?v=__CLIENT_VERSION__" />
+    <link rel="stylesheet" href="_content/ClientBase/css/app-base.css?v=__CLIENT_VERSION__" />
+    <link rel="stylesheet" href="app.css?v=__CLIENT_VERSION__" />
+    <!-- The board and the card faces own their own stylesheets: one screen each, sized in the board
+         frame's own units, and loaded after app.css so they win where they overlap. -->
+    <link rel="stylesheet" href="board.css?v=__CLIENT_VERSION__" />
+    <link rel="stylesheet" href="cards.css?v=__CLIENT_VERSION__" />
+    <link rel="stylesheet" href="metagame.css?v=__CLIENT_VERSION__" />
+    <link rel="stylesheet" href="card-portraits.css?v=__CLIENT_VERSION__" />
+    <link rel="stylesheet" href="board-chrome.css?v=__CLIENT_VERSION__" />
+    <link rel="stylesheet" href="board-targeting.css?v=__CLIENT_VERSION__" />
+    <link rel="stylesheet" href="board-deltas.css?v=__CLIENT_VERSION__" />
+    <link rel="stylesheet" href="board-effects.css?v=__CLIENT_VERSION__" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <title>Sticky Paws</title>
+</head>
+
+<body class="min-h-screen" style="background: var(--bg-primary, #0d0a12);">
+    <div id="app">
+        <div style="position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: #a1a1aa; font-family: system-ui, sans-serif;">
+            Loading…
+        </div>
+    </div>
+
+    <div id="blazor-error-ui" data-nosnippet>
+        An unhandled error has occurred.
+        <!-- Reloads the current URL rather than navigating to ".", which would drop the ?env= override and
+             bring the app back up in a different environment than it crashed in. -->
+        <a href="javascript:location.reload()" class="reload">Reload</a>
+        <span class="dismiss">🗙</span>
+    </div>
+
+    <!-- Suppress the right-click / Android long-press context menu (CSS can't block this). -->
+    <script>
+        window.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    </script>
+    <script src="board-motion.js?v=__CLIENT_VERSION__"></script>
+    <script src="board-targeting.js?v=__CLIENT_VERSION__"></script>
+    <script src="board-effects.js?v=__CLIENT_VERSION__"></script>
+    <script src="_framework/blazor.webassembly.js?v=__CLIENT_VERSION__" autostart="false"></script>
+    <script>
+        // The server stamps published entry points with a content-derived version. The development
+        // server leaves the placeholder unchanged; its normal no-cache policy handles local rebuilds.
+        Blazor.start({
+            loadBootResource: function (type, name, defaultUri) {
+                if (type === 'dotnetjs') return defaultUri + '?v=__CLIENT_VERSION__';
+            }
+        });
+    </script>
+</body>
+
+</html>

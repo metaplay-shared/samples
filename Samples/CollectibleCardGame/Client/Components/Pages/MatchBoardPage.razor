@@ -1,0 +1,1186 @@
+@page "/match"
+@using Game.Logic
+@using Game.Client.Components.Board
+@using Game.Client.Components.Heist
+@using Game.Client.Components.Matchmaking
+@using Metaplay.Core
+@using Microsoft.JSInterop
+@inject MetaplayClientService MetaplayService
+@inject MatchService Match
+@inject MatchmakingService Matchmaking
+@inject CollectionService Collection
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@implements IDisposable
+
+<PageTitle>Sticky Paws — match</PageTitle>
+
+@* The board.
+
+   The client is a pure follower: nothing moves here until the server's update lands. The lift on a pressed
+   card and the highlight on a selected attacker are local feedback and are not game state — the card is not
+   in play, the attacker has not attacked. That is the one place "render nothing until the server says so" is
+   softened, and only in appearance.
+
+   The board never checks connection state: the app shell owns that, over the whole app. *@
+
+@if (!Match.HasMatch)
+{
+    <div class="board-waiting" data-testid="board-waiting">
+        <h3>No match</h3>
+        <p>You are not at a table. Practice starts one from Home.</p>
+        <a class="overlay-secondary" href="@Link("")" data-testid="board-back-home">Back to Home</a>
+    </div>
+}
+else
+{
+    <BoardView State="@BuildViewState()" />
+}
+
+@* The wait, over the screen the player pressed Play again on. Home mounts one of these too, and for the same
+   reason it is here as well rather than moved up to the shell: nothing is torn down for a wait of under a
+   minute, and the finished Heist is the second place a search can start (Docs/client.md, "The Heist" —
+   "with the searching dialog over the finished screen rather than in place of it, and a search the server
+   refuses says so there"). *@
+<SearchingDialog Matchmaking="@Matchmaking" />
+
+@code {
+    /// <summary>
+    /// How often the board repaints. It is the one screen that genuinely needs a loop: a countdown ring and a
+    /// beat queue are both time, not state, and the shell's own frame pump deliberately raises only what
+    /// nothing else can see.
+    /// </summary>
+    const int FrameIntervalMs = 16;
+
+    bool _running;
+
+    MatchModel? Model => Match.Model;
+    MatchRulesState? Board => Match.Rules;
+
+    WeatherInfo? Weather
+    {
+        get
+        {
+            SharedGameConfig? config = Match.GameConfig;
+            WeatherId? id = Match.Presentation.VisualState?.Weather ?? Board?.Weather?.Ref.WeatherId;
+            if (config == null || id == null)
+                return null;
+
+            return config.Weathers.TryGetValue(id, out WeatherInfo weather) ? weather : null;
+        }
+    }
+
+    List<HandCard> HandCards => Match.OwnHand ?? new List<HandCard>();
+
+    /// <summary>
+    /// The live board's half of the seam: everything <see cref="BoardView"/> draws, read off
+    /// <see cref="MatchService"/> once per render.
+    /// <para>
+    /// Built fresh each render rather than kept, because every member of it is already derived — the legality
+    /// sets are recomputed on the edges that change them and the clocks move every frame — so a cached copy
+    /// would be a second answer to keep in step. The offline scene preview fills the same object from a model
+    /// it built itself, which is what makes a screenshot of a scene a screenshot of this board.
+    /// </para>
+    /// </summary>
+    BoardViewState BuildViewState() => new BoardViewState
+    {
+        Rules              = Board!,
+        Visual             = Match.Presentation.VisualState ?? BoardVisualState.FromRules(Board!),
+        Beat               = Match.Presentation.CurrentBeat,
+        Config             = Match.GameConfig,
+        Weather            = Weather,
+        Stakes             = Model!.Stakes,
+        LocalSeat          = Match.LocalSeat,
+        OpponentSeat       = Match.OpponentSeat,
+        AttachmentEpoch    = Match.AttachmentEpoch,
+        LocalRoster        = Model.Seats[Match.LocalSeat],
+        OpponentRoster     = Model.Seats[Match.OpponentSeat],
+        History            = Match.Presentation.PresentedHistory,
+        HandCards          = HandCards,
+
+        PlayableCards      = _playableCards,
+        Attackers          = _attackers,
+        TargetableCritters = _targetableCritters,
+        TargetableDens     = _targetableDens,
+        ReplaceableCards   = _replaceableCards,
+        CritterTags        = CritterTags(),
+        CritterDeltas      = CritterDeltas(),
+        DenDeltas          = DenDeltas(),
+        DenTags            = _denHealTags,
+        CritterTagAmounts  = _healAmounts,
+        DenTagAmounts      = _denHealAmounts,
+
+        SelectedCard       = _selectedCard,
+        SelectedAttacker   = _selectedAttacker,
+        MulliganMarks      = _mulliganMarks,
+        PeekKeeps          = _peekKeeps,
+        RefusalReason      = _refusalNotice,
+        RefusalText        = RefusalText,
+        ShowsStrikeNotice  = ShowsStrikeNotice,
+        TargetingState     = TargetingState,
+
+        Now                = Match.Now.Value,
+        DeadlineAt         = ActiveDeadlineAt,
+        RingAllowed        = Match.Presentation.ShowsTurnIndicator,
+        TurnIndicatorState = TurnIndicatorState,
+        IsTrailing         = Match.Presentation.IsTrailing,
+        QueueLength        = Match.Presentation.QueueLength,
+        OwnTurnNumber      = OwnTurnNumber,
+        CanEndTurn         = CanEndTurn,
+        HasSomethingLeft   = HasSomethingLeft,
+        ActionsLeft        = ActionsLeft,
+        MaxDenHp           = Match.GameConfig?.Global.DenStartingHp ?? 0,
+        PopNewManaAcorn    = IsManaRampBeat,
+
+        ShowsPreMatchReveal = ShowsPreMatchReveal,
+        IsMulliganOpen     = Match.Presentation.VisualState?.Phase == MatchPhase.Mulligan,
+        CanAnswerMulligan  = Match.IsMulliganOpen,
+        IsBusy             = IsBusy,
+        PendingChoice      = Match.Presentation.IsTrailing ? null : Match.PendingChoice,
+        ShowsResultPanel   = Match.Presentation.ShowsTerminalPanel(Model.Result != null),
+        Result             = Model.Result,
+        AllSeatsAcked      = Model.AllSeatsAcked,
+        Heist              = BuildHeistState(),
+        IsFeedExpanded     = _feedExpanded,
+        IsPileOpen         = _openPile != null,
+        PileTitle          = PileTitle,
+        PileCards          = PileCards,
+
+        OnHandCardDragStart = EventCallback.Factory.Create<CardInstanceId>(this, id => SelectHandCard(id, deferPlay: true)),
+        OnHandCardClick    = EventCallback.Factory.Create<CardInstanceId>(this, OnHandCardClicked),
+        OnCritterClick     = EventCallback.Factory.Create<CardInstanceId>(this, OnCritterClicked),
+        OnDenClick         = EventCallback.Factory.Create<int>(this, OnDenClicked),
+        OnEndTurn          = EventCallback.Factory.Create(this, OnEndTurn),
+        OnMulliganConfirm  = EventCallback.Factory.Create(this, OnMulliganConfirm),
+        OnPeekToggle       = EventCallback.Factory.Create<CardInstanceId>(this, OnPeekToggle),
+        OnPeekConfirm      = EventCallback.Factory.Create(this, OnPeekConfirm),
+        OnLeave            = EventCallback.Factory.Create(this, OnLeave),
+        OnPlayAgain        = EventCallback.Factory.Create(this, OnPlayAgain),
+        OnOpenPile         = EventCallback.Factory.Create<(int Seat, ZoneInspector.PileKind Kind)>(this, OpenPile),
+        OnClosePile        = EventCallback.Factory.Create(this, ClosePile),
+        OnClearSelection   = EventCallback.Factory.Create(this, ClearSelection),
+        OnToggleFeed       = EventCallback.Factory.Create(this, ToggleFeed),
+    };
+
+    /// <summary>
+    /// Whether the beat on screen is this seat's own max-mana ramp — the one mana change a player would
+    /// otherwise miss entirely. It rides the beat queue like every other flourish, so
+    /// the pop plays inside the pause the server already held for it.
+    /// </summary>
+    bool IsManaRampBeat
+        => Model != null
+           && Match.Presentation.RunningBeat is ManaChangedEvent mana
+           && mana.Seat == Match.LocalSeat
+           && ManaRamp.IsMaxOnlyRamp(Model.History, mana);
+
+    /// <summary>
+    /// The deadline the board may draw a ring for: only the one in force while the game is on. The Heist's own
+    /// clock is deliberately not this one — by the time it is armed the <em>engine</em> phase is
+    /// <c>Complete</c>, so the board draws no ring at all and the Heist screen reads the stamp itself.
+    /// </summary>
+    MetaTime? ActiveDeadlineAt => Board?.Phase == MatchPhase.Playing ? Model?.Pacing.DeadlineAt : null;
+
+    // ---- the Heist ----
+
+    /// <summary>
+    /// The Heist screen's half of the seam, or null when this finished match lands on the plain result panel.
+    /// <para>
+    /// Every value here is state the client already has. The lineup is the difference between two public
+    /// lists — the loser's unfiltered played cards and the menu the table froze — and the transfer preview is
+    /// a <em>function</em> rather than a value, because which rank this account holds a card at is what the
+    /// player is about to change and has to be read live as they click around.
+    /// </para>
+    /// </summary>
+    HeistViewState? BuildHeistState()
+    {
+        MatchModel? model = Model;
+        if (model?.Result == null || !HeistPresentation.ShowsHeistScreen(model.Phase, model.Result))
+            return null;
+
+        int winnerSeat = model.Result.WinnerSeat;
+        if (!MatchSeats.IsValid(winnerSeat))
+            return null;
+
+        int          loserSeat = MatchSeats.Other(winnerSeat);
+        int          picksOwed = MatchHeistPolicy.PicksOwedForMatch(model.Stakes, model.Result);
+        List<CardId> picks     = model.Result.Heist?.Picks ?? new List<CardId>();
+        bool         isWinner  = Match.LocalSeat == winnerSeat;
+
+        return new HeistViewState
+        {
+            Result           = model.Result,
+            Stakes           = model.Stakes,
+            Config           = Match.GameConfig,
+            IsWinner         = isWinner,
+            Stage            = HeistPresentation.Stage(model.Phase, model.Result, Match.LocalSeat, picksOwed),
+            PicksOwed        = picksOwed,
+            Picks            = picks,
+            Lineup           = HeistPresentation.Lineup(
+                                   model.Rules?.Result?.PlayedBy(loserSeat),
+                                   model.HeistEligibility != null ? model.HeistEligibility[loserSeat] : null,
+                                   picks,
+                                   model.Stakes.Locked(loserSeat),
+                                   model.Stakes.Locked(winnerSeat)),
+            AnyAutoDefaulted = model.Result.Heist?.AnyPickAutoDefaulted ?? false,
+            DeadlineAt       = model.Pacing.DeadlineAt,
+            Now              = Match.Now.Value,
+            AllSeatsAcked    = model.AllSeatsAcked,
+            RefusalText      = HeistRefusalText,
+            MyMoveFor        = card => MyHeistMove(isWinner, card),
+            MyRankFor        = card => Collection.RankOf(card),
+            OnPick           = EventCallback.Factory.Create<CardId>(this, OnHeistPick),
+            OnPlayAgain      = EventCallback.Factory.Create(this, OnPlayAgain),
+            OnLeave          = EventCallback.Factory.Create(this, OnLeave),
+        };
+    }
+
+    /// <summary>
+    /// What taking one card would do to this account's own copy, read off the live collection and the live
+    /// lock slots — the same two public facts the server's own transfer reads, through the same function.
+    /// </summary>
+    HeistRankMove MyHeistMove(bool isWinner, CardId card)
+    {
+        GlobalConfig? global = Match.GameConfig?.Global;
+        if (global == null)
+            return default;
+
+        return HeistPresentation.Mine(isWinner, Collection.Owns(card), Collection.RankOf(card), Collection.IsLocked(card), global);
+    }
+
+    /// <summary>
+    /// The winner's pick. Sent as a seat intent and nothing else: the screen is a presentation of a
+    /// server-side transaction, so it shows the pick it sent and then the collection it is given back.
+    /// </summary>
+    void OnHeistPick(CardId card) => Match.SubmitSeatIntent(new HeistPickIntent(card));
+
+    /// <summary>
+    /// The Heist screen's refusal line. Read straight off the service rather than through the board's own
+    /// transient notice, which is cleared as the board's input frees up: a refused pick has to stay on screen
+    /// until the player picks again, because on that screen the pick is the whole decision.
+    /// <para>
+    /// <c>NotYourTurn</c> gets a sentence here where the board deliberately absorbs it. On the board that code
+    /// means something the server did first, which is usually good news and is answered by the card going back
+    /// down; on this screen there is nothing to put down, so the same silence would be a press that did
+    /// nothing.
+    /// </para>
+    /// </summary>
+    string HeistRefusalText => Match.LastRefusal?.Reason switch
+    {
+        MatchRefusalCode.NotYourTurn => "That pick is not yours to make.",
+        null                         => "",
+        MatchRefusalCode reason      => TextForRefusal(reason.ToString()),
+    };
+
+    // ---- the pre-match reveal ----
+
+    /// <summary>
+    /// How long the wager stays on screen before it gets out of the way. Long enough to read six values and a
+    /// sentence, and it costs no clock at all: the panel blocks nothing, so the mulligan underneath it is
+    /// answerable from the first frame and a player who does answer takes the panel with them.
+    /// </summary>
+    const int RevealMs = 8000;
+
+    /// <summary>
+    /// Which table the reveal has already been shown for. Keyed on the match's <em>identity</em> rather than
+    /// on the attachment epoch, because a reconnect is a new epoch on the same table — and being shown the
+    /// wager twice for one game is exactly what "shown once, before the mulligan" is not.
+    /// </summary>
+    EntityId? _revealShownFor;
+
+    MetaTime _revealUntil;
+    bool _revealDismissed;
+    bool _revealWasShowing;
+
+    /// <summary> Whether the panel is up: within its window, and not yet waved away by a mulligan press. </summary>
+    bool ShowsPreMatchReveal => Model?.Result == null && !_revealDismissed && Match.Now.Value < _revealUntil;
+
+    /// <summary> A table this page has not shown the wager for yet. Called where the model first arrives. </summary>
+    void MaybeOpenPreMatchReveal()
+    {
+        MatchModel? model = Model;
+        if (model == null || _revealShownFor == model.EntityId)
+            return;
+
+        _revealShownFor  = model.EntityId;
+        _revealDismissed = false;
+        _revealUntil     = Match.Now.Value + MetaDuration.FromMilliseconds(RevealMs);
+    }
+
+    /// <summary>
+    /// The first mulligan interaction takes the panel away. The wager has been read by then — that is what the
+    /// player is about to act on — and the hand underneath is what they reached for.
+    /// </summary>
+    void DismissPreMatchReveal() => _revealDismissed = true;
+
+    // ---- the strike notice ----
+
+    /// <summary>
+    /// How long "your turn ran out" stays on screen. Long enough to read one sentence twice; nothing waits on
+    /// it and no clock in the game is spent by it, so it is a plain wall-clock window rather than a beat.
+    /// </summary>
+    const int StrikeNoticeMs = 7000;
+
+    /// <summary> The count this page has already seen on its own seat, so only an increase raises a notice. </summary>
+    int _seenStrikes;
+
+    MetaTime _strikeNoticeUntil;
+
+    /// <summary>
+    /// Whether the transient notice is up. It goes away on its own and is superseded by the covered-seat
+    /// notice, which <see cref="BoardView"/> prefers, once a bot actually has the seat.
+    /// </summary>
+    bool ShowsStrikeNotice => Match.Now.Value < _strikeNoticeUntil;
+
+    /// <summary>
+    /// Raise the notice on a strike this page <em>watched</em> land. A whole state arriving with no prior
+    /// frame carries whatever count the seat already had, so telling a reconnecting player their turn just ran
+    /// out would be a notice about something they did not miss — the same rule the board's beats follow
+    /// (<c>Docs/client.md</c>, "The first frame"). The count itself is never drawn.
+    /// </summary>
+    void TrackOwnStrikes()
+    {
+        int strikes = SeenStrikeCount();
+
+        // The notice ends when the thing it warns about stops being true. A count that dropped is the seat
+        // having acted, so the standing "one more and a bot takes the seat" is now false in its second clause
+        // — the player has the whole budget again — and leaving it up for the rest of its window would tell
+        // them the opposite of what they just earned.
+        if (strikes < _seenStrikes)
+            _strikeNoticeUntil = default;
+
+        if (strikes > _seenStrikes)
+            _strikeNoticeUntil = Match.Now.Value + MetaDuration.FromMilliseconds(StrikeNoticeMs);
+
+        _seenStrikes = strikes;
+    }
+
+    /// <summary> The local seat's count, or zero while there is no seat to read it off. </summary>
+    int SeenStrikeCount()
+        => Model != null && Match.LocalSeat >= 0 ? Model.Seats[Match.LocalSeat].Strikes : 0;
+
+    string Link(string path) => EnvironmentLink.Href(Navigation, path);
+
+    // ---- interaction state. All of it local feedback; none of it game state. ----
+
+    CardInstanceId? _selectedCard;
+    CardInstanceId? _selectedAttacker;
+    readonly HashSet<CardInstanceId> _mulliganMarks = new HashSet<CardInstanceId>();
+    readonly HashSet<CardInstanceId> _peekKeeps = new HashSet<CardInstanceId>();
+    (int Seat, ZoneInspector.PileKind Kind)? _openPile;
+
+    /// <summary> Whether the event feed is showing more than its last three lines. </summary>
+    bool _feedExpanded;
+    string? _refusalNotice;
+    bool _wasMulliganOpen;
+
+    // ---- what the legality functions say is live right now ----
+
+    HashSet<CardInstanceId> _playableCards = new HashSet<CardInstanceId>();
+
+    /// <summary> The cards in hand the mulligan may put back, which is what the fan offers while it is open. </summary>
+    HashSet<CardInstanceId> _replaceableCards = new HashSet<CardInstanceId>();
+
+    HashSet<CardInstanceId> _attackers = new HashSet<CardInstanceId>();
+    HashSet<CardInstanceId> _targetableCritters = new HashSet<CardInstanceId>();
+    List<int> _targetableDens = new List<int>();
+
+    protected override void OnInitialized()
+    {
+        MetaplayService.OnStateChanged += OnStateChanged;
+        Match.OnMatchChanged += OnStateChanged;
+        Match.OnMatchAttachmentChanged += OnAttachmentChanged;
+
+        // Play again starts a search from this screen, so the dialog's own state changes have to reach it.
+        // Its countdown is time rather than state and is repainted from the frame loop below, which this
+        // screen already runs — Home needs a loop of its own for exactly that and has one.
+        Matchmaking.OnSearchChanged += OnStateChanged;
+
+        // Here as well as on an attachment change, and the difference is the whole of when the panel is seen:
+        // the page turns *because* a table attached, so this component is built after that event has already
+        // been raised and its own handler will not fire for the attach that brought the player here. Keying on
+        // the match's identity is what makes the two calls one showing rather than two.
+        MaybeOpenPreMatchReveal();
+
+        // Same reason, and the same first-frame rule: whatever the seat arrives carrying is the baseline.
+        _seenStrikes = SeenStrikeCount();
+
+        ReadTuningFromQuery();
+
+        _running = true;
+        _ = RunFrameLoopAsync();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // The OS preference can only turn reduced motion *on*, never off, so `?motion=reduced` -- read
+        // synchronously in OnInitialized, before this runs -- stays an override rather than being cleared by
+        // a player who has expressed no preference.
+        try
+        {
+            if (await JS.InvokeAsync<bool>("stickyPawsBoardMotion.prefersReducedMotion"))
+                Match.Tuning.ReducedMotion = true;
+        }
+        catch (JSException)
+        {
+        }
+    }
+
+    /// <summary>
+    /// The client's animation knobs, forceable from the query string. At the length a beat ships with it is
+    /// over faster than a cold WebAssembly boot, so no test could be made to observe one — this is what lets a
+    /// test watch each half of a beat instead of racing it.
+    /// </summary>
+    void ReadTuningFromQuery()
+    {
+        Uri uri = new Uri(Navigation.Uri);
+        foreach (string pair in uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            int equals = pair.IndexOf('=');
+            string key = equals > 0 ? pair[..equals] : pair;
+            string value = equals > 0 ? Uri.UnescapeDataString(pair[(equals + 1)..]) : "";
+
+            if (key == "beat" && int.TryParse(value, out int beatMs))
+                Match.Tuning.BeatLength = MetaDuration.FromMilliseconds(beatMs);
+            else if (key == "motion" && value == "reduced")
+                Match.Tuning.ReducedMotion = true;
+            else if (key == "stale" && value == "1")
+                _staleIntents = true;
+        }
+    }
+
+    /// <summary>
+    /// The board's own frame loop. Every frame is guarded: this task is fire-and-forget, so one throwing frame
+    /// would otherwise end the loop into an unobserved task and leave the board frozen with nothing in the log
+    /// — the ring stops, beats stop advancing, <c>IsTrailing</c> sticks and the result panel is withheld
+    /// forever. The first sighting of each distinct failure is reported and the repeats are counted, which is
+    /// the same treatment the SDK frame pump got.
+    /// </summary>
+    async Task RunFrameLoopAsync()
+    {
+        while (_running)
+        {
+            try
+            {
+                Match.Tick();
+
+                // The reveal leaves by the clock rather than by a state change, so the frame signature cannot
+                // see it go. One comparison a frame is what puts the board back without it.
+                if (ShowsPreMatchReveal != _revealWasShowing)
+                {
+                    _revealWasShowing = ShowsPreMatchReveal;
+                    await InvokeAsync(StateHasChanged);
+                }
+
+                // The searching dialog's countdown is time too, and the match's own frame signature cannot see
+                // it: a finished table has no deadline left to tick. One comparison a frame, on the text
+                // rather than on the clock, so a static dialog costs no renders at all.
+                if (Matchmaking.IsSearching && Matchmaking.Countdown != _searchCountdownShown)
+                {
+                    _searchCountdownShown = Matchmaking.Countdown;
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+            catch (Exception ex)
+            {
+                ReportFrameFailure(ex);
+            }
+
+            await Task.Delay(FrameIntervalMs);
+        }
+    }
+
+    /// <summary> The countdown the dialog last drew, so a frame that changes nothing renders nothing. </summary>
+    string _searchCountdownShown = "";
+
+    readonly Dictionary<string, int> _frameFailureCounts = new Dictionary<string, int>();
+
+    void ReportFrameFailure(Exception ex)
+    {
+        string key = $"{ex.GetType().FullName}: {ex.Message}";
+
+        if (_frameFailureCounts.TryGetValue(key, out int seen))
+        {
+            _frameFailureCounts[key] = seen + 1;
+
+            if ((seen + 1) % 100 == 0)
+                Console.WriteLine($"[MatchBoardPage] frame failure still recurring ({seen + 1}x): {key}");
+
+            return;
+        }
+
+        _frameFailureCounts[key] = 1;
+        Console.WriteLine($"[MatchBoardPage] frame failure: {ex}");
+    }
+
+    protected override void OnParametersSet() => RefreshLegality();
+
+    void OnStateChanged()
+    {
+        ClearMulliganMarksWhenClosed();
+        ClearSelectionIfNothingInFlight();
+        TrackOwnStrikes();
+        RefreshLegality();
+        LeaveIfTheTableIsGone();
+        InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// A whole state arrived with no prior frame. The selection is dropped rather than carried across: an
+    /// attacker chosen before a reconnect may not be on the board any more.
+    /// </summary>
+    void OnAttachmentChanged()
+    {
+        ClearSelection();
+        _mulliganMarks.Clear();
+        _wasMulliganOpen = Match.IsMulliganOpen;
+        _peekKeeps.Clear();
+        _openPile = null;
+        _refusalNotice = null;
+
+        // The count the fresh state carries is the baseline, not news: a player who reconnects onto a seat
+        // that already has a strike against it did not just watch it happen.
+        _seenStrikes = SeenStrikeCount();
+        _strikeNoticeUntil = default;
+
+        MaybeOpenPreMatchReveal();
+
+        LeaveIfTheTableIsGone();
+        InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// A lapsed mulligan has no confirm callback to clear its local scissors, so the authoritative phase
+    /// edge owns the same cleanup as an explicit answer.
+    /// </summary>
+    void ClearMulliganMarksWhenClosed()
+    {
+        bool isOpen = Match.IsMulliganOpen;
+        if (_wasMulliganOpen && !isOpen)
+            _mulliganMarks.Clear();
+        _wasMulliganOpen = isOpen;
+    }
+
+    /// <summary>
+    /// Leave for Home when <b>the server has said the table is gone</b> — never merely because the sub-entity
+    /// detached.
+    /// <para>
+    /// The detach edge is not the signal, and believing it was is the mistake this replaces. A reconnect
+    /// detaches as soon as the connection stops being <c>Connected</c> and re-attaches only on the next
+    /// session's start, hundreds of milliseconds to seconds later — they are not one continuation — so a board
+    /// that navigated on "detached with nothing replacing it" left a live match on every in-page outage that
+    /// outlived the resume window: a laptop sleep, a backgrounded tab, a network switch. The player was
+    /// bounced to Home with no notice and then bounced back when the attach landed, losing the board's query
+    /// string on the way.
+    /// </para>
+    /// <para>
+    /// <see cref="MatchService.MatchGoneUnseen"/> is the server's own verdict, set by the same handshake that
+    /// clears the account's pointer, and it is the fact the notice on Home is already built on. Requiring the
+    /// board to be gone as well is belt and braces: the flag is cleared when a new match starts, so it cannot
+    /// be true while a live board is on screen.
+    /// </para>
+    /// </summary>
+    void LeaveIfTheTableIsGone()
+    {
+        if (_leaving || Match.HasMatch || !Match.MatchGoneUnseen)
+            return;
+
+        _leaving = true;
+        InvokeAsync(() => EnvironmentLink.NavigateTo(Navigation, ""));
+    }
+
+    /// <summary> Whether this page has already started leaving, so the navigation is raised once. </summary>
+    bool _leaving;
+
+    /// <summary>
+    /// What is live, read off the shared legality functions rather than decided here. Legality is shown, never
+    /// explained: playable cards lift and take input, everything else is dimmed and inert.
+    /// </summary>
+    void RefreshLegality()
+    {
+        _playableCards = new HashSet<CardInstanceId>();
+        _attackers = new HashSet<CardInstanceId>();
+        _targetableCritters = new HashSet<CardInstanceId>();
+        _targetableDens = new List<int>();
+        _replaceableCards = new HashSet<CardInstanceId>();
+        _healTags = new Dictionary<CardInstanceId, string>();
+        _denHealTags = new Dictionary<int, string>();
+        _healAmounts = new Dictionary<CardInstanceId, int>();
+        _denHealAmounts = new Dictionary<int, int>();
+        _cardDeltas = new Dictionary<CardInstanceId, TargetDelta>();
+        _denCardDeltas = new Dictionary<int, TargetDelta>();
+
+        if (!Match.HasMatch)
+            return;
+
+        // What the mulligan may put back: while it is open the hand holds only the opening deal, so every card.
+        // Built here rather than read from a property that would allocate on every one of the board's ten
+        // frames a second.
+        if (Match.IsMulliganOpen)
+        {
+            foreach (HandCard card in HandCards)
+                _replaceableCards.Add(card.Instance);
+        }
+
+        if (IsBusy)
+            return;
+
+        foreach (MatchIntent intent in Match.LegalIntents())
+        {
+            switch (intent)
+            {
+                case PlayCardIntent play:
+                    _playableCards.Add(play.Card);
+                    if (_selectedCard.HasValue && play.Card == _selectedCard.Value)
+                        AddTarget(play.Target);
+                    break;
+
+                case AttackIntent attack:
+                    _attackers.Add(attack.Attacker);
+                    if (_selectedAttacker.HasValue && attack.Attacker == _selectedAttacker.Value)
+                        AddTarget(attack.Target);
+                    break;
+            }
+        }
+
+        RefreshCardPreviews();
+
+        // A refusal is shown and then forgotten once the input is free again: it is a fact about one attempt.
+        _refusalNotice = Match.LastRefusal?.Reason.ToString();
+    }
+
+    /// <summary>
+    /// What aiming at each lit critter would do — an attack's consequence, or, while a Snack is choosing its
+    /// target, the amount it would actually restore. One map, because a critter is only ever one of the two.
+    /// The words are <see cref="TargetPreview"/>'s, so the live board and the offline scene preview say the
+    /// same thing.
+    /// </summary>
+    Dictionary<CardInstanceId, string> CritterTags()
+        => _selectedAttacker.HasValue && Board != null
+            ? TargetPreview.Consequences(Board, Match.LocalSeat, _selectedAttacker.Value, _targetableCritters)
+            : _healTags;
+
+    Dictionary<CardInstanceId, TargetDelta> CritterDeltas()
+        => _selectedAttacker.HasValue && Board != null
+            ? TargetPreview.Attacks(Board, Match.LocalSeat, _selectedAttacker.Value, _targetableCritters)
+            : _cardDeltas;
+
+    Dictionary<int, TargetDelta> DenDeltas()
+    {
+        if (!_selectedAttacker.HasValue || Board == null)
+            return _denCardDeltas;
+        Dictionary<int, TargetDelta> deltas = new Dictionary<int, TargetDelta>();
+        BoardCritter attacker = Board.Seat(Match.LocalSeat).FindCritter(_selectedAttacker.Value);
+        if (attacker != null)
+        {
+            foreach (int seat in _targetableDens)
+                deltas[seat] = TargetPreview.AttackDen(attacker, Board.Seat(seat).DenHp);
+        }
+        return deltas;
+    }
+
+    Dictionary<CardInstanceId, TargetDelta> _cardDeltas = new Dictionary<CardInstanceId, TargetDelta>();
+    Dictionary<int, TargetDelta> _denCardDeltas = new Dictionary<int, TargetDelta>();
+
+    // What a heal being aimed would restore per target: the words the tag shows, and the number beside them
+    // for a fixture to read rather than parse out of copy. Empty unless a heal is choosing.
+    Dictionary<CardInstanceId, string> _healTags = new Dictionary<CardInstanceId, string>();
+    Dictionary<int, string> _denHealTags = new Dictionary<int, string>();
+    Dictionary<CardInstanceId, int> _healAmounts = new Dictionary<CardInstanceId, int>();
+    Dictionary<int, int> _denHealAmounts = new Dictionary<int, int>();
+
+    /// <summary>
+    /// Numeric outcomes for legal targets: shared heal queries, or a single literal chosen-target burn.
+    /// TargetPreview deliberately declines damage chains and amounts that require a board counter.
+    /// </summary>
+    void RefreshCardPreviews()
+    {
+        if (!_selectedCard.HasValue)
+            return;
+
+        MatchRulesState? rules = Board;
+        SharedGameConfig? config = Match.GameConfig;
+        if (rules == null || config == null)
+            return;
+
+        CardInfo? card = null;
+        int rank = 0;
+        foreach (HandCard held in HandCards)
+        {
+            if (held.Instance != _selectedCard.Value)
+                continue;
+
+            card = config.Cards.TryGetValue(held.Card, out CardInfo info) ? info : null;
+            rank = held.Rank;
+            break;
+        }
+
+        if (card == null)
+            return;
+
+        int? damageAmount = TargetPreview.ChosenDamageAmount(card, rank);
+        if (damageAmount.HasValue)
+        {
+            foreach (CardInstanceId target in _targetableCritters)
+            {
+                BoardCritter critter = ResolutionRules.FindCritterAnywhere(rules, target);
+                if (critter != null)
+                    _cardDeltas[target] = TargetPreview.DamageCritter(critter, damageAmount.Value);
+            }
+            foreach (int seat in _targetableDens)
+                _denCardDeltas[seat] = TargetPreview.DamageDen(rules.Seat(seat).DenHp, damageAmount.Value);
+            return;
+        }
+
+        if (HealPreview.ChosenHealAmount(card, rank) == null)
+            return;
+
+        int amount = HealPreview.ChosenHealAmount(card, rank)!.Value;
+
+        foreach (CardInstanceId target in _targetableCritters)
+        {
+            int? healed = HealPreview.ForTarget(rules, config.Global, card, rank, EffectTargetRef.OnCritter(target));
+            BoardCritter critter = ResolutionRules.FindCritterAnywhere(rules, target);
+            if (!healed.HasValue || critter == null)
+                continue;
+
+            _healAmounts[target] = healed.Value;
+            _cardDeltas[target] = TargetPreview.HealCritter(critter, amount);
+            _healTags[target] = TargetPreview.CritterHeal(critter, amount);
+        }
+
+        foreach (int seat in _targetableDens)
+        {
+            int? healed = HealPreview.ForTarget(rules, config.Global, card, rank, EffectTargetRef.Den(seat));
+            if (!healed.HasValue)
+                continue;
+
+            _denHealAmounts[seat] = healed.Value;
+            _denCardDeltas[seat] = TargetPreview.HealDen(rules.Seat(seat).DenHp, config.Global.DenStartingHp, amount);
+            _denHealTags[seat] = TargetPreview.DenHeal(rules.Seat(seat).DenHp, config.Global.DenStartingHp, amount);
+        }
+    }
+
+    void AddTarget(EffectTargetRef target)
+    {
+        if (target.IsCritter)
+            _targetableCritters.Add(target.Critter);
+        else if (target.IsDen && !_targetableDens.Contains(target.DenSeat))
+            _targetableDens.Add(target.DenSeat);
+    }
+
+    // ---- input ----
+
+    void OnHandCardClicked(CardInstanceId instance) => SelectHandCard(instance, deferPlay: false);
+
+    void SelectHandCard(CardInstanceId instance, bool deferPlay)
+    {
+        // Reaching for a card is the first mulligan interaction, so the wager panel gets out of the way.
+        DismissPreMatchReveal();
+
+        // The mulligan is the one place the client batches, because the server resolves it as one step.
+        if (Match.IsMulliganOpen)
+        {
+            // Guarded like every other input path. Without it a click lands while the deal's beats are still
+            // playing — the authoritative phase is already Mulligan, the overlay is not on screen yet — and
+            // marks a card the player cannot see marked.
+            if (IsBusy)
+                return;
+
+            // Only a card the mulligan can put back takes a mark, by the same predicate the table's own
+            // check calls: the board offers nothing the table would refuse.
+            if (!_replaceableCards.Contains(instance))
+                return;
+
+            if (!_mulliganMarks.Remove(instance))
+                _mulliganMarks.Add(instance);
+            return;
+        }
+
+        if (IsBusy || !_playableCards.Contains(instance))
+            return;
+
+        _selectedAttacker = null;
+
+        // Clicks play a targetless card immediately; touch drags defer it until release in the play area.
+        List<EffectTargetRef> targets = Match.TargetsFor(instance);
+        if (targets.Count == 0 && !deferPlay)
+        {
+            Submit(new PlayCardIntent(instance, EffectTargetRef.None));
+            return;
+        }
+
+        _selectedCard = _selectedCard.HasValue && _selectedCard.Value == instance ? null : instance;
+        RefreshLegality();
+    }
+
+    void OnCritterClicked(CardInstanceId instance)
+    {
+        if (IsBusy)
+            return;
+
+        // A live selection consumes the press: this is the target it was waiting for.
+        if (_selectedCard.HasValue && _targetableCritters.Contains(instance))
+        {
+            Submit(new PlayCardIntent(_selectedCard.Value, EffectTargetRef.OnCritter(instance)));
+            return;
+        }
+
+        if (_selectedAttacker.HasValue && _targetableCritters.Contains(instance))
+        {
+            Submit(new AttackIntent(_selectedAttacker.Value, EffectTargetRef.OnCritter(instance)));
+            return;
+        }
+
+        if (_attackers.Contains(instance))
+        {
+            _selectedCard = null;
+            _selectedAttacker = _selectedAttacker.HasValue && _selectedAttacker.Value == instance ? null : instance;
+            RefreshLegality();
+        }
+    }
+
+    void OnDenClicked(int seat)
+    {
+        if (IsBusy)
+            return;
+
+        // The same re-check the critter path makes: the board offers nothing the table would refuse, and this
+        // handler is the one seam where the offer and the send are decided in different places.
+        if (!_targetableDens.Contains(seat))
+            return;
+
+        if (_selectedCard.HasValue)
+            Submit(new PlayCardIntent(_selectedCard.Value, EffectTargetRef.Den(seat)));
+        else if (_selectedAttacker.HasValue)
+            Submit(new AttackIntent(_selectedAttacker.Value, EffectTargetRef.Den(seat)));
+    }
+
+    void OnEndTurn()
+    {
+        if (!CanEndTurn)
+            return;
+
+        Submit(new EndTurnIntent());
+    }
+
+    void OnMulliganConfirm()
+    {
+        DismissPreMatchReveal();
+
+        if (!Match.IsMulliganOpen || IsBusy)
+            return;
+
+        Submit(new MulliganIntent(new List<CardInstanceId>(_mulliganMarks)));
+        _mulliganMarks.Clear();
+    }
+
+    void OnPeekToggle(CardInstanceId instance)
+    {
+        if (!_peekKeeps.Remove(instance))
+            _peekKeeps.Add(instance);
+    }
+
+    void OnPeekConfirm()
+    {
+        if (Match.PendingChoice == null || IsBusy)
+            return;
+
+        // The answer names indices in the reveal, never cards: an index means nothing to anybody without the
+        // revealed list, so nothing about this move has to be kept off the timeline. It echoes the held
+        // choice's id, so an answer to a reveal the table has moved past is refused rather than misapplied.
+        List<HandCard> revealed = Match.PendingChoice.Revealed;
+        List<int>          keep     = new List<int>(_peekKeeps.Count);
+
+        for (int ndx = 0; ndx < revealed.Count; ndx++)
+        {
+            if (_peekKeeps.Contains(revealed[ndx].Instance))
+                keep.Add(ndx);
+        }
+
+        Submit(new EffectChoiceIntent(Board!.PendingChoice?.Id ?? 0, keep));
+        _peekKeeps.Clear();
+    }
+
+    void OnLeave()
+    {
+        // Leaving is a disconnect that skips grace. The game is still played out and the result is still
+        // real — that is the point.
+        Match.SubmitSeatIntent(new LeaveMatchIntent());
+        EnvironmentLink.NavigateTo(Navigation, "");
+    }
+
+    /// <summary>
+    /// Play the same kind of match again <b>from where the player is standing</b>. After a practice match that
+    /// is another practice match against the same bot profile; after a ranked match the searching dialog goes
+    /// up over the finished screen, and a search the server refuses says so there (<c>Docs/client.md</c>,
+    /// "The Heist").
+    /// <para>
+    /// The deck is the one Home's own picker would have opened on, chosen by the same shared function: the
+    /// deck this account was last seated with, falling back to the first starter deck. There is no picker
+    /// here, and there should not be — a screen that asked which deck next would be a menu.
+    /// </para>
+    /// </summary>
+    async Task OnPlayAgain()
+    {
+        DeckChoice? deck = PracticeDeckPick.Choose(
+            null,
+            Collection.LastPlayedDeck,
+            Collection.Decks.Keys,
+            StarterDeckIds());
+
+        if (deck == null)
+        {
+            // Nothing to queue with, which the config build refuses to produce. Home is the honest fallback.
+            EnvironmentLink.NavigateTo(Navigation, "");
+            return;
+        }
+
+        MatchModel? model = Model;
+        if (model != null && !model.Stakes.IsRanked && Match.LocalSeat >= 0)
+        {
+            if (_practiceAgainPending)
+                return;
+
+            // The new table's association turns the page, as it does from Home, and the same bounded lock
+            // keeps a double tap from sending twice.
+            _practiceAgainPending = true;
+            Match.StartPracticeMatch(deck, model.Seats[Match.OpponentSeat].BotProfile);
+            await Task.Delay(PracticeAgainLockMs);
+            _practiceAgainPending = false;
+            return;
+        }
+
+        await Matchmaking.EnterRankedQueueAsync(deck);
+    }
+
+    bool _practiceAgainPending;
+    const int PracticeAgainLockMs = 2000;
+
+    IEnumerable<StarterDeckId> StarterDeckIds()
+    {
+        foreach (StarterDeckInfo starter in Collection.StarterDecks)
+            yield return starter.StarterDeckId;
+    }
+
+    void Submit(MatchIntent intent)
+    {
+        _refusalNotice = null;
+        if (intent is PlayCardIntent play)
+            _selectedCard = play.Card;
+
+        // The selection is held until the server answers, not dropped at send. While an intent is in flight
+        // the card stays lifted and an attacker stays highlighted, which is the acknowledgement client.md
+        // asks for ("While an attack is in flight the attacker and its target stay highlighted, which is the
+        // same acknowledgement the lifted card is"). Clearing here instead made the round trip invisible
+        // except as a disabled board, and made "a refused card falls back into the hand" untestable, because
+        // there was never a lifted card for a refusal to drop.
+        if (_staleIntents ? Match.SubmitAfterTurnPassed(intent) : Match.Submit(intent))
+            _awaitingAnswer = true;
+        else
+            ClearSelection();
+    }
+
+    /// <summary>
+    /// Whether a selection is being held for an intent that has been sent and not yet answered.
+    /// <para>
+    /// The distinction matters: a lift with <em>nothing</em> in flight is a card waiting for the player to
+    /// pick its target, and that must survive every board change around it. Dropping the selection whenever
+    /// no intent was in flight — which is what "clear if not locked" means — wipes the player's half-made move
+    /// on the opponent's next step, so a targeted card can never be played at all.
+    /// </para>
+    /// </summary>
+    bool _awaitingAnswer;
+
+    /// <summary>
+    /// The intent in flight was answered — consumed or refused — so whatever it lifted comes back down. Driven
+    /// by the state change rather than the send, which is what makes the lift last exactly one round trip.
+    /// </summary>
+    void ClearSelectionIfNothingInFlight()
+    {
+        if (!_awaitingAnswer || Match.IsInputLocked)
+            return;
+
+        _awaitingAnswer = false;
+        ClearSelection();
+    }
+
+    /// <summary>
+    /// Whether <c>?stale=1</c> asked for every intent to reach the table after the turn has passed
+    /// (<see cref="MatchService.SubmitAfterTurnPassed"/>).
+    /// <para>
+    /// It exists so the refusal path can be tested for real. Every route to a refusal that a browser can take
+    /// is closed by design: the input locks for the round trip, the button renders <c>disabled</c> (and
+    /// browsers dispatch no click on a disabled button, forced or not), and <c>OnEndTurn</c> re-checks before
+    /// sending. That is correct behaviour and it means a test cannot otherwise produce the one thing worth
+    /// asserting — that a refused intent is absorbed, renders its reason rather than <c>Illegal</c>, and leaves
+    /// a board that still takes input. This is the same kind of hook as the <c>?beat=</c> tuning above, which
+    /// exists because a shipped beat is over faster than a test can look at it, and it is gated the same way:
+    /// nothing sets it but a query string a test puts there.
+    /// </para>
+    /// </summary>
+    bool _staleIntents;
+
+    void ClearSelection()
+    {
+        _selectedCard = null;
+        _selectedAttacker = null;
+        RefreshLegality();
+    }
+
+    // ---- readouts ----
+
+    /// <summary>
+    /// Whether input is refused right now: an intent in flight, a beat the table is holding, or a visual beat
+    /// the player has not finished seeing. The authoritative model can already be on the next turn while the
+    /// board still shows the previous one; offering input in that gap makes controls act on a state that is
+    /// not yet on screen.
+    /// </summary>
+    bool IsBusy => Match.IsInputLocked || Match.Presentation.IsTrailing;
+
+    bool CanEndTurn => Match.IsLocalSeatOnTurn && !IsBusy && Match.PendingChoice == null;
+
+    /// <summary> Whether the turn still has something in it: unspent mana, a playable card, a ready critter. </summary>
+    bool HasSomethingLeft => _playableCards.Count > 0 || _attackers.Count > 0;
+
+    /// <summary>
+    /// How much of the turn is unspent, which is what the nudge beside End turn counts. A playable card and
+    /// a ready attacker are both one thing the player could still do; nothing here is a rule, so it is a
+    /// count of the same two sets the highlights are drawn from.
+    /// </summary>
+    int ActionsLeft => _playableCards.Count + _attackers.Count;
+
+    /// <summary>
+    /// How many turns this seat has had, counting from one. Derived on the client: the model's turn
+    /// number counts both seats' turns, and "your turn 12" is not a number a player recognises as their
+    /// sixth turn. The seat that goes first has the odd turns.
+    /// </summary>
+    int OwnTurnNumber
+    {
+        get
+        {
+            MatchRulesState? board = Board;
+            if (board == null || board.Turn <= 0)
+                return 0;
+
+            // Turn 1 is the first seat's. A seat's own count is how many of the turns so far were its own.
+            int turn = Match.Presentation.VisualState?.Turn ?? board.Turn;
+            bool localWentFirst = board.FirstSeat == Match.LocalSeat;
+            return localWentFirst ? (turn + 1) / 2 : turn / 2;
+        }
+    }
+
+    TargetingLayer.TargetingKind TargetingState =>
+        Match.IsInputLocked || _awaitingAnswer ? TargetingLayer.TargetingKind.None
+        : _selectedCard.HasValue && SelectedCardIsRestorative ? TargetingLayer.TargetingKind.Heal
+        : _selectedCard.HasValue ? TargetingLayer.TargetingKind.Play
+        : _selectedAttacker.HasValue ? TargetingLayer.TargetingKind.Attack
+        : TargetingLayer.TargetingKind.None;
+
+    bool SelectedCardIsRestorative
+    {
+        get
+        {
+            if (!_selectedCard.HasValue || Match.GameConfig == null)
+                return false;
+
+            foreach (HandCard card in HandCards)
+            {
+                if (card.Instance == _selectedCard.Value
+                    && Match.GameConfig.Cards.TryGetValue(card.Card, out CardInfo info))
+                    return info.IsSnack;
+            }
+
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Whose turn the screen says it is. Withheld while the board trails: nobody is on turn as far as the
+    /// screen is concerned while a beat is still playing out the attack that ended the last one.
+    /// </summary>
+    string TurnIndicatorState
+    {
+        get
+        {
+            if (Match.Presentation.ShowsTerminalPanel(Model?.Result != null))
+                return "over";
+            if (!Match.Presentation.ShowsTurnIndicator)
+                return "trailing";
+            if (Board?.Phase == MatchPhase.Mulligan)
+                return "mulligan";
+
+            return Match.IsLocalSeatOnTurn ? "yours" : "theirs";
+        }
+    }
+
+    string RefusalText => TextForRefusal(_refusalNotice);
+
+    /// <summary> One copy table, read by the board's own notice and by the Heist screen's. </summary>
+    static string TextForRefusal(string? code) => code switch
+    {
+        nameof(MatchRefusalCode.Illegal)         => "The table refused that move.",
+        nameof(MatchRefusalCode.OutOfDate)       => "Your hand was out of date; it has been corrected.",
+        nameof(MatchRefusalCode.NotAvailableYet) => "That is not available yet.",
+        nameof(MatchRefusalCode.NotASeat)        => "You are not seated at this table.",
+        // The Heist's own refusal. It is the first seat intent a client can have refused at all, and the
+        // screen says so rather than absorbing it: a pick that vanished would be a decision the player
+        // watched fail with no explanation.
+        nameof(MatchRefusalCode.NotEligible)     => "That card is not on the menu. Take one of the others.",
+        // A covered seat's press asks for the seat back; the bot keeps it until the next turn starts.
+        nameof(MatchRefusalCode.SeatCovered)     => "A bot has your seat until the next turn starts.",
+        // Stale, NotYourTurn and AlreadyDone mean something the server did first, which is often good news:
+        // the card goes down, the input unlocks, and nothing is said.
+        _                                        => "",
+    };
+
+    string PileTitle => _openPile == null
+        ? ""
+        : (_openPile.Value.Kind == ZoneInspector.PileKind.Graveyard
+            ? (_openPile.Value.Seat == Match.LocalSeat ? "Your graveyard" : "Their graveyard")
+            : (_openPile.Value.Seat == Match.LocalSeat ? "Your unseen pool" : "Their unseen pool"));
+
+    List<CardId> PileCards
+    {
+        get
+        {
+            if (_openPile == null || Board == null)
+                return new List<CardId>();
+
+            SeatState seat = Board.Seat(_openPile.Value.Seat);
+            if (_openPile.Value.Kind != ZoneInspector.PileKind.Graveyard)
+                return seat.UnseenPool;
+
+            // A graveyard is instance ids on the model, and what each one is comes off the public registry —
+            // which is the split working as intended: an id says nothing on its own.
+            List<CardId> buried = new List<CardId>(seat.Graveyard.Count);
+            foreach (CardInstanceId id in seat.Graveyard)
+            {
+                CardId? card = Model != null ? CardLookup.CardId(Model, id) : null;
+                if (card != null)
+                    buried.Add(card);
+            }
+
+            return buried;
+        }
+    }
+
+    void OpenPile((int Seat, ZoneInspector.PileKind Kind) which)
+    {
+        // The inspector is dismissed by any board action, so opening one also drops a live selection.
+        ClearSelection();
+        _openPile = which;
+    }
+
+    void ClosePile() => _openPile = null;
+
+    void ToggleFeed() => _feedExpanded = !_feedExpanded;
+
+    public void Dispose()
+    {
+        _running = false;
+        MetaplayService.OnStateChanged -= OnStateChanged;
+        Match.OnMatchChanged -= OnStateChanged;
+        Match.OnMatchAttachmentChanged -= OnAttachmentChanged;
+        Matchmaking.OnSearchChanged -= OnStateChanged;
+    }
+}

@@ -1,0 +1,87 @@
+/* Game-specific styles, loaded after ClientBase's app-base.css, which holds the motion toolkit
+   (.font-display, .animate-*). */
+
+/* ---------------------------------------------------------------------------
+   Design tokens: the warm, dark "midnight burrow" palette with an amber accent. The menu, dialogs and the
+   shared UI components read these; the gold is the accent the board and the card tiles use for rank and power.
+   --------------------------------------------------------------------------- */
+:root {
+    --bg-primary:     #0d0a12;
+    --bg-secondary:   #14101c;
+    --bg-card:        #1c1626;
+    --bg-hover:       #282034;
+    --border-color:   rgba(255, 255, 255, 0.08);
+    --text-primary:   #f4f4f5;
+    --text-secondary: #a1a1aa;
+    --text-muted:     #71717a;
+    --accent-blue:    #f0a12b;
+    --accent-green:   #22c55e;
+    --accent-amber:   #f59e0b;
+    --accent-red:     #ef4444;
+
+    --accent-gold:       #f5c542;
+    --accent-gold-deep:  #d99a1f;
+    --hero-glow:         rgba(245, 197, 66, 0.55);
+}
+
+
+/* ---------------------------------------------------------------------------
+   Full-screen, app-like behavior (phones; emulated on desktop browsers)
+   - The page itself never scrolls or zooms.
+   - No pull-to-refresh / rubber-band overscroll.
+   - No double-tap zoom, no long-press selection menus.
+   --------------------------------------------------------------------------- */
+html,
+body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;                 /* the page (document) never scrolls */
+    overscroll-behavior: none;        /* no pull-to-refresh / rubber-band */
+    touch-action: manipulation;       /* no double-tap-to-zoom */
+    -webkit-user-select: none;
+    user-select: none;                /* no long-press text selection menus */
+    -webkit-touch-callout: none;      /* no iOS long-press Copy/Share/Save popup */
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Block image drag / drag-to-save. */
+img {
+    -webkit-user-drag: none;
+    user-drag: none;
+}
+
+/* Lock the body in place so mobile Safari can't drag the whole page around. */
+body {
+    position: fixed;
+    inset: 0;
+}
+
+/* Keep real controls selectable/usable even though selection is disabled globally. */
+button,
+input,
+textarea,
+select {
+    -webkit-user-select: auto;
+    user-select: auto;
+}
+
+/* ---------------------------------------------------------------------------
+   Portrait phone-width column
+   Constrain the UI to a phone-width column so it feels native on phones and is emulated as a centered
+   column on desktop. Higher specificity than the Tailwind .max-w-2xl utility, so this wins.
+   --------------------------------------------------------------------------- */
+header > .container,
+main.container {
+    max-width: 26rem;
+}
+
+/* The main content region is the ONLY scroll surface, and only when a view is taller than the screen.
+   Everything else stays put. The transparent top bar floats over the top of this area. */
+main {
+    height: 100dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    /* Respect the home-indicator / bottom safe area. */
+    padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
+}

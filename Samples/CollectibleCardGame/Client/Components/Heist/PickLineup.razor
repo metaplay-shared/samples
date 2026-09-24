@@ -1,0 +1,99 @@
+@namespace Game.Client.Components.Heist
+@using Game.Logic
+@using Game.Client.Components
+@using Game.Client.Services
+
+@* Every card the loser played this match, in played order.
+
+   THE LOCKED ONES ARE IN IT, padlocked and unpickable, rather than quietly missing — for the same reason their
+   padlocks were visible on the table all match: the lineup should be the game the winner just watched, and
+   cards that vanished from it would read as a bug rather than as the loser's foresight
+   (Docs/client.md, "The Heist").
+
+   The compact CardTile keeps its open-information padlock. Its button supplies keyboard selection and
+   the pressed state; the loser's copy and already-taken rows are disabled. *@
+
+@* The row is a child of the scroller rather than the scroller itself, and that is not decoration: a flex row
+   centred with justify-content overflows to BOTH sides, and the part that overflows to the left of a scroll
+   container cannot be scrolled to at all — so the first cards of a long lineup were unreachable, by a pointer
+   as well as by a fixture. `width: max-content` with auto side margins centres a short lineup and anchors a
+   long one at its start, where played order begins. *@
+<div class="heist-loot" data-testid="heist-loot" data-count="@Rows.Count">
+  <div class="heist-loot-row">
+    @foreach (HeistLootRow row in Rows)
+    {
+        <div class="heist-loot-slot" data-testid="@(row.Pickable && CanPick ? "heist-pick" : "heist-loot-card")"
+             data-card-id="@row.Card.Value"
+             data-pickable="@(row.Pickable && CanPick ? "true" : "false")"
+             data-selected="@((CanPick && row.Pickable && SelectedCard == row.Card).ToString().ToLowerInvariant())"
+             data-taken="@(row.Taken ? "true" : "false")"
+             data-locked-by="@row.LockedBy.ToString()">
+            @if (Card(row.Card) is CardInfo card)
+            {
+                <button type="button" class="heist-card-choice" disabled="@(!row.Pickable || !CanPick)"
+                        aria-label="@card.DisplayName" aria-pressed="@((CanPick && SelectedCard == row.Card).ToString().ToLowerInvariant())"
+                        @onclick="() => OnPick.InvokeAsync(row.Card)">
+                <CardTile Card="@card"
+                          Rank="@row.OwnedRank"
+                          Owned="true"
+                          Locked="@row.IsFrozen"
+                          Dimmed="@(!row.Pickable || !CanPick)"
+                          RankMax="@RankMax"
+                          Badge="@BadgeFor(row)"
+                          TestId="heist-loot-tile"
+                           />
+                </button>
+                @if (CanPick && row.Pickable && SelectedCard == row.Card)
+                {
+                    <span class="heist-selected-label">✓ Selected</span>
+                }
+            }
+        </div>
+    }
+  </div>
+</div>
+
+@code {
+    /// <summary> The lineup, already decided by <see cref="HeistPresentation.Lineup"/>. </summary>
+    [Parameter, EditorRequired] public List<HeistLootRow> Rows { get; set; } = default!;
+
+    [Parameter, EditorRequired] public SharedGameConfig Config { get; set; } = default!;
+
+    /// <summary> Whether this client may pick at all: the winner's seat, with a slot still open. </summary>
+    [Parameter] public bool CanPick { get; set; }
+
+    /// <summary>
+    /// Whether this client holds the winning seat. The badges are <em>relative</em> — one of them says whose
+    /// padlock is on a card — so a component that did not know which side it was drawing for told the loser
+    /// that a card of theirs was "yours, frozen" on the strength of the winner having frozen a copy.
+    /// </summary>
+    [Parameter] public bool IsWinner { get; set; }
+
+    [Parameter] public int RankMax { get; set; } = 5;
+
+    [Parameter] public CardId? SelectedCard { get; set; }
+
+    [Parameter] public EventCallback<CardId> OnPick { get; set; }
+
+    CardInfo? Card(CardId cardId)
+        => Config != null && Config.Cards.TryGetValue(cardId, out CardInfo card) ? card : null;
+
+    /// <summary>
+    /// The tile's under-label: what this row <em>is</em> rather than what taking it would do. The transfer
+    /// belongs in words under the stage, in full, on both sides — a badge is not the place to state a cost.
+    /// </summary>
+    string? BadgeFor(HeistLootRow row)
+    {
+        if (row.Taken)
+            return "TAKEN";
+
+        return row.LockedBy switch
+        {
+            // Every row on this lineup is a card the LOSER played, so "theirs" and "yours" swap with the
+            // reader: the winner is looking at the loser's cards, and the loser at their own.
+            HeistLockedBy.TheLoser  => IsWinner ? "LOCKED" : "YOURS, LOCKED",
+            HeistLockedBy.TheWinner => IsWinner ? "YOURS, FROZEN" : "THEIRS, FROZEN",
+            _                       => null,
+        };
+    }
+}

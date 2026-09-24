@@ -1,0 +1,63 @@
+@namespace Game.Client.Components
+@using Game.Logic
+@using Game.Client.Services
+@inject CollectionService Collection
+
+@* One combined readout, driven by the same shared function the server re-runs: the card count against the
+   exact deck size, the clan count against the limit, the Power Score, and — when the list is not legal — the
+   first rule it breaks, stated as a reason rather than as a refusal. *@
+
+<div class="deck-legality flex flex-col gap-1.5">
+    <div class="count-line">
+        <span style="color: var(--text-secondary);">
+            <span class="deck-count-number" style="color: @(CountIsRight ? "var(--accent-green)" : "var(--text-primary)");"
+                  data-testid="deck-card-count">@Cards.Count</span>
+            <span style="color: var(--text-muted);">/ <span data-testid="deck-size-target">@DeckSize</span></span>
+        </span>
+        <span style="color: var(--text-secondary);">
+            Clans <span class="tabular-nums" data-testid="deck-clan-count">@ClanCount</span>
+            <span style="color: var(--text-muted);">/ @MaxClans</span>
+        </span>
+        <span style="color: var(--text-secondary);">
+            Power <span class="tabular-nums font-semibold" style="color: var(--accent-gold);"
+                        data-testid="deck-power-score">@PowerScore</span>
+        </span>
+    </div>
+
+    @* data-error carries the rule that failed, so a test can assert the outcome without pinning the copy.
+       The words are for the player and may be reworded freely; the code is the contract. *@
+    <p class="text-[11px]" data-testid="deck-legality" data-error="@Legality.Error"
+       style="color: @(Legality.IsValid ? "var(--accent-green)" : "var(--text-muted)");">
+        @(Legality.IsValid ? $"Legal deck — Power Score {PowerScore}." : DeckLegalityText.Describe(Legality, Collection.GameConfig!))
+    </p>
+</div>
+
+@code {
+    /// <summary> The deck as it currently stands in the editor. </summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<CardId> Cards { get; set; } = Array.Empty<CardId>();
+
+    int DeckSize => Collection.GameConfig?.Global.DeckSize ?? 0;
+    int MaxClans => Collection.GameConfig?.Global.MaxClansPerDeck ?? 0;
+    bool CountIsRight => Cards.Count == DeckSize;
+
+    int PowerScore => Collection.PowerScore(Cards);
+    DeckValidationResult Legality => Collection.ValidateDeck(Cards);
+
+    /// <summary> Distinct clan-limited clans in the list. Wanderers never count. </summary>
+    int ClanCount
+    {
+        get
+        {
+            HashSet<ClanId> clans = new HashSet<ClanId>();
+            foreach (CardId cardId in Cards)
+            {
+                ClanInfo? clan = Collection.GetCard(cardId)?.Clan?.Ref;
+                if (clan != null && clan.CountsTowardClanLimit)
+                    clans.Add(clan.ClanId);
+            }
+
+            return clans.Count;
+        }
+    }
+}

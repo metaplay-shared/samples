@@ -1,0 +1,26 @@
+TrackId #key,Rank2.AttackDelta,Rank2.HealthDelta,Rank2.CostDelta,Rank2.AmountDelta,Rank3.AttackDelta,Rank3.HealthDelta,Rank3.CostDelta,Rank3.AmountDelta,Rank4.AttackDelta,Rank4.HealthDelta,Rank4.CostDelta,Rank4.AmountDelta,Rank5.AttackDelta,Rank5.HealthDelta,Rank5.CostDelta,Rank5.AmountDelta,Notes
+None,0,0,0,0,,,,,0,0,0,0,,,,,Flat. Tokens and cards whose numbers never move.
+CritterDefault,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,Cumulative increments across ranks 2–5; rank-5 totals unchanged.
+TrickCheaper3,0,0,0,0,0,0,-1,0,0,0,0,0,,,,,A trick that gets cheaper rather than bigger.
+TrickAmount3,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,1,Cumulative increments across ranks 2–5; rank-5 totals unchanged.
+TrickAmount5,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,Cumulative increments across ranks 2–5; rank-5 totals unchanged.
+Body0x15,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,Cumulative increments across ranks 2–5; rank-5 totals unchanged.
+Body10x10,0,1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,Cumulative increments across ranks 2–5; rank-5 totals unchanged.
+Body10x15,0,1,0,0,1,0,0,0,0,1,0,0,1,0,0,0,Cumulative increments across ranks 2–5; rank-5 totals unchanged.
+Body10x20,0,1,0,0,1,1,0,0,1,0,0,0,0,1,0,0,Cumulative increments across ranks 2–5; rank-5 totals unchanged.
+Body15x10,0,1,0,0,1,0,0,0,0,1,0,0,1,0,0,0,Cumulative increments across ranks 2–5; rank-5 totals unchanged.
+Body15x15,1,0,0,0,1,1,0,0,0,1,0,0,1,0,0,0,Cumulative increments across ranks 2–5; rank-5 totals unchanged.
+Body15x20,1,1,0,0,0,1,0,0,1,1,0,0,1,0,0,0,Cumulative increments across ranks 2–5; rank-5 totals unchanged.
+Body15x25,1,1,0,0,0,1,0,0,1,1,0,0,0,1,0,0,Cumulative increments across ranks 2–5; rank-5 totals unchanged.
+Body15x30,1,1,0,0,0,2,0,0,0,1,0,0,1,1,0,0,Cumulative increments across ranks 2–5; rank-5 totals unchanged.
+Body15x5,1,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,Cumulative increments across ranks 2–5; rank-5 totals unchanged.
+Body20x15,1,1,0,0,0,1,0,0,1,1,0,0,1,0,0,0,Cumulative increments across ranks 2–5; rank-5 totals unchanged.
+Body20x20,1,1,0,0,0,1,0,0,1,1,0,0,1,0,0,0,Cumulative increments across ranks 2–5; rank-5 totals unchanged.
+Body20x25,1,1,0,0,1,1,0,0,0,1,0,0,1,1,0,0,Cumulative increments across ranks 2–5; rank-5 totals unchanged.
+Body20x30,1,1,0,0,0,2,0,0,1,1,0,0,1,1,0,0,Cumulative increments across ranks 2–5; rank-5 totals unchanged.
+Body25x20,1,1,0,0,1,1,0,0,1,0,0,0,1,1,0,0,Cumulative increments across ranks 2–5; rank-5 totals unchanged.
+Body25x30,1,1,0,0,1,2,0,0,1,1,0,0,1,1,0,0,Cumulative increments across ranks 2–5; rank-5 totals unchanged.
+Body30x25Late,1,1,0,0,2,1,0,0,1,1,0,0,1,1,0,0,Cumulative increments across ranks 2–5; rank-5 totals unchanged.
+Body35x40Late,1,2,0,0,2,1,0,0,1,2,0,0,2,1,0,0,Cumulative increments across ranks 2–5; rank-5 totals unchanged.
+Body5x10,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,Cumulative increments across ranks 2–5; rank-5 totals unchanged.
+Body5x15,0,1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,Cumulative increments across ranks 2–5; rank-5 totals unchanged.

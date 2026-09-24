@@ -1,0 +1,26 @@
+<Solution>
+  <Folder Name="/Client/">
+    <Project Path="Client/Client.csproj" />
+    <Project Path="ClientBase/ClientBase.csproj" />
+    <Project Path="SharedCode/GameLogic.csproj" />
+    <Project Path="Client.Tests/Client.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Server/">
+    <Project Path="Backend/BotClient/BotClient.csproj" />
+    <Project Path="Backend/Server/Server.csproj" />
+    <Project Path="Backend/SharedCode/SharedCode.csproj" />
+    <Project Path="Backend/SharedCode.Tests/SharedCode.Tests.csproj" />
+    <Project Path="Backend/Server.Tests/Server.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Tools/">
+    <Project Path="Tools/GameConfigGen/GameConfigGen.csproj" />
+    <Project Path="Tools/SerializerGen/SerializerGen.csproj" />
+  </Folder>
+  <Folder Name="/Metaplay/">
+    <Project Path="../../MetaplaySDK/Backend/BotClient/Metaplay.BotClient.csproj" />
+    <Project Path="../../MetaplaySDK/Backend/Cloud/Metaplay.Cloud.csproj" />
+    <Project Path="../../MetaplaySDK/Backend/Server/Metaplay.Server.csproj" />
+    <Project Path="../../MetaplaySDK/Backend/ServerShared/Metaplay.ServerShared.csproj" />
+    <Project Path="../../MetaplaySDK/Dotnet/Client/Metaplay.Client.csproj" />
+  </Folder>
+</Solution>

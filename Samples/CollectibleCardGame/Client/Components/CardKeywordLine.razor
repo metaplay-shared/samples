@@ -1,0 +1,80 @@
+@namespace Game.Client.Components
+@using Game.Logic
+
+@* Everything one card wears in keyword form: the engine flags it is printed with, then the triggers it binds,
+   each a <see cref="KeywordChip"/> carrying its own glossary text. Stated once here so every surface that draws
+   a card — the detail frame, and the board's hand fan, critter chips and event feed — agrees on both what the
+   line contains and what it leaves out. *@
+
+@if (Chips.Count > 0 || Triggers.Count > 0)
+{
+    <div class="flex flex-wrap items-center gap-1 @Class" data-testid="@TestId">
+        @foreach (KeywordInfo keyword in Chips)
+        {
+            <KeywordChip Keyword="@keyword" />
+        }
+        @foreach (CardTrigger trigger in Triggers)
+        {
+            <KeywordChip Trigger="@trigger" />
+        }
+    </div>
+}
+
+@code {
+    /// <summary> The card whose keywords to draw. </summary>
+    [Parameter, EditorRequired]
+    public CardInfo Card { get; set; } = default!;
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    /// <summary> The line's <c>data-testid</c>, overridden where a screen already names its keyword line. </summary>
+    [Parameter]
+    public string TestId { get; set; } = "card-keywords";
+
+    /// <summary> The printed engine flags, in authored order. </summary>
+    List<KeywordInfo> Chips
+    {
+        get
+        {
+            List<KeywordInfo> keywords = new List<KeywordInfo>();
+            if (Card?.Keywords == null)
+                return keywords;
+
+            foreach (MetaRef<KeywordInfo> keyword in Card.Keywords)
+            {
+                if (keyword?.MaybeRef != null)
+                    keywords.Add(keyword.Ref);
+            }
+
+            return keywords;
+        }
+    }
+
+    /// <summary>
+    /// The bound triggers whose labels earn their ink. A trick's whole body is its Hello — the config build
+    /// refuses a trick that binds anything else — so on a trick the label is always there and says nothing the
+    /// card's own type does not. On a critter it marks the battlecry-like minority, so there it stays.
+    /// </summary>
+    List<CardTrigger> Triggers
+    {
+        get
+        {
+            List<CardTrigger> triggers = new List<CardTrigger>();
+            if (Card == null)
+                return triggers;
+
+            foreach (CardTrigger trigger in EffectVocabulary.AllCardTriggers)
+            {
+                if (!Card.BindsTrigger(trigger))
+                    continue;
+                if (trigger == CardTrigger.Hello && Card.Type == CardType.Trick)
+                    continue;
+
+                triggers.Add(trigger);
+            }
+
+            return triggers;
+        }
+    }
+}

@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk" ToolsVersion="15.0">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>Latest</LangVersion>
+    <RootNamespace>Game.Cloud</RootNamespace>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The same tree the client-side GameLogic.csproj (living inside SharedCode/) compiles as a normal project;
+         its bin/obj must be excluded here since default-glob exclusions only cover this project's own. -->
+    <Compile Include="$(SharedCodePath)\**\*.cs"
+             Exclude="$(SharedCodePath)\bin\**;$(SharedCodePath)\obj\**"
+             LinkBase="SharedCode" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(MetaplayServerPath)\Cloud\Metaplay.Cloud.csproj" />
+    <ProjectReference Include="$(MetaplayServerPath)\CodeAnalyzers\Metaplay.CodeAnalyzers.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <ProjectReference Include="$(MetaplayServerPath)\CodeAnalyzers.Shared\Metaplay.CodeAnalyzers.Shared.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+  </ItemGroup>
+</Project>

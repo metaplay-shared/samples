@@ -1,0 +1,26 @@
+StepId #key,Op,Target,Amount,Amount2,Duration,Keyword,Card,Filter,Selector,Notes
+DamageChosen3,Damage,Chosen,15,,,,,,,Direct burn at the chosen target.
+BurnDen1,Damage,EnemyDen,5,,,,,,,"A jab of reach, shared by several Kitsune."
+SweepEnemies1,Damage,AllEnemy,5,,,,,,,Board sweep that clears the smallest bodies.
+DenPerKitsune,Damage,EnemyDen,5xPer:PlayedThisMatch,,,,,Clan=Kitsune,,"Scales on public history, so both players can count it."
+PeekTop3Keep1,Peek,,3,1,,,,,,The one primitive that pauses resolution for a choice.
+DrawOne,Draw,,1,,,,,,,Plain card draw.
+ManaBurst2,GainMana,,2,,Turn,,,,,Temporary mana for a tempo swing.
+AcornMana1,GainMana,,1,,Turn,,,,,The second-player compensation.
+RampOne,GainMana,,1,,Permanent,,,,,"Permanent ramp, shared by cards and a Weather."
+BounceChosen,Bounce,Chosen,,,,,,,,Return one critter to its owner's hand.
+BounceAll,Bounce,AllCritters,,,,,,,,Reset the whole board.
+GrowSelf1,Buff,Self,5,5,,,,,,The source critter grows.
+BuffChosen22,Buff,Chosen,10,10,,,,,,A treat for a friendly critter.
+ShrinkChosen11,Buff,Chosen,-5,-5,,,,,,"Stat theft. Not damage: no Bubble pop, no Snacktime."
+RallyFriendly11,Buff,AllFriendly,5,5,,,,,,Whole-team buff.
+HealChosen4,Heal,Chosen,20,,,,,,,The Sunny Pups' big heal.
+HealChosen2,Heal,Chosen,10,,,,,,,A small neutral heal.
+HealOwnerDen1,Heal,OwnDen,5,,,,,,,Resolved as the seat the event belongs to.
+HealDenPerFriendly,Heal,OwnDen,5xPer:FriendlyCritters,,,,,,,Scales on the board both players can see.
+DenGloom1,Damage,OwnDen,5,,,,,,,A Weather clock: the turn seat's own Den takes 5.
+CloakChosenSneaky,GrantKeyword,Chosen,,,,Sneaky,,,,Grant an engine flag in play.
+SummonLambs2,Summon,,2,,,,LambToken,,,Fills up to the board limit; the excess is lost.
+CopyCheapEnemyTrick,CopyFromGraveyard,EnemyGraveyard,,,,,,Type=Trick,Cheapest,Deterministic selection over public state.
+CopyBigOwnCritter,CopyFromGraveyard,OwnGraveyard,,,,,,Type=Critter,Costliest,Recursion of your own fallen.
+CopyBigEnemyCard,CopyFromGraveyard,EnemyGraveyard,,,,,,,Costliest,The clan's signature theft.

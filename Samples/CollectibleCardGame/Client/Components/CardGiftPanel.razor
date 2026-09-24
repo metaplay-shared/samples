@@ -1,0 +1,47 @@
+@using Game.Logic
+@inject CollectionService Collection
+@inject MetaplayClientService Client
+@implements IDisposable
+
+@if (Collection.UnseenCardGift is CardInfo gift)
+{
+    <section class="paper card-gift card-gift-reveal" data-testid="card-gift-reveal" data-card-id="@gift.CardId.Value" aria-live="polite">
+        <CardFace Card="gift" Rank="@Collection.RankOf(gift.CardId)" ShowStats="@(gift.Type == CardType.Critter)" />
+        <div><span class="eyebrow">A new face in the neighbourhood</span><h2>@gift.DisplayName</h2>
+            <p>Added to your collection at rank @Collection.RankOf(gift.CardId). Ready for your next deck.</p>
+            <button class="btn gold" data-testid="card-gift-dismiss" @onclick="Collection.DismissCardGift">Lovely!</button>
+        </div>
+    </section>
+}
+else if (Collection.CardGiftInterval > 0)
+{
+    <section class="dark-panel card-gift" data-testid="card-gift-progress">
+        @if (Collection.HasUnownedCards)
+        {
+            <div><strong>Your next new card</strong><p>One unowned card every @Collection.CardGiftInterval
+                @(Collection.CardGiftIncludesPractice ? "completed matches. Practice counts too." : "completed ranked matches.")</p></div>
+            <div class="card-gift-meter"><span>@Progress / @Collection.CardGiftInterval matches</span>
+                <progress value="@Progress" max="@Collection.CardGiftInterval" aria-label="Progress toward a new card"></progress></div>
+        }
+        else
+        {
+            <div><strong>Every troublemaker, collected.</strong><p>You own every collectible in this set.</p></div>
+        }
+    </section>
+}
+
+@code {
+    int Progress => Math.Min(Collection.CardGiftProgress, Collection.CardGiftInterval);
+    protected override void OnInitialized()
+    {
+        Collection.OnCollectionChanged += Refresh;
+        Client.OnStateChanged += Refresh;
+    }
+    void Refresh() => _ = InvokeAsync(StateHasChanged);
+    protected override void OnAfterRender(bool firstRender) => Collection.ClaimReadyCardGift();
+    public void Dispose()
+    {
+        Collection.OnCollectionChanged -= Refresh;
+        Client.OnStateChanged -= Refresh;
+    }
+}

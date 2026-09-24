@@ -1,0 +1,104 @@
+@namespace Game.Client.Components
+@using Game.Logic
+@using Game.Client.Services
+@inject CollectionService Collection
+
+@* One keyword, with the glossary line that teaches it attached as help text. Every keyword a player can read
+   anywhere in the client is one of these, so the glossary text follows the keyword rather than being a screen's
+   own copy: the card detail, and later the board's hand fan, critter chips and event feed, all draw from the
+   same config row.
+
+   The five engine flags and the two trigger labels — Hello and Goodbye — are config rows and carry their own
+   display name and description. The remaining triggers are engine vocabulary rather than keywords (the
+   seven-keyword cap is a design rule, see ../../Docs/game-design.md), so their help text is stated here. *@
+
+@if (Label.Length > 0)
+{
+    <span class="inline-flex items-center rounded px-1.5 py-0.5 text-[11px] font-medium @(Help.Length > 0 ? "cursor-help" : "") @Class"
+          style="background: rgba(59, 130, 246, 0.15); color: var(--accent-blue);"
+          title="@(Help.Length > 0 ? Help : null)"
+          data-testid="keyword-chip"
+          data-keyword="@Key">@Label</span>
+}
+
+@code {
+    /// <summary> A keyword row to draw: one of the five engine flags, or a Hello/Goodbye trigger label. </summary>
+    [Parameter]
+    public KeywordInfo? Keyword { get; set; }
+
+    /// <summary>
+    /// A trigger the card binds, drawn as the label that marks it. Hello and Goodbye resolve to their config
+    /// rows; the rest are engine vocabulary with no row to read.
+    /// </summary>
+    [Parameter]
+    public CardTrigger? Trigger { get; set; }
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    /// <summary> The config row behind this chip, or null for a trigger the keyword glossary does not name. </summary>
+    KeywordInfo? Row => Keyword ?? (Trigger.HasValue ? TriggerRow(Trigger.Value) : null);
+
+    /// <summary> Stable across a display-name edit, because a test naming a keyword means the rule, not its copy. </summary>
+    string Key => Row?.KeywordId?.Value ?? Trigger?.ToString() ?? "";
+
+    /// <summary>
+    /// The keyword as the player reads it. A trigger label is authored with its sentence colon ("Hello:"),
+    /// which a chip standing on its own has nothing to introduce.
+    /// </summary>
+    string Label
+    {
+        get
+        {
+            KeywordInfo? row = Row;
+            if (row != null && !string.IsNullOrEmpty(row.DisplayName))
+                return row.DisplayName.TrimEnd(':', ' ');
+
+            return Trigger.HasValue ? TriggerLabel(Trigger.Value) : "";
+        }
+    }
+
+    /// <summary> The glossary line, empty when there is nothing to teach and the chip is plain text. </summary>
+    string Help
+    {
+        get
+        {
+            KeywordInfo? row = Row;
+            if (row != null && !string.IsNullOrEmpty(row.Description))
+                return row.Description;
+
+            return Trigger.HasValue ? TriggerHelp(Trigger.Value) : "";
+        }
+    }
+
+    /// <summary> The glossary row for a trigger that has one. Hello and Goodbye are keywords wearing their trigger's name. </summary>
+    KeywordInfo? TriggerRow(CardTrigger trigger)
+    {
+        if (trigger != CardTrigger.Hello && trigger != CardTrigger.Goodbye)
+            return null;
+
+        SharedGameConfig? config = Collection.GameConfig;
+        if (config == null)
+            return null;
+
+        return config.Keywords.TryGetValue(KeywordId.FromString(trigger.ToString()), out KeywordInfo row) ? row : null;
+    }
+
+    /// <summary> Fallback naming: the engine triggers no keyword row covers. </summary>
+    static string TriggerLabel(CardTrigger trigger) => trigger switch
+    {
+        CardTrigger.OnAttack  => "On attack",
+        CardTrigger.TurnStart => "Turn start",
+        CardTrigger.TurnEnd   => "Turn end",
+        _                     => trigger.ToString(),
+    };
+
+    /// <summary> What the engine's own triggers mean, in the same one-line register the config glossary uses. </summary>
+    static string TriggerHelp(CardTrigger trigger) => trigger switch
+    {
+        CardTrigger.OnAttack  => "Effect after this critter attacks, resolved once its combat damage is dealt and any deaths are swept.",
+        CardTrigger.TurnStart => "Effect at the start of its owner's turn.",
+        CardTrigger.TurnEnd   => "Effect at the end of its owner's turn.",
+        _                     => "",
+    };
+}

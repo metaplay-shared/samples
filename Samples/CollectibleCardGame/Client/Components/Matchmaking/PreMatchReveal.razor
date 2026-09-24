@@ -1,0 +1,112 @@
+@namespace Game.Client.Components.Matchmaking
+@using Game.Logic
+@using Game.Client.Components.Board
+
+@* The wager, stated before a card is chosen.
+
+   This is where the queue's work becomes visible: the Weather, both players' names, both deck Power Scores,
+   both lock sets, the stakes tier those imply, and whether the opponent is a computer seat. It is shown
+   before the mulligan, so nobody discovers after winning that the Heist pays less than they assumed, and
+   nobody discovers after losing that it cost more (Docs/matchmaking.md, "What the player sees").
+
+   BOTH SEATS SEE THE SAME RECORD. A tier that applied to only one player and was visible to only that player
+   would be exactly the surprise this screen exists to prevent, so the only thing that differs between the two
+   clients is which side the copy calls "you".
+
+   IT IS A PANEL, NOT A GATE, and that is a constraint rather than a preference: the mulligan deadline is
+   armed when the table is SET UP and is only held out of the fold while a seated human is away, so the stamp
+   is already running while the client cold-boots and turns its page. A screen the player had to dismiss would
+   spend the mulligan's own clock on something that is not the mulligan. So it sits over the mulligan with the
+   hand and the confirm live underneath, takes no pointer events at all, and gets out of the way on the first
+   mulligan interaction or on its own short timeout. The wager is still read before a card is chosen, which is
+   the whole requirement.
+
+   Nothing here is a round trip: every value is state the client already has by the time the match activates. *@
+
+<div class="pre-match-reveal" data-testid="pre-match-reveal"
+     data-tier="@Stakes.Tier.ToString()"
+     data-ranked="@(Stakes.IsRanked ? "true" : "false")"
+     data-weather="@(Weather?.WeatherId.Value ?? "")">
+
+    <div class="reveal-weather">
+        <span class="reveal-weather-icon" aria-hidden="true">@(Weather?.ArtEmoji ?? "🌤️")</span>
+        <span class="reveal-weather-name" data-testid="reveal-weather-name">@(Weather?.DisplayName ?? "Clear skies")</span>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Weather?.Description))
+    {
+        <p class="reveal-weather-description" data-testid="reveal-weather-description">@Weather!.Description</p>
+    }
+
+    <div class="reveal-seats">
+        @Seat(LocalSeat, isLocal: true)
+        <span class="reveal-versus" aria-hidden="true">vs</span>
+        @Seat(OpponentSeat, isLocal: false)
+    </div>
+
+    <p class="reveal-tier" data-testid="reveal-tier">@TierLine</p>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public MatchStakes Stakes { get; set; } = default!;
+    [Parameter, EditorRequired] public MatchSeat LocalRoster { get; set; } = default!;
+    [Parameter, EditorRequired] public MatchSeat OpponentRoster { get; set; } = default!;
+    [Parameter] public WeatherInfo? Weather { get; set; }
+    [Parameter] public int LocalSeat { get; set; }
+    [Parameter] public int OpponentSeat { get; set; }
+
+    MatchSeat Roster(int seat) => seat == LocalSeat ? LocalRoster : OpponentRoster;
+
+    int PowerScore(int seat)
+        => Stakes.PowerScores != null && seat >= 0 && seat < Stakes.PowerScores.Count ? Stakes.PowerScores[seat] : 0;
+
+    /// <summary>
+    /// How many cards this seat has behind a padlock. Padlocks are open information and both sets froze at
+    /// enqueue, so what the winner will be able to pick from is settled before a card is played rather than
+    /// adjusted once the loser can see how the match went.
+    /// </summary>
+    int LockCount(int seat)
+        => Stakes.LockedCards != null && seat >= 0 && seat < Stakes.LockedCards.Count ? Stakes.LockedCards[seat].Count : 0;
+
+    RenderFragment Seat(int seat, bool isLocal) => @<div class="reveal-seat" data-testid="reveal-seat" data-seat="@seat" data-local="@(isLocal ? "true" : "false")">
+        <span class="reveal-name" data-testid="reveal-name" data-seat="@seat">@Roster(seat).DisplayName</span>
+        @if (Roster(seat).Occupancy == SeatOccupancy.Bot)
+        {
+            <span class="reveal-bot" data-testid="reveal-bot-label" title="A computer player">Computer player</span>
+        }
+        <span class="reveal-power" data-testid="reveal-power-score" data-seat="@seat" data-power-score="@PowerScore(seat)">
+            Power @PowerScore(seat)
+        </span>
+        <span class="reveal-locks" data-testid="reveal-locks" data-seat="@seat" data-count="@LockCount(seat)"
+              title="Locked cards can neither lose a rank nor gain one">
+            🔒 @LockCount(seat) locked
+        </span>
+    </div>;
+
+    /// <summary>
+    /// The tier, framed for the seat reading it. The record is identical on both clients; only "you" moves.
+    /// </summary>
+    string TierLine => Stakes.Tier switch
+    {
+        StakesTier.Practice when Stakes.IsRanked =>
+            "Nobody turned up in time, so this is a computer player at practice stakes: rating moves, ranks do not.",
+        StakesTier.Practice =>
+            "Practice. Nothing is at stake in either direction.",
+        StakesTier.Shielded =>
+            "Newcomer shield: no rank moves either way.",
+        StakesTier.Favourite or StakesTier.Underdog when IsLocalSeatTheFavourite =>
+            "You brought the stronger deck. Win and nothing moves; lose and they pick two of your cards.",
+        StakesTier.Favourite or StakesTier.Underdog =>
+            "You are the underdog. Win and you pick two of their cards; lose and nothing of yours moves.",
+        _ =>
+            "An even matchup. The winner takes a rank off one card the loser played.",
+    };
+
+    /// <summary>
+    /// Whether the seat reading this is the one that entered ahead on Power Score. The tier names seat 0's
+    /// side of it — it is frozen at formation and a winner is not knowable then — so each client turns that
+    /// one shared field into its own reading, through the shared function the Heist itself applies the payout
+    /// table with. There is one implementation of the rule and this screen is one of its two readers.
+    /// </summary>
+    bool IsLocalSeatTheFavourite => MatchHeistPolicy.SeatIsTheFavourite(Stakes.Tier, LocalSeat);
+}

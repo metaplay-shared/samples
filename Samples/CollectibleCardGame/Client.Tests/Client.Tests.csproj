@@ -1,0 +1,51 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Microsoft.Playwright.NUnit" Version="1.57.0" />
+    <PackageReference Include="NUnit" Version="4.3.2" />
+    <PackageReference Include="NUnit.Analyzers" Version="4.7.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="5.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="NUnit.Framework" />
+  </ItemGroup>
+
+  <!-- The client's pure halves, compiled into this assembly against the SDK's net10.0 flavor rather than
+       referenced: ClientBase and Client are both net10.0-browser only, so no other project can reference
+       them. Everything listed here is deliberately free of anything browser-shaped, which is what makes the
+       rules it holds — the clock's rejection policy, the board's trailing rule, the fan's geometry — testable
+       away from the browser at all (Docs/client.md, "Testability"). -->
+  <ItemGroup>
+    <Compile Include="..\ClientBase\Services\ConnectionTrouble.cs" Link="Shell\ConnectionTrouble.cs" />
+    <Compile Include="..\ClientBase\Configuration\LocalDevelopmentPorts.cs" Link="Shell\LocalDevelopmentPorts.cs" />
+    <Compile Include="..\Client\Services\BoardPresentation.cs" Link="Board\BoardPresentation.cs" />
+    <Compile Include="..\Client\Services\ModelClock.cs" Link="Board\ModelClock.cs" />
+    <Compile Include="..\Client\Services\BoardBeat.cs" Link="Board\BoardBeat.cs" />
+    <Compile Include="..\Client\Services\BoardImpact.cs" Link="Board\BoardImpact.cs" />
+    <Compile Include="..\Client\Services\BoardVisualState.cs" Link="Board\BoardVisualState.cs" />
+    <Compile Include="..\Client\Services\CardArtCatalog.cs" Link="Cards\CardArtCatalog.cs" />
+    <Compile Include="..\Client\Components\Board\HandFanGeometry.cs" Link="Board\HandFanGeometry.cs" />
+    <Compile Include="..\Client\Components\Board\BoardSlotLayout.cs" Link="Board\BoardSlotLayout.cs" />
+    <Compile Include="..\Client\Services\HeistPresentation.cs" Link="Heist\HeistPresentation.cs" />
+    <Compile Include="..\Client\Services\PracticeDeckPick.cs" Link="Meta\PracticeDeckPick.cs" />
+    <Compile Include="..\Client\Services\MatchmakingCopy.cs" Link="Meta\MatchmakingCopy.cs" />
+    <Compile Include="..\Client\Services\ManaRamp.cs" Link="Board\ManaRamp.cs" />
+    <Compile Include="..\Client\Services\TargetPreview.cs" Link="Board\TargetPreview.cs" />
+    <ProjectReference Include="..\..\..\MetaplaySDK\Dotnet\Client\Metaplay.Client.csproj" />
+    <!-- The board presentation queues the engine's own events, so it needs the shared game types. GameLogic
+         multi-targets, and this project's net10.0 TFM picks the non-browser flavor. -->
+    <ProjectReference Include="..\SharedCode\GameLogic.csproj" />
+  </ItemGroup>
+
+</Project>

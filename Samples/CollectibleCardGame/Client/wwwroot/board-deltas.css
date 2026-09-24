@@ -1,0 +1,30 @@
+/* Target previews sit at the same top-centre anchor as the confirmed impact numbers. */
+.delta-preview {
+    visibility: hidden;
+    position: absolute;
+    z-index: 18;
+    left: 50%;
+    top: 12%;
+    transform: translate(-50%, -50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.18em;
+    min-width: 1.7em;
+    justify-content: center;
+    padding: 0.12em 0.35em;
+    border: 2px solid #ffd8c1;
+    border-radius: 0.7em;
+    color: #fff7e7;
+    background: linear-gradient(#ba483f, #77252f);
+    box-shadow: 0 0.2em 0.5em #150b25aa, inset 0 1px 0 #ffffff55;
+    font-size: clamp(12px, 2.7cqh, 24px);
+    line-height: 1;
+    font-weight: 900;
+    text-shadow: 0 1px 2px #230d2c;
+    pointer-events: none;
+}
+.delta-heal { background: linear-gradient(#349664, #196847); border-color: #bdffc9; }
+.delta-blocked { background: linear-gradient(#458cb7, #315077); border-color: #c5edff; }
+.is-aimed-target > .delta-preview { visibility: visible; }
+.delta-lethal { background: #121018; border-color: #eee9f4; box-shadow: 0 0.2em 0.5em #150b25aa; }
+.delta-symbol { font-size: 0.72em; }

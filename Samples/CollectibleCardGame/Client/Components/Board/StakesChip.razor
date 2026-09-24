@@ -1,0 +1,26 @@
+@namespace Game.Client.Components.Board
+@using Game.Logic
+
+@* What is on the table, as a quiet mode word beneath the Weather.
+
+   The tier itself — who is favourite, what an upset pays — belongs to the pre-match reveal and to the
+   result, not to a board a player is trying to read mid-turn. What the board owes is the one bit that
+   changes how a move feels: whether this game is for keeps. *@
+
+<div class="stakes-chip" data-testid="stakes-chip" data-tier="@Stakes.Tier.ToString()" title="@Detail">@Word</div>
+
+@code {
+    [Parameter, EditorRequired] public MatchStakes Stakes { get; set; } = default!;
+
+    string Word => Stakes.Tier == StakesTier.Practice ? "PRACTICE" : "RANKED";
+
+    /// <summary> The tier in words, for the hover — the board says the mode, not the arithmetic. </summary>
+    string Detail => Stakes.Tier switch
+    {
+        StakesTier.Practice  => "Practice — no ranks at stake",
+        StakesTier.Shielded  => "Newcomer shield — no ranks at stake",
+        StakesTier.Underdog  => "Underdog — an upset pays double",
+        StakesTier.Favourite => "Favourite — no ranks to win",
+        _                    => "Even matchup — standard stakes",
+    };
+}

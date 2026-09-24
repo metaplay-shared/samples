@@ -1,0 +1,108 @@
+@using Game.Logic
+@inject CommunityService Community
+@inject MetaplayClientService Client
+@implements IDisposable
+
+@if (ActivityOnly)
+{
+    <div class="community-activity" data-testid="community-activity" aria-label="Player activity">
+        @if (Community.Snapshot is CommunitySnapshot activity)
+        {
+            <span><i class="online-dot"></i><strong data-testid="players-online">@activity.Online</strong> online</span>
+            <span><strong data-testid="players-queued">@activity.Queued</strong> in queue</span>
+            <span><strong data-testid="players-in-match">@activity.InMatch</strong> in matches</span>
+        }
+        else
+        {
+            <span>@(Community.IsOffline ? "Player activity needs an online connection." : "Player activity unavailable — reconnecting…")</span>
+        }
+    </div>
+}
+else
+{
+    <section class="paper leaderboard" data-testid="global-leaderboard">
+        <div class="leaderboard-heading">
+            <img src="art/clan-symbol-hearth-knot.webp" alt="" />
+            <div><span class="eyebrow">The neighbourhood ladder</span><h2>Global leaderboard</h2></div>
+        </div>
+        <p class="leaderboard-caption">Ranked rating · wins break ties</p>
+        @if (Community.Snapshot is CommunitySnapshot snapshot)
+        {
+            @if (snapshot.OwnPosition is LeaderboardRow own)
+            {
+                <div class="leaderboard-own" data-testid="leaderboard-own" data-position="@own.Position">
+                    <span>Your position <strong>#@own.Position</strong> / @snapshot.RankedPlayers</span>
+                    <b>@own.Player.Rating <small>rating</small></b>
+                </div>
+            }
+            else
+            {
+                <p class="leaderboard-own" data-testid="leaderboard-unranked">Complete a ranked match to join the leaderboard.</p>
+            }
+            @if (snapshot.Leaders.Count > 0)
+            {
+                <div class="leaderboard-scroll">
+                    <table>
+                        <thead><tr><th scope="col">Rank</th><th scope="col">Player</th><th scope="col">Rating</th><th scope="col">Wins</th></tr></thead>
+                        <tbody>
+                            @foreach (LeaderboardRow row in snapshot.Leaders)
+                            {
+                                bool isOwn = row.Player.PlayerId == snapshot.OwnPosition?.Player.PlayerId;
+                                <tr class="@(isOwn ? "is-own" : "")" data-testid="leaderboard-row" data-player="@row.Player.PlayerId">
+                                    <td class="leaderboard-position">@row.Position</td>
+                                    <th scope="row">@row.Player.DisplayName @(isOwn ? "(you)" : "")</th>
+                                    <td><strong>@row.Player.Rating</strong></td><td>@row.Player.Wins</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <small class="leaderboard-caption">Top @snapshot.Leaders.Count of @snapshot.RankedPlayers ranked players</small>
+            }
+            else
+            {
+                <p data-testid="leaderboard-empty">No ranked results yet. The first match starts the ladder.</p>
+            }
+        }
+        else
+        {
+            <p data-testid="leaderboard-unavailable">@(Community.IsOffline
+                ? "The global leaderboard is available when playing online."
+                : "Leaderboard unavailable. Retrying automatically…")</p>
+        }
+    </section>
+}
+
+@code {
+    [Parameter] public bool ActivityOnly { get; set; }
+    readonly CancellationTokenSource _cancel = new();
+
+    protected override void OnInitialized()
+    {
+        Community.Changed += OnChanged;
+        Client.OnStateChanged += OnClientChanged;
+        Community.Refresh();
+        _ = PollAsync();
+    }
+
+    async Task PollAsync()
+    {
+        try
+        {
+            using PeriodicTimer timer = new(TimeSpan.FromSeconds(10));
+            while (await timer.WaitForNextTickAsync(_cancel.Token))
+                await InvokeAsync(() => { Community.Refresh(); StateHasChanged(); });
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    void OnClientChanged() { Community.Refresh(); OnChanged(); }
+    void OnChanged() => _ = InvokeAsync(StateHasChanged);
+    public void Dispose()
+    {
+        Community.Changed -= OnChanged;
+        Client.OnStateChanged -= OnClientChanged;
+        _cancel.Cancel();
+        _cancel.Dispose();
+    }
+}

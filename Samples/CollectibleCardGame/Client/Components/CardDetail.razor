@@ -1,0 +1,174 @@
+@namespace Game.Client.Components
+@using Game.Logic
+@using Game.Client.Services
+@inject CollectionService Collection
+
+<MetagameDialog IsOpen="@(Card != null)" OnClose="OnClose" Title="@(Card?.DisplayName ?? "Card")" HideTitle="true">
+    @if (Card != null)
+    {
+        <div class="detail-layout" data-testid="card-detail">
+            <div class="detail-art">
+                <CardFace Card="Card" Rank="@(Owned ? Rank : RankMin)" Locked="Locked" ShowStats="@(Card.Type == CardType.Critter)" />
+                <span class="rank-label" data-testid="card-detail-rank-stars">@RankStars</span>
+                <span data-testid="card-detail-rank" data-rank="@(Owned ? Rank : 0)">@(Owned ? $"Rank {Rank}" : "Not owned")</span>
+            </div>
+            <div class="detail-copy">
+                <div><div class="eyebrow">@ClanName · @Card.Rarity · @Card.Type</div><h2 data-testid="card-detail-name">@Card.DisplayName</h2></div>
+                <CardKeywordLine Card="Card" TestId="card-detail-keywords" />
+                <p data-testid="card-detail-stats">
+                    @if (Card.Type == CardType.Critter) { <span>Attack @Stats.Attack · Health @Stats.Health · </span> }
+                    <span>Cost <span data-testid="card-detail-cost">@Stats.Cost</span></span>
+                    @if (RankDelta.Length > 0) { <small>(@RankDelta)</small> }
+                </p>
+                @if (!string.IsNullOrEmpty(Card.RulesText)) { <p class="rules" data-testid="card-detail-rules">@Card.RulesText</p> }
+                @if (!string.IsNullOrEmpty(Card.Flavor)) { <blockquote>@Card.Flavor</blockquote> }
+                <div class="detail-ranks"><strong>Room to grow</strong><p data-testid="card-detail-rank-track">@RankTrackLine</p></div>
+                @if (Owned && Rank >= (Collection.GameConfig?.Global.MinLockRank ?? 2))
+                {
+                    <LockAffordance CardId="Card.CardId" ShowHint="true" OnNeedsSlotChoice="OnNeedsSlotChoice" />
+                }
+                else if (Owned)
+                {
+                    <p data-testid="lock-hint">Rank @(Collection.GameConfig?.Global.MinLockRank ?? 2) and above can be locked. Rank 1 cards are already safe from Heists.</p>
+                }
+                @if (Card != null)
+                {
+                    <div class="detail-ranks"><strong>In your decks</strong>
+                        @if (!Collection.Decks.Any(pair => pair.Value.Cards.Contains(Card.CardId))) { <p>No saved decks yet contain this card.</p> }
+                        @foreach ((int id, PlayerDeck deck) in Collection.Decks)
+                        {
+                            if (deck.Cards.Contains(Card.CardId)) { <p>@deck.Name</p> }
+                        }
+                    </div>
+                }
+            @if (Owned && ShowDevRanks)
+            {
+                <div class="flex flex-col gap-1" data-testid="dev-rank-row">
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] uppercase tracking-wide" style="color: var(--text-muted);">Dev: rank</span>
+                        @for (int rank = RankMin; rank <= RankMax; rank++)
+                        {
+                            int captured = rank;
+                            <button type="button" class="px-2 py-0.5 rounded text-[11px]"
+                                    style="background: var(--bg-hover); color: var(--text-secondary);"
+                                    data-testid="dev-set-rank" data-rank="@captured"
+                                    @onclick="() => SetDevRank(captured)">@captured</button>
+                        }
+                    </div>
+                    @if (_devRankRefusal != null)
+                    {
+                        <p class="text-[10px]" style="color: var(--accent-red);" data-testid="dev-rank-refusal">@_devRankRefusal</p>
+                    }
+                </div>
+            }
+
+            </div>
+        </div>
+    }
+</MetagameDialog>
+
+@code {
+    /// <summary> The card to show, or null when the overlay is closed. </summary>
+    [Parameter]
+    public CardInfo? Card { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    /// <summary> Forwarded to the lock affordance: the screen owns the "which lock to move?" picker. </summary>
+    [Parameter]
+    public EventCallback<CardId> OnNeedsSlotChoice { get; set; }
+
+    /// <summary>
+    /// Whether to draw the development-only rank control. The screen that opens this reads the query string,
+    /// the way the board reads its own test knobs.
+    /// </summary>
+    [Parameter]
+    public bool ShowDevRanks { get; set; }
+
+    int RankMin => Collection.GameConfig?.Global.RankMin ?? 1;
+
+    string? _devRankRefusal;
+
+    /// <summary> Move the rank, or say why not — a locked card's rank is frozen, and the action refuses it. </summary>
+    void SetDevRank(int rank)
+    {
+        if (Card != null)
+            _devRankRefusal = Collection.DevSetCardRank(Card.CardId, rank);
+    }
+
+    bool Owned => Card != null && Collection.Owns(Card.CardId);
+    bool Locked => Card != null && Collection.IsLocked(Card.CardId);
+    int Rank => Card == null ? 0 : Collection.RankOf(Card.CardId);
+    int RankMax => Collection.GameConfig?.Global.RankMax ?? 5;
+
+    /// <summary> The numbers this account's own copy fields. An unowned card is shown at the rank floor. </summary>
+    CardStats Stats => Card!.GetStatsAtRank(Owned ? Rank : Collection.GameConfig?.Global.RankMin ?? 1);
+
+    string ClanColor => Card?.Clan?.Ref?.ColorHex ?? "var(--border-color)";
+    string ClanName => Card?.Clan?.Ref?.DisplayName ?? "";
+
+    string RankStars => new string('★', Owned ? Rank : 0) + new string('☆', Math.Max(0, RankMax - (Owned ? Rank : 0)));
+
+    /// <summary>
+    /// What the rank has moved, printed numbers and all. This is the line's real payload: the frame already
+    /// carries the current numbers, and only the delta says the copy has grown.
+    /// </summary>
+    string RankDelta
+    {
+        get
+        {
+            if (Card == null)
+                return "";
+
+            List<string> moved = new List<string>();
+            if (Card.Type == CardType.Critter && (Stats.Attack != Card.Attack || Stats.Health != Card.Health))
+                moved.Add($"{Stats.Attack}/{Stats.Health} from printed {Card.Attack}/{Card.Health}");
+            if (Stats.Cost != Card.Cost)
+                moved.Add($"cost {Stats.Cost} from printed {Card.Cost}");
+
+            return string.Join(", ", moved);
+        }
+    }
+
+    /// <summary> What each milestone rank adds, read off the shared track the card is authored against. </summary>
+    string RankTrackLine
+    {
+        get
+        {
+            RankTrackInfo? track = Card?.RankTrack?.Ref;
+            if (track == null || track.IsFlat)
+                return "Flat — this card's numbers are the same at every rank.";
+
+            List<string> parts = new List<string>();
+            for (int rank = RankTrackInfo.FirstGrowthRank; rank <= RankTrackInfo.LastGrowthRank; rank++)
+            {
+                string step = DescribeStep(track.GetStep(rank));
+                if (step.Length > 0)
+                    parts.Add($"Rank {rank}: {step}" + (parts.Count > 0 ? " (additional)" : ""));
+            }
+
+            return string.Join(" · ", parts);
+        }
+    }
+
+    static string DescribeStep(RankTrackStep? step)
+    {
+        if (step == null || step.IsEmpty)
+            return "";
+
+        List<string> parts = new List<string>();
+        if (step.AttackDelta != 0)
+            parts.Add($"{Signed(step.AttackDelta)} attack");
+        if (step.HealthDelta != 0)
+            parts.Add($"{Signed(step.HealthDelta)} health");
+        if (step.CostDelta != 0)
+            parts.Add($"{Signed(step.CostDelta)} cost");
+        if (step.AmountDelta != 0)
+            parts.Add($"{Signed(step.AmountDelta)} to its effect");
+
+        return string.Join(", ", parts);
+    }
+
+    static string Signed(int value) => value >= 0 ? $"+{value}" : value.ToString();
+}

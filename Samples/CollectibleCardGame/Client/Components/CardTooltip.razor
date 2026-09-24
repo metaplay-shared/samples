@@ -1,0 +1,76 @@
+@namespace Game.Client.Components
+@using Game.Logic
+
+@* The card itself never changes anatomy when inspected. This adjacent parchment owns everything that needs
+   reading room: rank, glossary help, rules and flavour. Long details scroll independently; presses inside
+   the panel never submit the owning card. *@
+
+<div class="card-tooltip rarity-@RaritySlug"
+     role="tooltip"
+     data-testid="card-tooltip"
+     data-card-id="@Card.CardId.Value"
+     @onclick:stopPropagation="true" @onpointerdown:stopPropagation="true">
+    <h3 class="card-tooltip-title">@Card.DisplayName</h3>
+    <div class="card-tooltip-meta">
+        <span>@Card.Rarity · @Card.Type</span>
+        <span class="card-tooltip-rank">@RankStars · Rank @Rank</span>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Card.RulesText))
+    {
+        <p class="card-tooltip-rules" data-testid="card-tooltip-rules">@Card.RulesText</p>
+    }
+
+    @foreach (KeywordInfo keyword in Keywords)
+    {
+        <div class="card-tooltip-keyword">
+            <img src="art/icon-@(KeywordSlug(keyword)).webp" alt="" aria-hidden="true" draggable="false" />
+            <div>
+                <strong>@keyword.DisplayName.TrimEnd(':', ' ')</strong>
+                @if (!string.IsNullOrEmpty(keyword.Description))
+                {
+                    <small>@keyword.Description</small>
+                }
+            </div>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(Card.Flavor))
+    {
+        <p class="card-tooltip-flavor">@Card.Flavor</p>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public CardInfo Card { get; set; } = default!;
+    [Parameter] public int Rank { get; set; } = 1;
+    [Parameter] public int RankMax { get; set; } = 5;
+
+    string RaritySlug => Card.Rarity.ToString().ToLowerInvariant();
+
+    string RankStars
+    {
+        get
+        {
+            int ceiling = Math.Max(Rank, RankMax);
+            return new string('★', Math.Clamp(Rank, 0, ceiling)) + new string('☆', Math.Max(0, ceiling - Rank));
+        }
+    }
+
+    List<KeywordInfo> Keywords
+    {
+        get
+        {
+            List<KeywordInfo> keywords = new List<KeywordInfo>();
+            foreach (MetaRef<KeywordInfo> keyword in Card.Keywords)
+            {
+                if (keyword?.MaybeRef != null)
+                    keywords.Add(keyword.Ref);
+            }
+
+            return keywords;
+        }
+    }
+
+    static string KeywordSlug(KeywordInfo keyword) => keyword.KeywordId.Value.ToLowerInvariant();
+}

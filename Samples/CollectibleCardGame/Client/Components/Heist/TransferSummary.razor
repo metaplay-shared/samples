@@ -1,0 +1,73 @@
+@namespace Game.Client.Components.Heist
+@using Game.Logic
+@using Game.Client.Services
+
+@* The transfer, spelled out and read by both players. THIS IS THE POINT OF THE SCREEN.
+
+   The loser sees exactly what left their collection, because hiding the cost in a for-keeps economy is the one
+   dishonest thing this game could do (Docs/client.md, "The Heist").
+
+   Each side carries its two ranks as values as well as words, so a fixture reads the numbers rather than
+   parsing the copy. The "theirs" side is drawn only where it can be drawn honestly: the winner's screen states
+   the loser's move from the rank the lineup row carries — public the moment the card was played — and the
+   loser's screen states nothing about the winner's collection, because it has no business knowing it. *@
+
+<div class="heist-transfer-lines" data-testid="heist-transfer-summary" data-card-id="@Card.Value"
+     data-settled="@(Settled ? "true" : "false")">
+    @if (!Settled)
+    {
+        @* What taking this card WOULD do, before anything is committed: the reader's own side read live, and
+           the loser's read off the rank the lineup row carries. *@
+        <p class="heist-transfer" data-testid="heist-transfer" data-side="mine"
+           data-from="@Mine.From" data-to="@Mine.To" data-kind="@Mine.Kind.ToString()">
+            @HeistPresentation.MineLine(Mine)
+        </p>
+
+        @if (IsWinner)
+        {
+            <p class="heist-transfer" data-testid="heist-transfer" data-side="theirs"
+               data-from="@Theirs.From" data-to="@Theirs.To" data-kind="@Theirs.Kind.ToString()">
+                @HeistPresentation.TheirsLine(Theirs)
+            </p>
+        }
+    }
+    else
+    {
+        @* What it DID, once the pick has landed — and this is the half the loser is owed, because it is the
+           only statement anywhere of what left their collection. One move, framed for whoever is reading it:
+           the same numbers on both screens, from the rank the lineup row carries and the rule the table
+           applied, rather than from a live read that would re-apply the rule to a rank it has already moved. *@
+        <p class="heist-transfer" data-testid="heist-transfer" data-side="@(IsWinner ? "theirs" : "mine")"
+           data-from="@Theirs.From" data-to="@Theirs.To" data-kind="@Theirs.Kind.ToString()">
+            @(IsWinner ? HeistPresentation.TheirsLine(Theirs) : HeistPresentation.MineLine(Theirs))
+        </p>
+
+        @if (IsWinner)
+        {
+            @* And what the winner holds now, read off their own collection: the one side of the transfer that
+               has no "before" recorded anywhere, so it is stated as the fact it is rather than as a delta. *@
+            <p class="heist-transfer" data-testid="heist-yours-now" data-rank="@MyRankNow">
+                Your copy is now rank @MyRankNow.
+            </p>
+        }
+    }
+</div>
+
+@code {
+    /// <summary> The card the summary is about. </summary>
+    [Parameter, EditorRequired] public CardId Card { get; set; } = default!;
+
+    /// <summary> This client's own half of the move, off its own live collection state. Preview only. </summary>
+    [Parameter] public HeistRankMove Mine { get; set; }
+
+    /// <summary> The loser's half, from the lineup row's frozen rank. </summary>
+    [Parameter] public HeistRankMove Theirs { get; set; }
+
+    [Parameter] public bool IsWinner { get; set; }
+
+    /// <summary> Whether the pick has landed, which changes what can honestly be said. </summary>
+    [Parameter] public bool Settled { get; set; }
+
+    /// <summary> The winner's own rank for the card, now. Settled winners only. </summary>
+    [Parameter] public int MyRankNow { get; set; }
+}

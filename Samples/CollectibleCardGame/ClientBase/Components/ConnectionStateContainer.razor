@@ -1,0 +1,22 @@
+@* A screen's cold-start state: a spinner until there is a player to draw. Connection trouble after that is the
+   connection shell's to show, over whatever the screen last drew. *@
+@if (IsReady)
+{
+    @ChildContent
+}
+else
+{
+    <div class="flex flex-col items-center justify-center min-h-[60%]" role="status">
+        <div class="loading loading-spinner loading-lg" style="color: var(--accent-blue);"></div>
+        <p class="mt-4 text-sm" style="color: var(--text-secondary);">Connecting to game server...</p>
+    </div>
+}
+
+@code {
+    /// <summary> Whether the screen has what it needs to draw its content. </summary>
+    [Parameter]
+    public bool IsReady { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+}

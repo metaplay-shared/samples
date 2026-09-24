@@ -1,0 +1,192 @@
+@namespace Game.Client.Components
+@using Game.Logic
+@using Game.Client.Services
+
+@* One compact card anatomy everywhere it appears. Inspection scales this exact face and opens CardTooltip
+   beside it; it never swaps to a second frame. Art, identity, rarity and live values remain independent
+   layers so config updates and match state never require baked text or numbers. *@
+
+<div class="card-face card-face-summary @TypeClass @RarityClass @Art.CompositionClass @StateClass"
+     data-testid="card-face"
+     data-mode="summary"
+     data-sneaky="@IsSneaky.ToString().ToLowerInvariant()"
+     data-bubble="@HasBubble.ToString().ToLowerInvariant()"
+     data-art-fallback="@Art.IsFallback.ToString().ToLowerInvariant()">
+    <span class="card-face-backing" aria-hidden="true"></span>
+
+    <div class="card-face-art-window" aria-hidden="true">
+        <img class="card-face-backdrop" src="@Art.BackdropSrc" alt="" draggable="false" />
+    </div>
+
+    <img class="card-face-frame" src="art/card-frame-shared.webp" alt="" aria-hidden="true" draggable="false" />
+    @if (Card?.Type != CardType.Trick)
+    {
+        <img class="card-face-stat-sockets" src="art/card-stat-sockets.webp" alt="" aria-hidden="true" draggable="false" />
+    }
+
+    <span class="card-face-rarity-band" aria-hidden="true"></span>
+    <span class="card-face-rarity-mark" title="@RarityLabel"></span>
+    <div class="card-face-name" data-testid="@NameTestId">@(Card?.DisplayName ?? "?")</div>
+
+    @if (Art.Treatment == CardArtTreatment.CritterCutout && Art.IllustrationSrc != null)
+    {
+        <img class="card-face-cutout" src="@Art.IllustrationSrc" alt="" aria-hidden="true" draggable="false" />
+    }
+    else if (Art.Treatment == CardArtTreatment.Fallback)
+    {
+        <span class="card-face-fallback-emoji" aria-hidden="true">@(Card?.ArtEmoji ?? "❔")</span>
+    }
+
+    <span class="card-face-cost" data-testid="@CostTestId">@CostShown</span>
+
+    @if (Card?.Clan?.MaybeRef != null)
+    {
+        <img class="card-face-crest" src="@CrestSrc" alt="" aria-hidden="true" draggable="false"
+             title="@Card.Clan.Ref.DisplayName" />
+    }
+
+    @if (KeywordGlyphs.Count > 0)
+    {
+        <div class="card-face-badges" data-testid="@KeywordsTestId">
+            @foreach ((string slug, string label) in KeywordGlyphs)
+            {
+                <img src="art/icon-@(slug).webp" alt="" title="@label" aria-hidden="true" draggable="false" />
+            }
+        </div>
+    }
+
+    @if (Locked)
+    {
+        <img class="card-face-lock" src="art/icon-lock.webp" alt="" title="Locked" data-testid="@LockTestId"
+             draggable="false" />
+    }
+
+    @if (IsSneaky)
+    {
+        <span class="card-face-state card-face-state-sneaky"
+              data-testid="card-state-sneaky"
+              title="Sneaky"
+              role="img" aria-label="Sneaky">
+            <img src="art/icon-sneaky.webp" alt="" aria-hidden="true" draggable="false" />
+        </span>
+    }
+
+    @if (ShowStats)
+    {
+        <span class="card-face-atk" data-testid="@AttackTestId">@AttackShown</span>
+        <span class="card-face-hp @(IsHurt ? "card-face-hp-hurt" : "")"
+              data-testid="@HealthTestId"
+              data-hurt="@IsHurt.ToString().ToLowerInvariant()">@HealthShown</span>
+    }
+
+    @if (Mark != null)
+    {
+        <span class="card-face-mark" aria-hidden="true">@Mark</span>
+    }
+
+    @if (!string.IsNullOrEmpty(Tag))
+    {
+        <span class="card-face-tag card-face-tag-@ToneSlug" data-testid="@TagTestId" data-amount="@TagAmount">@Tag</span>
+    }
+</div>
+
+@code {
+    public enum FaceMode
+    {
+        /// <summary> The compact card; inspection scales it without changing its anatomy. </summary>
+        Summary,
+    }
+
+    public enum TagTone { Neutral, Good, Warn, Muted }
+
+    [Parameter] public CardInfo? Card { get; set; }
+    [Parameter] public FaceMode Mode { get; set; } = FaceMode.Summary;
+    [Parameter] public int Rank { get; set; } = 1;
+    [Parameter] public int? Cost { get; set; }
+    [Parameter] public int? Attack { get; set; }
+    [Parameter] public int? Health { get; set; }
+    [Parameter] public bool ShowStats { get; set; } = true;
+    [Parameter] public bool IsHurt { get; set; }
+    [Parameter] public bool Locked { get; set; }
+    [Parameter] public bool IsPlayable { get; set; }
+    [Parameter] public bool IsReady { get; set; }
+    [Parameter] public bool IsSelected { get; set; }
+    [Parameter] public bool IsTarget { get; set; }
+    [Parameter] public bool IsHealTarget { get; set; }
+    [Parameter] public bool IsLifted { get; set; }
+    [Parameter] public bool IsMarked { get; set; }
+    [Parameter] public bool IsDimmed { get; set; }
+    [Parameter] public bool IsGuard { get; set; }
+    [Parameter] public bool IsSneaky { get; set; }
+    [Parameter] public bool IsSleepy { get; set; }
+    [Parameter] public bool HasBubble { get; set; }
+    [Parameter] public bool HasActed { get; set; }
+    [Parameter] public string? Mark { get; set; }
+    [Parameter] public string? Tag { get; set; }
+
+    /// <summary>
+    /// The number inside that tag, when it has one. A heal preview's amount rides the element as a value so
+    /// a fixture asserts the number rather than the wording; a consequence tag carries none.
+    /// </summary>
+    [Parameter] public int? TagAmount { get; set; }
+
+    [Parameter] public TagTone Tone { get; set; } = TagTone.Neutral;
+    [Parameter] public string? CostTestId { get; set; }
+    [Parameter] public string? AttackTestId { get; set; }
+    [Parameter] public string? HealthTestId { get; set; }
+    [Parameter] public string? NameTestId { get; set; }
+    [Parameter] public string? KeywordsTestId { get; set; }
+    [Parameter] public string? LockTestId { get; set; }
+    [Parameter] public string? TagTestId { get; set; }
+
+    CardArtSet Art => CardArtCatalog.Resolve(Card);
+    string TypeClass => Card?.Type == CardType.Trick ? "card-face-trick" : "card-face-critter";
+    string RarityClass => $"rarity-{Card?.Rarity.ToString().ToLowerInvariant() ?? "common"}";
+    string RarityLabel => Card?.Rarity.ToString() ?? "Common";
+    string CrestSrc => $"art/clan-symbol-{CardArtCatalog.ClanSymbolSlug(Card?.Clan?.MaybeRef?.ClanId?.Value)}.webp";
+
+    List<(string Slug, string Label)> KeywordGlyphs
+    {
+        get
+        {
+            List<(string Slug, string Label)> glyphs = new List<(string Slug, string Label)>();
+            if (Card == null)
+                return glyphs;
+
+            KeywordFlags flags = Card.GetKeywordFlags();
+            if ((flags & KeywordFlags.Guard) != 0)     glyphs.Add(("guard", "Guard"));
+            if ((flags & KeywordFlags.Zoomies) != 0)   glyphs.Add(("zoomies", "Zoomies"));
+            if ((flags & KeywordFlags.Bubble) != 0)    glyphs.Add(("bubble", "Bubble"));
+            if ((flags & KeywordFlags.Sneaky) != 0)    glyphs.Add(("sneaky", "Sneaky"));
+            if ((flags & KeywordFlags.Snacktime) != 0) glyphs.Add(("snacktime", "Snacktime"));
+            return glyphs;
+        }
+    }
+
+    CardStats Stats => Card?.GetStatsAtRank(Rank) ?? new CardStats();
+    int CostShown => Cost ?? Stats.Cost;
+    int AttackShown => Attack ?? Stats.Attack;
+    int HealthShown => Health ?? Stats.Health;
+    string ToneSlug => Tone.ToString().ToLowerInvariant();
+
+    string StateClass
+    {
+        get
+        {
+            List<string> classes = new List<string>();
+            if (IsPlayable) classes.Add("is-playable");
+            if (IsReady)    classes.Add("is-ready");
+            if (IsSelected) classes.Add("is-selected");
+            if (IsTarget)   classes.Add(IsHealTarget ? "is-target is-target-heal" : "is-target");
+            if (IsLifted)   classes.Add("is-lifted");
+            if (IsMarked)   classes.Add("is-marked");
+            if (IsDimmed)   classes.Add("is-dimmed");
+            if (IsGuard)    classes.Add("is-guard");
+            if (IsSneaky)   classes.Add("is-sneaky");
+            if (IsSleepy)   classes.Add("is-sleepy");
+            if (HasBubble)  classes.Add("is-bubble");
+            if (HasActed)   classes.Add("is-spent");
+            return string.Join(' ', classes);
+        }
+    }
+}

@@ -1,0 +1,7 @@
+WeatherId #key,DisplayName,AuraKeyword,CostScope,CostDelta,Trigger,Steps,ArtEmoji,Description
+AcornRain,Acorn Rain,,FirstTrickPerTurn,-1,None,,🌰,The first trick each player casts on their turn costs 1 less.
+BubbleBath,Bubble Bath,Bubble,None,,None,,🫧,All critters have Bubble.
+HarvestMoon,Harvest Moon,,None,,TurnStart,RampOne,🌕,Both players gain 1 extra maximum mana per turn. The whole game plays big.
+PicnicDay,Picnic Day,,None,,CritterDies,HealOwnerDen1,🧺,"Whenever a critter dies, its owner's Den heals 5."
+SugarRush,Sugar Rush,Zoomies,None,,None,,🍬,All critters have Zoomies.
+LongShadows,Long Shadows,,None,,TurnEnd,DenGloom1,🌑,"At the end of your turn, your own Den takes 5 damage. Nothing lasts."

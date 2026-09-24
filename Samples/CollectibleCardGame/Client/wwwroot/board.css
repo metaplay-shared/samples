@@ -1,0 +1,1230 @@
+/* The match board.
+
+   Loaded after app.css (see index.html) and owning everything inside the board's own rectangle. A separate
+   stylesheet rather than more of app.css because the board is one self-contained screen. Desktop geometry
+   is authored in the frame's own units; compact landscape layouts tighten and reflow peripheral controls
+   before they shrink the cards. Nothing here means anything outside `.board-frame`. */
+
+.board-stage {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    padding: 0;
+    isolation: isolate;
+    background: #14101c;
+    font-family: Inter, system-ui, sans-serif;
+}
+
+.board-frame {
+    position: relative;
+    width: min(100%, calc(100dvh * 16 / 9));
+    z-index: 1;
+    height: 100%;
+    container-type: size;
+
+    /* One card's width, named once. Every card the board draws is this wide, and the faces size themselves
+       off it — so the row, the hand and the peek cannot drift apart. */
+    --card-w: 7.5cqw;
+
+    /* The Den is a door, not a card, and it is drawn as wide as its arch is painted: the raster is painted
+       to this box's aspect. `BoardGeometryCssTests.DenArtworkFillsItsSlotAtCardHeight` measures the shipped
+       raster's aspect against the box it is drawn into, so changing this number needs a repainted arch. */
+    --den-w: calc(var(--card-w) * 1.8);
+    --table-gap: 1.1cqw;
+    --near-offset: calc(var(--den-w) / 2 + var(--table-gap) + var(--card-w) / 2);
+    --slot-step: calc(var(--card-w) + var(--table-gap));
+
+    /* Where the hand sits, named once. Two other rules have to line up with this band — the mulligan's
+       overlay stops above it, because it asks the player to tap the cards in it, and the refusal notice sits
+       on its edge — and a rule that repeated the numbers instead of reading them would cover the fan the
+       first time either moved. `--hand-hidden` is how much of each card is below the board's edge at rest:
+       enough to take the stat pills, so only the cost, the art and the name show. */
+    --hand-band: 20cqh;
+    --hand-bottom: 0cqh;
+    --hand-hidden: 3.8cqh;
+
+    font-size: clamp(12px, 1.9cqh, 16px);
+    border-radius: 0;
+    overflow: hidden;
+    background: transparent;
+    border: 0;
+}
+
+/* The rooftop. Its dark upper half and its green lawn are what give the two seats their own ground, which is
+   why the board draws no halfway line: the art already says where the middle is. `cover` rather than
+   `fill` because the source is 16:9.4 rather than 16:9 and stretching a painted sky is visible. */
+.board-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 50% 40%;
+    pointer-events: none;
+}
+
+.board-portrait-note { display: none; }
+
+.board-waiting {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    text-align: center;
+    color: var(--text-primary);
+}
+.board-waiting p { font-size: 0.85rem; color: var(--text-secondary); max-width: 28rem; }
+
+
+/* ---------------------------------------------------------------------------
+   Weather, mode and End turn: one right-side control group
+   --------------------------------------------------------------------------- */
+.turn-controls {
+    position: absolute;
+    z-index: 22;
+    top: 20.1cqh;
+    right: 0.8cqw;
+    width: 11cqw;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.55cqh;
+    text-align: center;
+}
+
+.weather {
+    position: relative;
+    z-index: 24;
+    width: 6.2cqh;
+    height: 6.2cqh;
+    border-radius: 1.7cqh;
+    display: grid;
+    place-items: center;
+    background: rgba(20, 16, 28, 0.82);
+    border: 0.28cqh solid rgba(243, 218, 160, 0.88);
+    box-shadow: 0 0.5cqh 1.4cqh rgba(0, 0, 0, 0.5);
+    cursor: help;
+}
+.weather-icon { width: 5.4cqh; height: 5.4cqh; object-fit: contain; }
+.weather-icon-emoji { width: auto; height: auto; font-size: 3.5cqh; line-height: 1; }
+
+/* The name and the effect are always in the DOM — a keyboard user and a screen reader reach them without a
+   hover — and revealed on hover, on focus, and for the whole mulligan. */
+.weather-detail {
+    position: absolute;
+    right: calc(100% + 1.2cqh);
+    top: -0.4cqh;
+    width: 24cqw;
+    padding: 0.8cqh 1.2cqh;
+    border-radius: 1.1cqh;
+    background: rgba(14, 10, 22, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: var(--text-primary);
+    font-size: 0.78em;
+    line-height: 1.35;
+    text-align: left;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(0.6cqh);
+    transition: opacity 0.14s ease 0.18s, transform 0.14s ease 0.18s, visibility 0s linear 0.32s;
+    pointer-events: none;
+}
+.weather-detail small {
+    display: block;
+    font-size: 0.72em;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.weather-detail b { display: block; margin: 0.1em 0 0.15em; font-size: 1.05em; }
+.weather-detail span { color: var(--text-secondary); }
+
+.weather:hover .weather-detail,
+.weather:focus-visible .weather-detail,
+.weather-open .weather-detail {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(0);
+    transition-delay: 0.18s, 0.18s, 0s;
+}
+.weather-open { border-color: rgba(242, 193, 78, 0.5); }
+
+.stakes-chip {
+    position: relative;
+    z-index: 23;
+    min-width: 6.4cqh;
+    padding: 0.2cqh 0.7cqh;
+    border-radius: 999px;
+    text-align: center;
+    font-size: 0.52em;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    background: rgba(14, 10, 22, 0.6);
+    color: rgba(255, 255, 255, 0.62);
+}
+
+/* ---------------------------------------------------------------------------
+   The opponent's hand: card backs at the top centre, with the count
+   --------------------------------------------------------------------------- */
+.enemy-hand {
+    position: absolute;
+    z-index: 12;
+    left: 50%;
+    top: 0.6cqh;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+}
+.enemy-card {
+    display: block;
+    width: 2.5cqw;
+    height: 6.2cqh;
+    margin-left: -1cqw;
+    border-radius: 0.4cqh;
+    object-fit: fill;
+    /* A fallback fill, so a missing raster is a face-down card rather than a hole. */
+    background: linear-gradient(150deg, #4b3a63, #241c30);
+    box-shadow: 0 0.2cqh 0.6cqh rgba(0, 0, 0, 0.5);
+}
+.enemy-card:first-child { margin-left: 0; }
+.enemy-hand-count {
+    margin-left: 0.7cqh;
+    padding: 0.1cqh 0.7cqh;
+    border-radius: 999px;
+    font-size: 0.7em;
+    font-weight: 800;
+    background: rgba(14, 10, 22, 0.85);
+    color: var(--text-primary);
+}
+
+/* ---------------------------------------------------------------------------
+   Battlefield rows: stacked zones, six sockets and one central Den
+   --------------------------------------------------------------------------- */
+.battlefield-row {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 19.45cqh;
+}
+.battlefield-row-enemy { top: 18.35cqh; }
+.battlefield-row-mine { top: 50.85cqh; }
+
+.den {
+    --den-height: calc(var(--card-w, 96px) * 35 / 24);
+    position: absolute;
+    z-index: 8;
+    left: 50%;
+    top: 0;
+    transform: translateX(-50%);
+    width: var(--den-w);
+    height: var(--den-height);
+    box-sizing: border-box;
+    border: max(1px, 0.1cqh) solid rgba(247, 230, 184, 0.2);
+    border-radius: 1.6cqh 1.6cqh 1cqh 1cqh;
+    background: rgba(30, 21, 46, 0.38);
+    box-shadow: 0 0.45cqh 1cqh rgba(7, 4, 13, 0.34);
+    transition: transform 150ms cubic-bezier(0.2, 0.9, 0.3, 1), border-color 120ms ease,
+                background 120ms ease, box-shadow 120ms ease;
+}
+
+.den-shell {
+    position: absolute;
+    inset: 0;
+    transform-origin: center;
+}
+
+.den-art {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    /* The raster is painted at exactly this box's aspect, so contain and fill
+       paint the same pixels — contain is the declaration that stays honest if either side drifts, because it
+       letterboxes instead of stretching the arch. */
+    object-fit: contain;
+    filter: drop-shadow(0 0.35cqh 0.35cqh rgba(5, 3, 10, 0.5));
+}
+
+.den-panel, .den-guarded { z-index: 2; }
+
+.den-panel {
+    position: absolute;
+    left: 8%;
+    right: 8%;
+    top: 31%;
+    bottom: 19%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.1em;
+    text-align: center;
+    color: #f6efe2;
+}
+.den-who { display: flex; align-items: center; max-width: 100%; gap: 0.3em; font-size: 0.72em; font-weight: 700; }
+.den-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.den-bot { font-size: 0.9em; flex: none; }
+.den-away { color: var(--text-muted); letter-spacing: 0.1em; flex: none; }
+
+/* The hit points: one big number, with the maximum demoted beside it. Nine glyphs since the stat domain was
+   widened, on a line that never wraps — so what does not fit spills over the door, which is why the Den box
+   is a door's width rather than a card's. `tabular-nums` is what keeps 100 dropping to 95 from shifting the
+   line under the eye, and the icon does not shrink: it is the label for the number, not decoration. */
+.den-hp {
+    display: flex;
+    align-items: baseline;
+    gap: 0.2em;
+    white-space: nowrap;
+    flex-wrap: nowrap;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.7);
+}
+.den-hp img { width: 1.5cqh; height: 1.5cqh; object-fit: contain; align-self: center; flex: none; }
+.den-hp b { font-size: 1.6em; font-weight: 800; line-height: 1; }
+.den-hp small { font-size: 0.6em; opacity: 0.55; }
+
+/* The Guard-gate cue teaches why this Den is closed without borrowing the target-state vocabulary. */
+.den-gated .den-art { filter: saturate(0.45) brightness(0.72); }
+.den-targetable {
+    z-index: 30;
+    border-color: rgba(255, 159, 28, 0.86);
+    background: rgba(132, 68, 23, 0.62);
+    box-shadow: inset 0 0 0 1px rgba(255, 225, 180, 0.16),
+                0 0 0 0.18cqh rgba(255, 159, 28, 0.54),
+                0 0 1.1cqh rgba(255, 159, 28, 0.38);
+    cursor: crosshair;
+}
+.den-targetable-heal {
+    border-color: rgba(85, 239, 173, 0.9);
+    background: rgba(22, 112, 76, 0.62);
+    box-shadow: inset 0 0 0 1px rgba(202, 255, 234, 0.18),
+                0 0 0 0.18cqh rgba(85, 239, 173, 0.58),
+                0 0 1.1cqh rgba(57, 232, 155, 0.4);
+}
+.den-targetable:hover,
+.den-targetable:focus-visible {
+    transform: translateX(-50%) translateY(-1.5%) scale(1.06);
+    outline: none;
+}
+.den-targetable .den-art { filter: brightness(1.1); }
+.den-gated .den-panel { opacity: 0.72; }
+.den-guarded {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 0.3em;
+    width: max-content;
+    max-width: 96%;
+    padding: 0.15cqh 0.8cqh;
+    border-radius: 999px;
+    text-align: center;
+    font-size: 0.62em;
+    font-weight: 800;
+    background: #f2c14e;
+    color: #2a2135;
+    box-shadow: 0 0.2cqh 0.6cqh rgba(0, 0, 0, 0.45);
+}
+.den-guarded img { width: 1.3cqh; height: 1.3cqh; object-fit: contain; }
+.den-guarded { top: calc(100% - 2.2cqh); }
+
+.den-preview {
+    position: absolute;
+    z-index: 4;
+    left: 50%;
+    bottom: 0.55cqh;
+    transform: translateX(-50%);
+    padding: 0.1cqh 0.7cqh;
+    border-radius: 999px;
+    background: #2fa86b;
+    color: #fff;
+    font-size: 0.62em;
+    font-weight: 800;
+    letter-spacing: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   The two critter rows, facing each other across the middle
+   --------------------------------------------------------------------------- */
+.critter-row {
+    position: absolute;
+    inset: 0;
+}
+.critter-row-empty { display: none; }
+.critter-slot {
+    position: absolute;
+    top: 0;
+    width: var(--card-w);
+    transition: left 220ms cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+.critter-slot-entry {
+    height: calc(var(--card-w) * 35 / 24);
+    border: max(2px, 0.2cqh) solid rgba(105, 239, 131, 0.9);
+    border-radius: calc(var(--card-w) * 0.13);
+    background: linear-gradient(145deg, rgba(34, 145, 77, 0.42), rgba(137, 255, 154, 0.15));
+    box-shadow: inset 0 0 0 1px rgba(223, 255, 196, 0.32), 0 0 1cqh rgba(72, 245, 120, 0.45);
+}
+.critter-slot-arriving { border-color: transparent; background: transparent; box-shadow: none; }
+.critter-slot-left-outer { left: calc(50% - var(--near-offset) - 2 * var(--slot-step) - var(--card-w) / 2); }
+.critter-slot-left-far { left: calc(50% - var(--near-offset) - var(--slot-step) - var(--card-w) / 2); }
+.critter-slot-left-near { left: calc(50% - var(--near-offset) - var(--card-w) / 2); }
+.critter-slot-right-near { left: calc(50% + var(--near-offset) - var(--card-w) / 2); }
+.critter-slot-right-far { left: calc(50% + var(--near-offset) + var(--slot-step) - var(--card-w) / 2); }
+.critter-slot-right-outer { left: calc(50% + var(--near-offset) + 2 * var(--slot-step) - var(--card-w) / 2); }
+/* How far a dying critter travels toward the graveyard dock on the left edge, per slot. Hand-tuned, and they
+   do not converge: the six land on six points about 5 cqw apart, all of them within the dock's own width, the
+   right-side three a few cqw short of its centre. What these numbers guarantee is only that each slot keeps
+   *its own* landing point when `--den-w` moves — the Den's width reaches them through `--near-offset`, which
+   moves every slot outward by half the Den's growth, so the left slots then have that much less to travel and
+   the right slots that much more. Retuning them to actually converge would change an animation nobody has
+   asked to change; measure before and after if you touch them. */
+.critter-slot-left-outer { --grave-x: -14.5cqw; }
+.critter-slot-left-far { --grave-x: -22.5cqw; }
+.critter-slot-left-near { --grave-x: -31.5cqw; }
+.critter-slot-right-near { --grave-x: -58.5cqw; }
+.critter-slot-right-far { --grave-x: -67.5cqw; }
+.critter-slot-right-outer { --grave-x: -76.5cqw; }
+
+.critter {
+    position: relative;
+    transform-origin: center;
+    transition: transform 150ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.critter-live {
+    z-index: 30;
+    cursor: pointer;
+}
+.critter[data-selected="true"] {
+    z-index: 44;
+    transform: translateY(-7%) scale(1.16);
+}
+.critter:hover:not(.critter-beat-attacker, .critter-beat-damage, .critter-beat-heal, .critter-beat-death),
+.critter:focus-visible:not(.critter-beat-attacker, .critter-beat-damage, .critter-beat-heal, .critter-beat-death),
+.critter-touch-peek:not(.critter-beat-attacker, .critter-beat-damage, .critter-beat-heal, .critter-beat-death) {
+    z-index: 90;
+    transform: translateY(-2%) scale(1.16);
+}
+.critter:focus-visible { outline: max(2px, 0.16cqh) solid rgba(255, 248, 223, 0.92); outline-offset: 0.35cqh; }
+
+/* A board card uses the same parchment as a hand card, but grows less and keeps its socket. Its plaque
+   waits out the same deliberate hover before appearing, and keyboard focus or a first touch tap exposes it
+   without changing the authoritative board. The reciprocal scale keeps the plaque at its authored size
+   while its parent card grows. */
+.critter-peek {
+    position: absolute;
+    z-index: 80;
+    top: 50%;
+    width: min(280px, 40vw);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 150ms ease 350ms, transform 150ms cubic-bezier(0.2, 0.75, 0.25, 1) 350ms,
+                visibility 0s linear 500ms;
+}
+.critter-slot-left-outer .critter-peek,
+.critter-slot-left-far .critter-peek,
+.critter-slot-left-near .critter-peek {
+    right: calc(100% + 0.8cqw);
+    transform: translateY(-46%) scale(0.862) translateY(8px);
+    transform-origin: right center;
+}
+.critter-slot-right-near .critter-peek,
+.critter-slot-right-far .critter-peek,
+.critter-slot-right-outer .critter-peek {
+    left: calc(100% + 0.8cqw);
+    transform: translateY(-46%) scale(0.862) translateY(8px);
+    transform-origin: left center;
+}
+.critter:hover .critter-peek,
+.critter:focus-visible .critter-peek,
+.critter-touch-peek .critter-peek {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(-50%) scale(0.862);
+    transition-delay: 350ms, 350ms, 0s;
+}
+
+/* A consequence tag waits for a hover; a heal preview does not. Hover is not a thing the board re-renders
+   for, so the tag is always in the DOM and CSS decides whether it is visible. */
+.critter-hover-tag .card-face-tag {
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+.critter-hover-tag:hover .card-face-tag { opacity: 1; }
+
+@keyframes critter-impact {
+    0%, 100% { transform: translateX(0); filter: brightness(1); }
+    28% { transform: translateX(-6%); filter: brightness(1.75) saturate(1.35); }
+    48% { transform: translateX(5%); }
+    68% { transform: translateX(-3%); }
+}
+
+@keyframes critter-enter-settle {
+    0% { opacity: 0.6; transform: scale(0.9); filter: brightness(1.7); }
+    62% { opacity: 1; transform: scale(1.06); filter: brightness(1.18); }
+    100% { opacity: 1; transform: scale(1); filter: brightness(1); }
+}
+
+@keyframes critter-heal {
+    0%, 100% { transform: scale(1); filter: brightness(1); }
+    45% {
+        transform: scale(1.08);
+        filter: brightness(1.45) drop-shadow(0 0 0.9cqh rgba(85, 239, 173, 0.9));
+    }
+}
+
+@keyframes critter-to-grave {
+    0% { opacity: 1; transform: translate(0, 0) rotate(0) scale(1); }
+    38% { opacity: 1; transform: translate(0, -8%) rotate(-3deg) scale(1.03); }
+    100% { opacity: 0; transform: translate(var(--grave-x, -31.5cqw), -3cqh) rotate(-22deg) scale(0.25); }
+}
+
+.critter-beat-attacker { z-index: 45; }
+.critter-beat-damage { animation: critter-impact var(--beat-duration, 320ms) ease-out both; }
+.critter-beat-heal { animation: critter-heal var(--beat-duration, 320ms) ease-in-out both; }
+.critter-beat-entering { animation: critter-enter-settle var(--beat-duration, 320ms) ease-out both; }
+.critter-beat-death {
+    z-index: 45;
+    animation: critter-to-grave var(--beat-duration, 320ms) ease-in both;
+}
+
+@keyframes den-impact {
+    0%, 100% { transform: scale(1); filter: brightness(1); }
+    35% { transform: scale(1.07); filter: brightness(1.7) saturate(1.3); }
+    60% { transform: scale(0.98); }
+}
+
+@keyframes den-heal {
+    0%, 100% { transform: scale(1); }
+    45% {
+        transform: scale(1.07);
+        filter: brightness(1.35) drop-shadow(0 0 1.2cqh rgba(85, 239, 173, 0.9));
+    }
+}
+
+.den-beat-damage { animation: den-impact var(--beat-duration, 320ms) ease-out both; }
+.den-beat-heal { animation: den-heal var(--beat-duration, 320ms) ease-in-out both; }
+
+/* ---------------------------------------------------------------------------
+   The pile counters, stacked at the far left of each row
+   --------------------------------------------------------------------------- */
+.piles {
+    position: absolute;
+    z-index: 18;
+    left: 1.1cqw;
+    top: 3.5cqh;
+    width: 10.35cqw;
+    display: grid;
+    gap: 0.65cqh;
+    font-size: 0.62em;
+}
+.piles-mine { --dock-accent: #f2c768; }
+.piles-enemy { --dock-accent: #75c9f1; }
+
+.pile {
+    position: relative;
+    width: 100%;
+    height: 5.85cqh;
+    padding: 0.55cqh 2.5cqw 0.55cqh 3.3cqw;
+    border: 1px solid rgba(234, 215, 151, 0.5);
+    border-left: 0.25cqh solid var(--dock-accent);
+    border-radius: 0.5cqh 1.4cqh 1.4cqh 0.5cqh;
+    background: linear-gradient(100deg, rgba(48, 35, 75, 0.94), rgba(23, 19, 41, 0.94) 70%);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04), 0 0.5cqh 1.1cqh rgba(5, 4, 11, 0.5);
+    color: #f8f1ff;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 120ms ease, filter 120ms ease, transform 120ms ease;
+}
+.pile:hover, .pile:focus-visible { border-color: rgba(255, 240, 184, 0.8); filter: brightness(1.12); transform: translateX(0.2cqw); outline: none; }
+.pile::after { content: ""; position: absolute; left: 2.9cqw; top: 0.9cqh; bottom: 0.9cqh; border-left: 1px solid rgba(234, 215, 151, 0.22); }
+.pile img { position: absolute; left: 0.35cqw; top: 0.7cqh; width: 2.45cqw; height: 4.3cqh; object-fit: contain; }
+.pile span small { display: block; color: #bfb2d1; font-size: 0.72em; font-weight: 800; letter-spacing: 0.08em; line-height: 1; white-space: nowrap; }
+.pile span b { display: block; margin-top: 0.35cqh; font-size: 1.05em; line-height: 1; }
+.pile > strong {
+    position: absolute;
+    right: 0.45cqw;
+    top: 1.25cqh;
+    display: grid;
+    place-items: center;
+    width: 2cqw;
+    height: 3.35cqh;
+    color: #20162f;
+    border: 0.2cqh solid #fff0b8;
+    border-radius: 50%;
+    background: var(--dock-accent);
+    font-weight: 900;
+}
+.pile-deck {
+    justify-self: end;
+    margin-top: -0.45cqh;
+    padding: 0.08cqh 0.5cqh;
+    border-radius: 999px;
+    background: rgba(14, 10, 22, 0.75);
+    color: var(--text-muted);
+    font-size: 0.78em;
+    white-space: nowrap;
+}
+
+.pile-cards { display: flex; flex-wrap: wrap; gap: 0.3rem; max-height: 12rem; overflow-y: auto; }
+.pile-card {
+    padding: 0.15rem 0.4rem;
+    border-radius: 0.3rem;
+    font-size: 0.72rem;
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+}
+
+/* ---------------------------------------------------------------------------
+   The mana acorns, bottom-left and alone there
+   --------------------------------------------------------------------------- */
+.mana { position: absolute; z-index: 14; left: 2.2cqw; bottom: 3cqh; }
+.acorns { display: flex; flex-wrap: wrap; max-width: 17cqw; gap: 0.2cqh; }
+.acorn {
+    width: 2.05cqw;
+    height: 3.4cqh;
+    object-fit: contain;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+}
+/* Spent acorns empty rather than vanish: "what I have left" and "what I will have next turn" are both
+   mid-turn questions. */
+.acorn-spent { opacity: 0.3; filter: grayscale(1) brightness(0.7); }
+
+/* The acorn a permanent ramp just added, for as long as that beat is on screen. It arrives *spent* — the
+   gain is payable from the next refill — so without this the whole of a ramp's payoff is one more empty
+   acorn beside the ones the card itself cost. */
+.acorn-ramped {
+    animation: mp-pop-in 0.32s var(--ease-spring) both;
+    opacity: 0.85;
+    filter: drop-shadow(0 0 0.5cqh var(--hero-glow));
+}
+.mana small {
+    display: block;
+    margin-top: 0.4cqh;
+    padding: 0.1cqh 0.6cqh;
+    border-radius: 0.5cqh;
+    width: fit-content;
+    font-size: 0.62em;
+    background: rgba(14, 10, 22, 0.7);
+    color: var(--text-secondary);
+}
+
+/* ---------------------------------------------------------------------------
+   The hand, on an arc along the bottom edge
+   --------------------------------------------------------------------------- */
+.hand {
+    position: absolute;
+    /* The transparent band spans the board; only its cards take input. */
+    pointer-events: none;
+    z-index: 50;
+    left: 0;
+    right: 0;
+    bottom: calc(var(--hand-bottom) - var(--hand-hidden));
+    height: var(--hand-band);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+
+/* One card on the arc: its sideways offset, its lift and its tilt all come from the same circle, computed in
+   HandFanGeometry so the shape is a unit test rather than a look. */
+.handcard {
+    position: absolute;
+    pointer-events: auto;
+    left: calc(50% - var(--card-w) / 2);
+    bottom: 0;
+    margin: 0;
+    transform: translate(calc(var(--fan-x) * var(--card-w)), calc(var(--fan-y) * var(--card-w) * -1.4))
+               rotate(var(--fan-rot));
+    transform-origin: 50% 120%;
+    transition: transform 260ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.handcard[data-selected="true"] {
+    transform: translate(calc(var(--fan-x) * var(--card-w)), calc(var(--fan-y) * var(--card-w) * -1.4 - 3.4cqh))
+               rotate(var(--fan-rot)) scale(var(--hand-lift-scale, 1.5));
+    z-index: 40;
+}
+
+.handcard[data-marked="true"] {
+    transform: translate(calc(var(--fan-x) * var(--card-w)), calc(var(--fan-y) * var(--card-w) * -1.4 - 2.4cqh))
+               rotate(var(--fan-rot)) scale(1.12);
+    z-index: 35 !important;
+}
+
+/* ---------------------------------------------------------------------------
+   End turn, and everything that belongs with it
+   --------------------------------------------------------------------------- */
+.endturn-wrap {
+    position: relative;
+    z-index: 22;
+    width: 11cqw;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6cqh;
+    padding-top: 0.4cqh;
+}
+.endturn-turnno {
+    min-height: 1.6cqh;
+    font-size: 0.62em;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    color: var(--text-secondary);
+}
+.endturn-turnno[data-state="yours"] { color: #cfc3ff; }
+
+.endturn {
+    position: relative;
+    isolation: isolate;
+    width: 8.3cqw;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    font-size: 0.86em;
+    font-weight: 900;
+    line-height: 1.05;
+    text-align: center;
+    letter-spacing: 0.025em;
+    color: #fff8df;
+    border: 0.32cqh solid #fff0a9;
+    background: repeating-conic-gradient(from -25deg, #7f57b8 0 8deg, #4e347d 8deg 16deg);
+    box-shadow: inset 0 0 0 0.55cqh #25183f, inset 0 0 0 0.78cqh #e9c95f,
+                0 0 1.6cqh rgba(255, 77, 186, 0.34), 0 0.9cqh 1.5cqh rgba(5, 3, 10, 0.6);
+    transform: rotate(-5deg);
+    text-shadow: 0 0.2cqh 0.2cqh #25102f, 0 0 0.7cqh rgba(215, 184, 255, 0.6);
+    cursor: pointer;
+    transition: filter 120ms ease, transform 120ms ease;
+}
+.endturn::before {
+    content: "";
+    position: absolute;
+    z-index: -1;
+    inset: 1.8cqh;
+    border-radius: 50%;
+    background: #402867;
+    box-shadow: 0 0 0 0.2cqh #f3d877;
+}
+.endturn:not(:disabled):hover, .endturn:not(:disabled):focus-visible {
+    filter: brightness(1.12);
+    transform: translateY(-0.3cqh) rotate(-5deg);
+}
+.endturn:disabled {
+    background: repeating-conic-gradient(from -25deg, #564b64 0 8deg, #3b3444 8deg 16deg);
+    color: var(--text-muted);
+    border-color: rgba(255, 255, 255, 0.18);
+    box-shadow: inset 0 0 0 0.55cqh #292431, 0 0.7cqh 1.2cqh rgba(5, 3, 10, 0.42);
+    cursor: not-allowed;
+}
+.endturn-label { position: relative; z-index: 2; }
+
+/* A quiet mark while the turn still has something in it. It never blocks and never asks a question. */
+.endturn-nudge:not(:disabled) {
+    box-shadow: inset 0 0 0 0.55cqh #25183f, inset 0 0 0 0.78cqh #e9c95f,
+                0 0 0 0.28cqh rgba(47, 168, 107, 0.5), 0 0 1.6cqh rgba(255, 77, 186, 0.34),
+                0 0.9cqh 1.5cqh rgba(5, 3, 10, 0.6);
+}
+
+/* The ring drains around the button as the deadline closes. It carries no text: the readout below is the
+   text, and two numbers for one deadline is one too many. */
+.deadline-ring {
+    position: absolute;
+    inset: -0.9cqh;
+    border-radius: 50%;
+    z-index: 1;
+    background: conic-gradient(#a99bff calc(var(--ring-progress) * 360deg), rgba(255, 255, 255, 0.1) 0);
+    mask: radial-gradient(circle, transparent 0 61%, #000 62%);
+    pointer-events: none;
+}
+.deadline-urgent { background: conic-gradient(#e4572e calc(var(--ring-progress) * 360deg), rgba(255, 255, 255, 0.1) 0); }
+
+.endturn-clock {
+    font-size: 1.15em;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+.endturn-clock-urgent { color: #ff8f6a; }
+.endturn-left { font-size: 0.62em; font-weight: 800; color: #6ddba0; }
+.endturn-left-urgent { color: #ff8f6a; }
+
+/* ---------------------------------------------------------------------------
+   The event feed, bottom-right and opposite the acorns
+   --------------------------------------------------------------------------- */
+.event-feed {
+    position: absolute;
+    z-index: 16;
+    right: 2.2cqw;
+    bottom: 2.4cqh;
+    width: 24cqw;
+    padding: 0.6cqh 0.9cqh;
+    border-radius: 1cqh;
+    background: rgba(14, 10, 22, 0.78);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 0.62em;
+    line-height: 1.4;
+    color: var(--text-secondary);
+}
+.event-lines { display: flex; flex-direction: column; gap: 0.1cqh; }
+.event-line { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-line:last-child { color: var(--text-primary); }
+
+/* Expanding in place rather than opening a panel: a feed that covered the board to explain the board would
+   be answering the wrong question. */
+.event-feed-open { max-height: 34cqh; overflow-y: auto; }
+.event-feed-open .event-line { white-space: normal; }
+.event-feed-expand {
+    margin-top: 0.3cqh;
+    padding: 0;
+    background: none;
+    border: 0;
+    font-size: 1em;
+    font-weight: 800;
+    color: #a99bff;
+    cursor: pointer;
+}
+
+
+.refusal-notice {
+    /* Above the overlays. A refusal is the answer to something the player just did, and an answer rendered
+       under a 72%-black scrim is an answer nobody reads — the mulligan and the peek are both states a
+       refusal can arrive in. */
+    position: absolute;
+    z-index: 70;
+    left: 50%;
+    bottom: calc(var(--hand-band) + var(--hand-bottom));
+    transform: translateX(-50%);
+    padding: 0.3cqh 1cqh;
+    border-radius: 0.6cqh;
+    font-size: 0.7em;
+    background: rgba(228, 87, 46, 0.22);
+    border: 1px solid rgba(228, 87, 46, 0.6);
+    color: #ffd9d9;
+}
+.refusal-notice:empty { display: none; }
+
+.seat-notice {
+    /* Stacked directly above the refusal notice, because both can be up at once: an intent the covering bot
+       raced is refused Stale, and the answer to it belongs beside the reason the bot was there. Below the
+       overlays rather than above them, unlike a refusal — the result panel has the last word, and there is
+       nothing to reclaim into behind it. */
+    position: absolute;
+    z-index: 50;
+    left: 50%;
+    bottom: calc(var(--hand-band) + var(--hand-bottom) + 3.4cqh);
+    transform: translateX(-50%);
+    max-width: 46cqw;
+    padding: 0.4cqh 1.2cqh;
+    border-radius: 0.6cqh;
+    font-size: 0.72em;
+    text-align: center;
+    text-wrap: balance;
+    pointer-events: none;
+}
+.seat-notice-struck {
+    background: rgba(232, 165, 61, 0.22);
+    border: 1px solid rgba(232, 165, 61, 0.62);
+    color: #ffe9c2;
+}
+.seat-notice-covered {
+    background: rgba(120, 156, 214, 0.22);
+    border: 1px solid rgba(120, 156, 214, 0.62);
+    color: #dfe9ff;
+}
+
+/* ---------------------------------------------------------------------------
+   Targeting
+   --------------------------------------------------------------------------- */
+.targeting-layer { position: absolute; inset: 0; z-index: 15; outline: none; }
+.trick-flight-destination {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    --card-w: clamp(100px, 12cqw, 160px);
+    width: var(--card-w);
+    height: calc(var(--card-w) * 35 / 24);
+    visibility: hidden;
+    pointer-events: none;
+}
+.last-trick {
+    max-height: 23cqh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    margin-bottom: 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, .12);
+    color: #f8eed8;
+    pointer-events: auto;
+    box-sizing: border-box;
+    opacity: 1;
+    transition: opacity 250ms ease-out;
+}
+.last-trick-fading { opacity: 0; }
+.last-trick > .card-face { --card-w: 64px; flex: 0 0 64px; }
+.last-trick-copy { min-width: 0; }
+.last-trick small { display: block; color: #dac08a; font-size: 12px; }
+.last-trick strong { display: block; font-size: 16px; }
+.last-trick p { margin: 4px 0 0; font-size: 14px; line-height: 1.35; }
+@container (max-width: 800px) {
+    .last-trick > .card-face { display: none; }
+    .last-trick strong { font-size: 14px; }
+    .last-trick p { font-size: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .last-trick { transition: none; }
+    .trick-flight-destination { visibility: visible; z-index: 80; }
+}
+.targeting-banner {
+    position: absolute;
+    left: 50%;
+    top: 44cqh;
+    transform: translateX(-50%);
+    z-index: 35;
+    padding: 0.4cqh 1.4cqh;
+    border-radius: 999px;
+    font-size: 0.76em;
+    font-weight: 700;
+    background: rgba(14, 10, 22, 0.92);
+    border: 1px solid rgba(255, 159, 28, 0.55);
+    color: #ffd79a;
+    text-align: center;
+    white-space: nowrap;
+    pointer-events: none;
+}
+.targeting-banner small { display: block; font-size: 0.72em; font-weight: 400; color: var(--text-muted); }
+
+/* ---------------------------------------------------------------------------
+   Overlays: the mulligan, the peek, the inspector, the result
+   --------------------------------------------------------------------------- */
+.board-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+}
+
+/* The mulligan scrims the whole table uniformly. The hand itself has no painted surface; raising that layer
+   therefore raises only the physical cards, not a bright horizontal strip behind them. */
+.board-overlay-mulligan { inset: 0; }
+.hand-mulligan { z-index: 70; pointer-events: none; }
+.hand-mulligan .handcard { pointer-events: auto; }
+.hand-mulligan.hand-inert .handcard { pointer-events: none; }
+.mulligan-weather {
+    position: absolute;
+    z-index: 2;
+    top: 20.1cqh;
+    right: 0.8cqw;
+    width: 11cqw;
+    display: flex;
+    justify-content: center;
+    pointer-events: none;
+}
+.board-overlay-mulligan .overlay-panel { transform: translateY(2cqh); width: 52cqw; }
+
+.overlay-panel {
+    max-width: 62cqw;
+    padding: 1.6cqh 2cqh;
+    border-radius: 1.4cqh;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    text-align: center;
+    box-shadow: 0 1.6cqh 4cqh rgba(0, 0, 0, 0.6);
+}
+.overlay-panel h3 { font-size: 1.15em; font-weight: 800; }
+.overlay-panel p { margin-top: 0.5cqh; font-size: 0.76em; color: var(--text-secondary); }
+.overlay-count { font-weight: 700; }
+.overlay-note { color: var(--text-muted); }
+.overlay-actions { margin-top: 1.2cqh; display: flex; gap: 0.8cqh; justify-content: center; }
+.overlay-confirm {
+    padding: 0.5cqh 1.4cqh;
+    border-radius: 0.7cqh;
+    font-size: 0.88em;
+    font-weight: 700;
+    background: linear-gradient(180deg, #ffe27a, var(--accent-gold) 55%, var(--accent-gold-deep));
+    color: #2a1a00;
+    border: none;
+    cursor: pointer;
+}
+.overlay-confirm:disabled { opacity: 0.55; cursor: not-allowed; }
+.overlay-secondary {
+    padding: 0.5cqh 1.4cqh;
+    border-radius: 0.7cqh;
+    font-size: 0.88em;
+    background: var(--bg-hover);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+/* The Heist. The one screen that takes the whole frame with the settled board behind it rather than a table
+   under it, so its panel is wider than the others and its lineup scrolls rather than shrinking: a loser who
+   played nine cards has to show nine, because the lineup is the game the winner just watched. */
+.heist-screen { z-index: 65; }
+.heist-panel { max-width: 84cqw; }
+.heist-mascot { font-size: 2.6em; line-height: 1; }
+.heist-loot {
+    margin-top: 1.2cqh;
+    overflow-x: auto;
+    padding-bottom: 0.4cqh;
+}
+.heist-loot-row {
+    display: flex;
+    gap: 0.8cqh;
+    flex-wrap: nowrap;
+    width: max-content;
+    margin-inline: auto;
+}
+.heist-loot-slot { flex: 0 0 auto; width: 7.6rem; }
+.heist-transfer-lines { margin-top: 1cqh; }
+.heist-transfer { font-size: 0.8em; color: var(--text-primary); }
+.heist-refusal { margin-top: 0.6cqh; font-size: 0.76em; color: var(--accent-red); }
+.heist-clock { margin-top: 1cqh; display: flex; justify-content: center; }
+.heist-clock-dial { position: relative; width: 6cqh; aspect-ratio: 1; display: grid; place-items: center; }
+.heist-clock-seconds {
+    font-size: 0.9em;
+    font-weight: 800;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.peek-cards { margin-top: 1.4cqh; display: flex; gap: 2cqh; justify-content: center; }
+.peek-card {
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+}
+.peek-card .card-face { --card-w: 9cqw; }
+
+/* Compact landscape keeps the battlefield playable instead of replacing it with an error panel. Peripheral
+   information yields first: the feed disappears, the edge docks narrow and the six sockets pack inward. */
+@media (max-width: 720px), (max-height: 460px) {
+    .board-stage { padding: 0; }
+    .board-frame {
+        width: 100%;
+        height: 100dvh;
+        aspect-ratio: auto;
+        --card-w: min(8.6cqw, 18cqh);
+        --hand-hidden: 10cqh;
+        --hand-lift-scale: 1.15;
+        border: 0;
+        border-radius: 0;
+    }
+    .battlefield-row-enemy { top: 15cqh; }
+    .battlefield-row-mine { top: 45cqh; }
+    .den-hp { font-size: 3cqh; }
+    .event-feed { display: none; }
+    .event-feed:has(.last-trick) { display: block; width: 30cqw; }
+    .event-feed:has(.last-trick) .event-lines,
+    .event-feed:has(.last-trick) .event-feed-expand { display: none; }
+    .piles { left: 0.6cqw; width: 11.8cqw; }
+    .pile { padding-left: 3.7cqw; padding-right: 2.7cqw; }
+    .pile::after { left: 3.25cqw; }
+    .pile img { width: 2.8cqw; }
+    .pile > strong { width: 2.35cqw; }
+    .turn-controls { right: 0.3cqw; width: 10.5cqw; }
+    .endturn-wrap { width: 10.5cqw; }
+    .endturn { width: 9.2cqw; }
+}
+
+/* The table is a landscape game. Compressing six card sockets, two Dens and the hand into portrait made every
+   target technically present but practically unplayable, so portrait asks for rotation instead of lying. */
+@media (orientation: portrait) {
+    .board-frame { display: none; }
+    .board-portrait-note {
+        display: flex;
+        width: min(82vw, 22rem);
+        padding: 1.4rem;
+        border: 1px solid rgba(243, 216, 119, 0.55);
+        border-radius: 1.2rem;
+        flex-direction: column;
+        gap: 0.5rem;
+        color: #fff8df;
+        background: linear-gradient(145deg, rgba(61, 38, 91, 0.96), rgba(21, 17, 36, 0.98));
+        box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.55);
+        text-align: center;
+    }
+    .board-portrait-note strong { color: #f3d877; font-size: 1.1rem; }
+    .board-portrait-note span { color: #d1c7db; font-size: 0.82rem; line-height: 1.45; }
+}
+
+/* ---------------------------------------------------------------------------
+   The development scene preview
+   The one rule here that is not the board: the corner label the offline scene preview stamps on itself, so a
+   screenshot says which scene it is. Never rendered outside a local or offline environment.
+   --------------------------------------------------------------------------- */
+.dev-scene-label {
+    position: fixed;
+    left: 0.5rem;
+    bottom: 0.4rem;
+    z-index: 90;
+    padding: 0.1rem 0.45rem;
+    border-radius: 0.3rem;
+    font-size: 0.6rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: rgba(0, 0, 0, 0.55);
+    color: rgba(255, 255, 255, 0.55);
+    pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .handcard, .weather-detail, .critter, .critter-slot, .den,
+    .critter-hover-tag .card-face-tag { transition: none; }
+    .critter, .den-shell { animation: none !important; }
+    /* The ramped acorn keeps its highlight and loses the motion: what the pop says is "this one is new",
+       and the glow says that standing still. */
+    .acorn-ramped { animation: mp-pop-in 0.001s both; }
+}
+
+.board-motion-card {
+    position: fixed !important;
+    z-index: 1000 !important;
+    margin: 0 !important;
+    transform: none;
+    transform-origin: center;
+    pointer-events: none !important;
+    transition: none !important;
+    will-change: transform, filter;
+}
+.board-motion-source-hidden { visibility: hidden !important; }
+
+/* The pre-match reveal: the wager, stated over the mulligan rather than in front of it.
+   It takes NO pointer events at any level, which is what makes it safe to draw above both the mulligan scrim
+   (60) and the raised hand (70): the confirm and the cards underneath stay reachable, and the panel gets out
+   of the way on the first mulligan interaction or on its own timeout rather than on a press of its own. */
+.pre-match-reveal {
+    position: absolute;
+    z-index: 80;
+    top: 10cqh;
+    left: 0;
+    right: 0;
+    width: 52cqw;
+    margin-inline: auto;
+    padding: 1.8cqh 2.4cqh;
+    border-radius: 1.8cqh;
+    background: linear-gradient(135deg, #fff4d9, #eddbaf);
+    border: 1px solid #c29a59;
+    color: #382941;
+    text-align: center;
+    box-shadow: inset 0 0 0 4px #fff4d955, inset 0 0 0 5px #b48a4b55, 0 1cqh 3cqh #08050c66;
+    pointer-events: none;
+    animation: reveal-arrival 240ms ease-out both;
+}
+.pre-match-reveal .reveal-weather {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.7cqh;
+    font-size: 0.85em;
+    color: #705547;
+}
+.pre-match-reveal .reveal-weather-icon { font-size: 1.2em; }
+.pre-match-reveal .reveal-weather-name { font-weight: 600; }
+.pre-match-reveal .reveal-seats {
+    margin-top: 1cqh;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 1.5cqh;
+}
+.pre-match-reveal .reveal-seat { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4cqh 1cqh; }
+.pre-match-reveal .reveal-name { width: 100%; font: 400 1.45em 'Lilita One', system-ui; overflow-wrap: anywhere; }
+.pre-match-reveal .reveal-bot { font-size: 0.75em; color: #705547; }
+.pre-match-reveal .reveal-power, .pre-match-reveal .reveal-locks { font-size: 0.8em; color: #705547; }
+.pre-match-reveal .reveal-versus { font: 400 1.2em 'Lilita One', system-ui; color: #9e773e; }
+.pre-match-reveal .reveal-tier {
+    margin-top: 1cqh;
+    padding-top: 1cqh;
+    border-top: 1px solid #b48a4b55;
+    font-size: 0.85em;
+    line-height: 1.4;
+    text-wrap: balance;
+    color: #644d48;
+}
+@keyframes reveal-arrival {
+    from { opacity: 0; translate: 0 -0.8cqh; }
+    to { opacity: 1; translate: 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pre-match-reveal { animation: none; }
+}
+
+/* Window-wide artwork and scrim stay independent of the table's interaction geometry. */
+.board-stage:has(.board-overlay)::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: #08060cb8;
+    pointer-events: none;
+}
+.board-frame:has(.board-overlay) > :not(.board-overlay):not(.pre-match-reveal):not(.hand-mulligan):not(.refusal-notice) {
+    opacity: 0.35;
+}
+.board-stage .board-portrait-note { position: relative; z-index: 1; align-self: center; }
+
+/* Match controls share the metagame's display face and quieter body text. Card faces own their typography. */
+.board-frame .board-overlay-mulligan .overlay-panel {
+    padding: 2.4cqh 3cqh;
+    border: 1px solid #b9945a;
+    border-radius: 1.8cqh;
+    background: linear-gradient(135deg, #fff4d9, #eddbaf);
+    color: #382941;
+    box-shadow: inset 0 0 0 4px #fff4d955, inset 0 0 0 5px #b48a4b55, 0 1cqh 3cqh #08050c66;
+}
+.board-frame .overlay-panel h3 { font: 400 1.65em 'Lilita One', system-ui; }
+.board-frame .board-overlay-mulligan .overlay-panel p { font-size: 0.9em; line-height: 1.5; color: #705547; }
+.board-frame .overlay-confirm { padding: 0.9cqh 2cqh; font-weight: 600; border: 1px solid #c49b48; }
+.board-frame .board-overlay-mulligan .overlay-secondary { background: #fff8e8; color: #644d48; border-color: #b9945a; }
+.board-frame .endturn-label { font: 400 1.25em 'Lilita One', system-ui; letter-spacing: 0; }
+.board-frame .endturn-turnno, .board-frame .endturn-left, .board-frame .den-who { font-weight: 600; }
+.board-frame .endturn-clock { font-weight: 600; }
+@media (max-height: 460px) {
+    .pre-match-reveal { top: 7cqh; width: 62cqw; padding: 1cqh 2cqh; font-size: 12px; }
+    .board-overlay-mulligan .overlay-panel { width: 62cqw; transform: translateY(9cqh); }
+    .board-frame .overlay-panel { padding: 1.3cqh 2cqh; }
+    .board-frame .overlay-panel h3 { font-size: 1.35em; }
+}
+
+/* While the summary is visible, its weather copy replaces the overlapping side tooltip. */
+.board-frame:has(.pre-match-reveal) .mulligan-weather { display: none; }
+.pre-match-reveal .reveal-weather-description { margin-top: 0.3cqh; font-size: 0.85em; color: #705547; }
+
+.heist-loot { padding: 10px 6px 24px; }
+.heist-card-choice { display: block; width: 100%; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; border-radius: 12px; }
+.heist-card-choice:disabled { cursor: default; }
+.heist-card-choice:not(:disabled) > * { cursor: pointer; }
+.heist-card-choice:focus-visible { outline: 2px solid #fff2c4; outline-offset: 3px; }
+.heist-loot-slot { position: relative; border-radius: 12px; }
+.heist-loot-slot[data-selected="true"] { outline: 3px solid #f4cd66; outline-offset: 3px; box-shadow: 0 0 24px #f4cd6677; }
+.heist-selected-label { display: block; color: #ffe8a5; font-size: 12px; font-weight: 600; margin-top: 6px; }
+
+.seat-reclaim {
+    display: block; margin: 6px auto 0; min-height: 36px; padding: 6px 14px;
+    border: 1px solid #e8cf93; border-radius: 8px; background: #f4dfad; color: #302039;
+    font: 600 12px Inter, sans-serif; cursor: pointer; pointer-events: auto;
+}
+.seat-reclaim:focus-visible { outline: 2px solid white; outline-offset: 3px; }

@@ -1,0 +1,23 @@
+# Option overrides when running the server locally
+
+# Bind the WebSocket listener to all interfaces (default is 127.0.0.1 in local environments) so the
+# browser-based Client can connect from other devices on the LAN, not just this machine.
+WebSockets:
+  ListenHost: "0.0.0.0"
+
+# Serve the Blazor WASM Client from the game server's public web host (PublicWebApi, port 5560).
+# Points at the Client *publish* output (relative to the server working dir, Backend/Server). A plain
+# `dotnet build` does not produce a self-contained wwwroot (index.html and static assets are resolved
+# via a static-web-assets manifest, not copied), so a publish is required. Produce it first with:
+#   dotnet publish Client/Client.csproj -c Release
+WebClientHosting:
+  WebRootPath: "../../Client/bin/Release/net10.0-browser/publish/wwwroot"
+
+# Match pacing for a locally running server, which is also what the Playwright match fixtures drive. Bot
+# delays are shortened for local iteration. The turn deadline is lengthened past any test run, so no fixture
+# is overtaken by it; a human playing locally still gets a deadline and a ring.
+Match:
+  MulliganDeadline: "00:01:00"
+  TurnDeadline: "00:05:00"
+  BotActionDelay: "00:00:00.250"
+  BotActionDelayJitter: "00:00:00.150"

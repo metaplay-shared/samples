@@ -1,0 +1,546 @@
+/* The compact card face. Every measurement follows --card-w, and inspection uniformly scales this exact
+   anatomy rather than swapping in another frame. */
+.card-face {
+    --cw: var(--card-w, 96px);
+    --rarity-main: #c87532;
+    --rarity-dark: #6b351f;
+    --rarity-light: #f4d99b;
+    position: relative;
+    isolation: isolate;
+    width: var(--cw);
+    aspect-ratio: 24 / 35;
+    flex: 0 0 auto;
+    overflow: visible;
+    color: #fff9dc;
+    font-family: Arial, Helvetica, system-ui, sans-serif;
+    filter: drop-shadow(0 calc(var(--cw) * 0.06) calc(var(--cw) * 0.052) rgba(8, 5, 16, 0.6))
+            brightness(var(--card-brightness, 1)) saturate(var(--card-saturation, 1));
+    transition: opacity 140ms ease, filter 140ms ease, transform 140ms ease;
+}
+
+.card-face.rarity-rare {
+    --rarity-main: #1fb7d7;
+    --rarity-dark: #07566e;
+    --rarity-light: #c9f6ff;
+}
+
+.card-face.rarity-epic {
+    --rarity-main: #c53ccf;
+    --rarity-dark: #591d68;
+    --rarity-light: #ffd76a;
+}
+
+.card-face-backing {
+    position: absolute;
+    z-index: 0;
+    inset: -2%;
+    border: max(1px, calc(var(--cw) * 0.01)) solid rgba(247, 230, 184, 0.4);
+    border-radius: 10% 10% 14% 14%;
+    background: rgba(33, 24, 50, 0.78);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+                0 calc(var(--cw) * 0.04) calc(var(--cw) * 0.07) rgba(7, 4, 13, 0.53);
+    transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+    pointer-events: none;
+}
+
+.card-face-art-window {
+    position: absolute;
+    z-index: 3;
+    left: 11.45%;
+    top: 6.43%;
+    width: 77.1%;
+    height: 50%;
+    overflow: hidden;
+    border-radius: 6% 6% 10% 10%;
+    background: #352847;
+    opacity: 0.9;
+}
+
+.card-face-backdrop {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.card-face-frame {
+    position: absolute;
+    z-index: 2;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: fill;
+}
+
+.card-face-stat-sockets {
+    position: absolute;
+    z-index: 2;
+    left: 0;
+    bottom: -3%;
+    width: 100%;
+    height: 25%;
+    object-fit: fill;
+    pointer-events: none;
+}
+
+.card-face-rarity-band {
+    position: absolute;
+    z-index: 5;
+    left: 10.4%;
+    top: 64.3%;
+    width: 79.2%;
+    height: 10%;
+    border-radius: calc(var(--cw) * 0.04);
+    background: linear-gradient(100deg, var(--rarity-dark), var(--rarity-main), var(--rarity-dark));
+    box-shadow: inset 0 0 0 max(1px, calc(var(--cw) * 0.01)) var(--rarity-light);
+}
+
+.card-face-rarity-mark {
+    position: absolute;
+    z-index: 6;
+    left: 14.6%;
+    top: 66.8%;
+    width: 7.3%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: var(--rarity-light);
+}
+
+.rarity-rare .card-face-rarity-mark {
+    border-radius: 0;
+    transform: rotate(45deg);
+}
+
+.rarity-epic .card-face-rarity-mark {
+    top: 65.7%;
+    width: 8.3%;
+    aspect-ratio: 8 / 9;
+    border-radius: 0;
+    clip-path: polygon(0 28%, 27% 52%, 50% 0, 73% 52%, 100% 28%, 86% 100%, 14% 100%);
+}
+
+.card-face-name {
+    position: absolute;
+    z-index: 6;
+    left: 25%;
+    top: 64.3%;
+    width: 61.5%;
+    height: 10%;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    color: #fff;
+    font-size: calc(var(--cw) * 0.078);
+    font-weight: 800;
+    line-height: 1;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    text-shadow: 0 1px 0 #16091d;
+}
+
+.card-face-cutout {
+    position: absolute;
+    z-index: 7;
+    left: -1%;
+    top: 2.1%;
+    width: 102%;
+    height: 61.4%;
+    object-fit: contain;
+    object-position: center bottom;
+    filter: drop-shadow(0 1px 1px rgba(39, 19, 49, 0.5));
+    pointer-events: none;
+}
+
+.card-art-garden-snail .card-face-cutout {
+    left: 0;
+    top: 5%;
+    width: 75%;
+    height: 58.5%;
+}
+
+.card-art-boulder-boar .card-face-cutout,
+.card-art-dumpster-bandit .card-face-cutout {
+    left: -3%;
+    width: 98%;
+}
+
+.card-face-fallback-emoji {
+    position: absolute;
+    z-index: 4;
+    left: 50%;
+    top: 29%;
+    transform: translate(-50%, -50%);
+    font-size: calc(var(--cw) * 0.4);
+    line-height: 1;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.4));
+}
+
+.card-face-cost {
+    position: absolute;
+    z-index: 10;
+    left: -3.1%;
+    top: -2.1%;
+    width: 25%;
+    aspect-ratio: 1;
+    display: grid;
+    place-items: center;
+    padding-bottom: 1%;
+    color: #fff9dc;
+    background: url("art/card-badge-cost.webp") center / contain no-repeat;
+    font-size: calc(var(--cw) * 0.105);
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    text-shadow: 0 0 2px #57220d;
+}
+
+.card-face-crest {
+    position: absolute;
+    z-index: 10;
+    left: 78.1%;
+    top: -2.1%;
+    width: 25%;
+    aspect-ratio: 1;
+    object-fit: contain;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
+    transition: left 220ms ease, top 220ms ease, width 220ms ease;
+}
+
+/* The exposed left edge carries both identifiers in a tight fan. Inspection opens the ordinary face. */
+.handcard .card-face-crest {
+    left: -1%;
+    top: 19%;
+    width: 20%;
+}
+.handcard-selected .card-face-crest,
+.handcard-peeking .card-face-crest,
+.hand:not(.hand-inert) .handcard:hover .card-face-crest,
+.hand:not(.hand-inert) .handcard:focus-visible .card-face-crest {
+    left: 78.1%;
+    top: -2.1%;
+    width: 25%;
+}
+
+.card-face-badges {
+    position: absolute;
+    z-index: 8;
+    left: 26%;
+    top: 76.4%;
+    width: 48%;
+    height: 17.1%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2%;
+}
+
+.card-face-badges img {
+    width: 18%;
+    min-width: calc(var(--cw) * 0.17);
+    height: 100%;
+    object-fit: contain;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.65));
+}
+
+.card-face-lock {
+    position: absolute;
+    z-index: 11;
+    right: 7%;
+    top: 46%;
+    width: 14%;
+    object-fit: contain;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
+}
+
+.card-face-state {
+    position: absolute;
+    z-index: 11;
+    right: -6%;
+    top: 42%;
+    width: 23%;
+    aspect-ratio: 1;
+    display: grid;
+    place-items: center;
+    border: max(1px, calc(var(--cw) * 0.018)) solid #d8c7ff;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 28%, #735fa5, #2a1c49 72%);
+    box-shadow: 0 0 calc(var(--cw) * 0.08) rgba(151, 120, 235, 0.72),
+                inset 0 0 0 max(1px, calc(var(--cw) * 0.012)) rgba(255, 255, 255, 0.16);
+    pointer-events: none;
+}
+.card-face-state img { width: 78%; height: 78%; object-fit: contain; }
+
+.card-face-atk,
+.card-face-hp {
+    position: absolute;
+    z-index: 10;
+    bottom: 2%;
+    width: 21%;
+    aspect-ratio: 1;
+    display: grid;
+    place-items: center;
+    padding: 0 0 1% 0;
+    color: #fff9dc;
+    font-size: calc(var(--cw) * 0.105);
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    text-align: center;
+    text-shadow: 0 0 2px #3c1531;
+}
+
+.card-face-atk { left: 7.4%; }
+.card-face-hp { right: 8.5%; }
+.card-face-hp-hurt { color: #ffd0c8; text-shadow: 0 0 3px #e54032; }
+
+.card-face-mark {
+    position: absolute;
+    z-index: 12;
+    left: 50%;
+    top: 34%;
+    transform: translate(-50%, -50%);
+    font-size: calc(var(--cw) * 0.32);
+    filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.55));
+    pointer-events: none;
+}
+
+.card-face-tag {
+    position: absolute;
+    z-index: 40;
+    left: 50%;
+    bottom: -22%;
+    transform: translateX(-50%);
+    padding: 0.12em 0.55em;
+    border-radius: 999px;
+    white-space: nowrap;
+    color: #fdf6e6;
+    background: #2a2135;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+    font-size: calc(var(--cw) * 0.1);
+    font-weight: 800;
+    pointer-events: none;
+}
+
+.card-face-tag-good { background: #2fa86b; }
+.card-face-tag-warn { background: #e4572e; }
+.card-face-tag-muted { color: rgba(253, 246, 230, 0.7); background: rgba(60, 52, 76, 0.92); }
+
+/* The interaction surface is the physical backing rather than an outline laid over neighboring cards. */
+@keyframes card-ready-sweep {
+    from { background-position: 100% 0; }
+    to { background-position: 0 0; }
+}
+
+.card-face.is-playable .card-face-backing,
+.card-face.is-ready .card-face-backing {
+    inset: -4%;
+    border: max(2px, calc(var(--cw) * 0.02)) solid #67ef83;
+    border-radius: 12% 12% 16% 16%;
+    background: linear-gradient(110deg,
+        rgba(23, 104, 63, 0.66) 8%,
+        rgba(45, 189, 96, 0.66) 34%,
+        rgba(181, 255, 137, 0.78) 47%,
+        rgba(45, 189, 96, 0.66) 60%,
+        rgba(23, 104, 63, 0.66) 88%);
+    background-size: 260% 100%;
+    box-shadow: 0 0 0 1px rgba(223, 255, 196, 0.47),
+                0 0 calc(var(--cw) * 0.075) calc(var(--cw) * 0.02) rgba(66, 235, 113, 0.5),
+                inset 0 0 calc(var(--cw) * 0.085) rgba(166, 255, 138, 0.27);
+    animation: card-ready-sweep 1.8s cubic-bezier(0.65, 0, 0.35, 1) infinite alternate;
+}
+
+.card-face.is-selected .card-face-backing {
+    inset: -4%;
+    border: max(2px, calc(var(--cw) * 0.025)) solid #b8a5ff;
+    background: rgba(91, 69, 154, 0.82);
+    box-shadow: 0 0 calc(var(--cw) * 0.09) calc(var(--cw) * 0.025) rgba(169, 155, 255, 0.5);
+    animation: none;
+}
+
+.card-face.is-target .card-face-backing {
+    inset: -4%;
+    border: max(2px, calc(var(--cw) * 0.022)) solid #ff9f1c;
+    background: rgba(152, 77, 19, 0.74);
+    box-shadow: 0 0 calc(var(--cw) * 0.07) calc(var(--cw) * 0.018) rgba(255, 159, 28, 0.42);
+    animation: none;
+}
+
+.card-face.is-target-heal .card-face-backing {
+    border-color: #55efad;
+    background: rgba(24, 126, 84, 0.76);
+    box-shadow: 0 0 calc(var(--cw) * 0.075) calc(var(--cw) * 0.02) rgba(57, 232, 155, 0.46);
+}
+
+.card-face.is-lifted { z-index: 5; }
+.card-face.is-marked .card-face-backing { border-color: #e4572e; background: rgba(130, 46, 36, 0.78); }
+.card-face.is-dimmed { --card-brightness: 0.64; --card-saturation: 0.7; }
+.card-face.is-dimmed .card-face-cost { filter: grayscale(0.85); }
+.card-face.is-guard { filter: drop-shadow(0 0 3px #f3c950) drop-shadow(0 6px 5px rgba(8, 5, 16, 0.6)); }
+.card-face.is-sleepy { filter: saturate(0.4) brightness(0.9); }
+.card-face.is-bubble .card-face-frame { filter: drop-shadow(0 0 calc(var(--cw) * 0.04) rgba(96, 190, 240, 0.9)); }
+.card-face.is-spent { opacity: 0.74; }
+
+.card-face.is-dimmed .card-face-backing,
+.card-face.is-sleepy .card-face-backing,
+.card-face.is-spent .card-face-backing,
+.card-face.is-lifted .card-face-backing {
+    animation: none;
+}
+
+/* Hand inspection retains the fan angle and scales the actual card. */
+.handcard:hover,
+.handcard-peeking {
+    transform: translate(calc(var(--fan-x) * var(--card-w)), calc(var(--fan-y) * var(--card-w) * -1.4 - 3.4cqh))
+               rotate(var(--fan-rot)) scale(var(--hand-lift-scale, 1.5));
+    z-index: 40 !important;
+}
+
+.hand-inert .handcard:hover {
+    transform: translate(calc(var(--fan-x) * var(--card-w)), calc(var(--fan-y) * var(--card-w) * -1.4))
+               rotate(var(--fan-rot));
+}
+
+.hand-inert .handcard-selected,
+.hand-inert .handcard-selected:hover {
+    transform: translate(calc(var(--fan-x) * var(--card-w)), calc(var(--fan-y) * var(--card-w) * -1.4 - 3.4cqh))
+               rotate(var(--fan-rot)) scale(var(--hand-lift-scale, 1.5));
+    z-index: 40 !important;
+}
+
+/* A submitted card stays alive under the pointer while its authoritative move is travelling. */
+.hand-inert .handcard-selected .card-face-frame {
+    animation: card-awaiting-answer 900ms ease-in-out infinite alternate;
+}
+
+@keyframes card-awaiting-answer {
+    from { filter: brightness(1) drop-shadow(0 0 2px #ffd87966); }
+    to { filter: brightness(1.15) drop-shadow(0 0 7px #ffd879aa); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .card-face-backing { transition: none; }
+    .hand-inert .handcard-selected .card-face-frame { animation: none; }
+}
+
+.handcard-peek {
+    position: absolute;
+    z-index: 50;
+    bottom: 0;
+    width: min(280px, 40vw);
+    pointer-events: none;
+    transform: rotate(calc(-1 * var(--fan-rot))) scale(0.666667);
+    transform-origin: center top;
+    animation: card-tooltip-in 150ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.handcard-peek-right { left: calc(100% + 18px); }
+
+@container (max-width: 1000px) {
+    .handcard-peek-edge {
+        left: auto;
+        right: calc(100% + 18px);
+    }
+    .handcard-peek-edge .card-tooltip {
+        padding-right: 17px;
+        padding-left: 15px;
+        border-right: 6px solid var(--tooltip-accent);
+        border-left-width: 2px;
+        border-radius: 15px 7px 7px 15px;
+        background: radial-gradient(circle at 18% 12%, #fff0c9 0 8%, transparent 30%),
+                    linear-gradient(255deg, #d3a970, #f3dda9 10%, #ecd19a 88%, #c79765);
+    }
+}
+
+
+
+.handcard-resolving-play {
+    z-index: 70 !important;
+    pointer-events: none;
+}
+
+@keyframes card-tooltip-in {
+    from { opacity: 0; translate: 0 8px; }
+    to { opacity: 1; translate: 0 0; }
+}
+
+.card-tooltip {
+    --tooltip-accent: #c87532;
+    width: min(280px, 40vw);
+    box-sizing: border-box;
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    pointer-events: auto;
+    padding: 14px 15px 13px 17px;
+    color: #432c3d;
+    border: 2px solid #70462f;
+    border-left: 6px solid var(--tooltip-accent);
+    border-radius: 7px 15px 15px 7px;
+    background: radial-gradient(circle at 82% 12%, #fff0c9 0 8%, transparent 30%),
+                linear-gradient(105deg, #d3a970, #f3dda9 10%, #ecd19a 88%, #c79765);
+    box-shadow: inset 0 0 0 2px rgba(255, 242, 203, 0.53), 0 12px 18px rgba(8, 5, 17, 0.6);
+    font-family: Arial, Helvetica, system-ui, sans-serif;
+}
+
+.card-tooltip.rarity-rare { --tooltip-accent: #25c4e5; }
+.card-tooltip.rarity-epic { --tooltip-accent: #d34ede; }
+
+.card-tooltip-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+    color: #765247;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.4;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    flex-wrap: wrap;
+}
+
+.card-tooltip-rank { color: #70451f; letter-spacing: 0; }
+
+.card-tooltip-keyword {
+    display: grid;
+    grid-template-columns: 27px 1fr;
+    gap: 7px;
+    align-items: center;
+    margin-top: 12px;
+}
+
+.card-tooltip-keyword img { width: 25px; height: 31px; object-fit: contain; }
+.card-tooltip-keyword strong { display: block; color: #4b2d43; font-size: 15px; }
+.card-tooltip-keyword small { display: block; margin-top: 3px; color: #59454c; font-size: 14px; line-height: 1.4; }
+.card-tooltip hr { margin: 9px 0; border: 0; border-top: 1px solid rgba(132, 93, 75, 0.33); }
+.card-tooltip-title { margin: 0 0 6px; color: #432c3d; font-size: 19px; font-weight: 800; line-height: 1.2; }
+.card-tooltip-rules { margin: 12px 0 0; color: #432c3d; font-size: 16px; font-weight: 600; line-height: 1.45; }
+.card-tooltip-flavor { margin: 12px 0 0; color: #69514e; font: italic 13px/1.4 Georgia, serif; }
+
+.board-motion-card .card-tooltip,
+.board-motion-source-hidden .card-tooltip,
+.handcard-resolving-play .card-tooltip,
+.critter-beat-attacker .card-tooltip { display: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+    .card-face,
+    .card-face-crest,
+    .handcard-peek { transition: none; animation: none; }
+    .card-face .card-face-backing { animation: none; }
+}
+
+/* Expansion names use two lines inside the shared name plaque. */
+.card-art-ember-eared-hare .card-face-name,
+.card-art-paper-lantern-prank .card-face-name,
+.card-art-the-hundred-tail-tale .card-face-name,
+.card-art-map-shell-turtle .card-face-name,
+.card-art-seal-of-approval .card-face-name,
+.card-art-pocket-shovel-mole .card-face-name,
+.card-art-deepdelver-mole .card-face-name,
+.card-art-longdog-lookout .card-face-name,
+.card-art-rescue-st-bernard .card-face-name,
+.card-art-hearth-of-the-whole-pack .card-face-name,
+.card-art-velvet-rope-cat .card-face-name,
+.card-art-queen-of-borrowed-things .card-face-name {
+    font-size: calc(var(--cw) * 0.066);
+    white-space: normal;
+    text-align: center;
+}

@@ -1,0 +1,119 @@
+@page "/decks"
+@using Game.Logic
+@using Game.ClientBase.Configuration
+@using Game.ClientBase.Services
+@inject MetaplayClientService MetaplayService
+@inject CollectionService Collection
+@inject ClientConfig Config
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Decks · @Config.AppTitle</PageTitle>
+<MetagameShell Active="decks">
+<ConnectionStateContainer IsReady="Collection.HasPlayer">
+    <div class="heading">
+        <div><div class="eyebrow">Good company. Great trouble.</div><h1>Your decks</h1><p>Pick a pack. Make it yours.</p></div>
+        <span class="pill" data-testid="deck-count">@Collection.DeckCount / @PlayerModel.MaxSavedDecks saved</span>
+    </div>
+    @if (Collection.DeckCount == 0)
+    {
+        <section class="paper empty-decks" data-testid="decks-empty">
+            <img src="art/cards/pebble-collector.webp" alt="" /><h2>Your first pack starts here.</h2>
+            <p>No decks yet. Choose @DeckSize different cards from up to @MaxClans clans, with a few wandering friends along for the ride.</p>
+            <a class="btn gold" href="@Link("decks/new")" data-testid="new-deck">Build your first deck</a>
+        </section>
+    }
+    else
+    {
+        <div class="deck-shelf" data-testid="deck-list">
+            @foreach ((int deckId, PlayerDeck deck) in Decks)
+            {
+                int capturedId = deckId;
+                <article class="paper deck-box" data-testid="deck-entry" data-deck-id="@deckId">
+                    <a href="@Link($"decks/{deckId}")" data-testid="open-deck">
+                        <div class="deck-art">
+                            @foreach (CardInfo card in CoverCards(deck))
+                            {
+                                <img src="@CardArtCatalog.Resolve(card).IllustrationSrc" alt="" />
+                            }
+                            <span class="pill">@ClanLine(deck)</span>
+                        </div>
+                        <div class="deck-copy"><h2 data-testid="deck-name">@deck.Name</h2>
+                            <div class="deck-line" data-testid="deck-size">@deck.Cards.Count cards · @ClanLine(deck)</div>
+                            <div class="deck-meta"><span data-testid="deck-power-score">Power @Collection.PowerScore(deck.Cards)</span><span>Edit deck →</span></div>
+                        </div>
+                    </a>
+                    <button class="delete" data-testid="delete-deck" @onclick="() => _deleteId = capturedId">Delete</button>
+                </article>
+            }
+            @if (Collection.CanSaveMoreDecks)
+            {
+                <a class="new-deck-tile" href="@Link("decks/new")" data-testid="new-deck"><b>+</b><h2>A new kind of trouble</h2><p>Build another deck</p></a>
+            }
+            else
+            {
+                <button class="new-deck-tile" disabled data-testid="new-deck"><h2>Shelf full</h2><p data-testid="deck-cap-notice">You already have @PlayerModel.MaxSavedDecks decks saved. Delete one to build another.</p></button>
+            }
+        </div>
+    }
+    <div class="deck-bottom"><p>@DeckSize cards · One of each · Up to @MaxClans clans · Wanderers welcome</p><a href="@Link("")">Starter decks are ready to play on Home →</a></div>
+    @if (_refusal != null) { <p role="alert" data-testid="decks-refusal">@_refusal</p> }
+</ConnectionStateContainer>
+<MetagameDialog IsOpen="@_deleteId.HasValue" Title="Retire this pack?" Size="small" OnClose="CancelDelete">
+    <p>Your cards stay in your collection. Only this saved deck is removed.</p>
+    <div class="dialog-buttons"><button class="btn" @onclick="CancelDelete">Keep deck</button><button class="btn gold" data-testid="confirm-delete-deck" @onclick="ConfirmDelete">Delete deck</button></div>
+</MetagameDialog>
+</MetagameShell>
+
+@code {
+    int? _deleteId;
+    void CancelDelete() => _deleteId = null;
+    void ConfirmDelete()
+    {
+        if (_deleteId.HasValue) Delete(_deleteId.Value);
+        _deleteId = null;
+    }
+    IEnumerable<CardInfo> CoverCards(PlayerDeck deck) => deck.Cards.Select(Collection.GetCard)
+        .Where(card => card != null && card.Type == CardType.Critter && !CardArtCatalog.Resolve(card).IsFallback)
+        .OrderByDescending(card => card.Rarity).ThenByDescending(card => card.Cost).Take(2);
+
+    /// <summary> An in-app link that keeps the ?env= override (offline mode) across a later reload. </summary>
+    string Link(string path) => EnvironmentLink.Href(Navigation, path);
+
+    string _refusal;
+
+    MetaDictionary<int, PlayerDeck> Decks => Collection.Decks;
+
+    int DeckSize => Collection.GameConfig?.Global.DeckSize ?? 0;
+    int MaxClans => Collection.GameConfig?.Global.MaxClansPerDeck ?? 0;
+
+    /// <summary> The clan-limited clans a deck draws on, for the one-line summary. </summary>
+    string ClanLine(PlayerDeck deck)
+    {
+        List<string> names = new List<string>();
+        foreach (CardId cardId in deck.Cards)
+        {
+            ClanInfo clan = Collection.GetCard(cardId)?.Clan?.Ref;
+            if (clan != null && clan.CountsTowardClanLimit && !names.Contains(clan.DisplayName))
+                names.Add(clan.DisplayName);
+        }
+
+        return names.Count == 0 ? "Wanderers only" : string.Join(" + ", names);
+    }
+
+    void Delete(int deckId) => _refusal = Collection.DeleteDeck(deckId);
+
+    protected override void OnInitialized()
+    {
+        MetaplayService.OnStateChanged += OnStateChanged;
+        Collection.OnCollectionChanged += OnStateChanged;
+    }
+
+    void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        MetaplayService.OnStateChanged -= OnStateChanged;
+        Collection.OnCollectionChanged -= OnStateChanged;
+    }
+}

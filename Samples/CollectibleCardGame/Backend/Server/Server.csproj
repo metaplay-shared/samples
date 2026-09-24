@@ -1,0 +1,46 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Version>0.1.0.0</Version>
+    <LangVersion>Latest</LangVersion>
+    <RunWorkingDirectory>$(MSBuildProjectDirectory)</RunWorkingDirectory>
+    <StartWorkingDirectory>.</StartWorkingDirectory>
+    <ExternalConsole>true</ExternalConsole>
+    <AspNetCoreHostingModel>InProcess</AspNetCoreHostingModel>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(MetaplayServerPath)\CodeAnalyzers\Metaplay.CodeAnalyzers.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <ProjectReference Include="$(MetaplayServerPath)\CodeAnalyzers.Shared\Metaplay.CodeAnalyzers.Shared.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <ProjectReference Include="..\SharedCode\SharedCode.csproj" />
+    <ProjectReference Include="$(MetaplayServerPath)\Server\Metaplay.Server.csproj" />
+  </ItemGroup>
+
+  <!-- ==========================================================================================
+       The vendored SDK copy in SdkPreview/ carries an SDK change not yet in the R38 release.
+       On R39 it must go, or the game silently runs against a stale copy of an SDK internal, so
+       the build refuses. SdkPreview/README.md has the steps. VendoredSdkBaseTests checks for
+       the API directly; MSBuild can only check the version.
+       ========================================================================================== -->
+  <Target Name="RefuseToBuildTheVendoredSdkCopyAgainstR39"
+          BeforeTargets="BeforeCompile"
+          Condition="Exists('$(MSBuildProjectDirectory)/SdkPreview')">
+    <PropertyGroup>
+      <_MetaplayVersionFile>$(MetaplaySDKPath)/version.yaml</_MetaplayVersionFile>
+      <_MetaplaySdkMajor Condition="Exists('$(_MetaplayVersionFile)')">$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(_MetaplayVersionFile)')), 'sdkVersion:\s*([0-9]+)').Groups[1].Value)</_MetaplaySdkMajor>
+    </PropertyGroup>
+    <Error Condition="'$(_MetaplaySdkMajor)' != '' And $(_MetaplaySdkMajor) &gt;= 39"
+           Text="This builds against Metaplay SDK $(_MetaplaySdkMajor), but Backend/Server/SdkPreview still holds a vendored copy of the SDK's multiplayer-entity actor base. It was carried only because that change was not in the R38 release. Delete Backend/Server/SdkPreview (and Backend/Server/SdkPreviewInternalsVisible.cs and Backend/Server.Tests/VendoredSdkBaseTests.cs), then change MatchActor's base back to EphemeralMultiplayerEntityActorBase&lt;MatchModel, MatchAction&gt; — the SDK's, reached by the using already there. See Backend/Server/SdkPreview/README.md." />
+  </Target>
+
+</Project>

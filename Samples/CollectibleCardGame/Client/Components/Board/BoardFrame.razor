@@ -1,0 +1,41 @@
+@namespace Game.Client.Components.Board
+@using Game.Client.Services
+
+@* The board rectangle everything on the match screen anchors to.
+
+   The frame fills the viewport height. Compact landscape uses the full width to keep peripheral controls at
+   the window edges, with height-bounded cards and a lower hand. These screens reflow
+   peripherals and tighten the explicit battlefield sockets rather than hiding the game.
+   Top and bottom anchors follow the window; horizontal anchors stay within the playable width — on a wide monitor
+   an anchor to the viewport puts End turn out in the desk furniture, a monitor's width away from the board it
+   belongs to.
+
+   The rooftop backdrop belongs to the viewport; the transparent frame only anchors the game. Its dark upper half and
+   its green lawn give the two seats their own ground, which is why the board no longer draws a line down the
+   middle: the art already says where the halfway line is.
+
+   The page remains one screenful; compact layouts discard decoration before shrinking interaction targets. *@
+
+<div class="board-stage" data-testid="board-stage">
+    <img class="board-backdrop" src="art/match-background-rooftop.webp" alt="" aria-hidden="true" draggable="false" />
+    <div class="board-frame @BeatClass"
+         data-testid="match-board"
+         data-beat="@BeatSlug"
+         data-beat-sequence="@(Beat?.Sequence ?? 0)"
+         style="--beat-duration: @BeatDurationMs;">
+        @ChildContent
+    </div>
+    <div class="board-portrait-note" data-testid="board-portrait-note">
+        <strong>Turn your device sideways</strong>
+        <span>Sticky Paws plays in landscape so cards and targets stay readable.</span>
+    </div>
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public BoardBeat? Beat { get; set; }
+
+    string BeatSlug => Beat?.Kind.ToString().ToLowerInvariant() ?? "none";
+    string BeatClass => Beat == null ? "" : $"board-beat board-beat-{BeatSlug}";
+    string BeatDurationMs => $"{Beat?.Duration.Milliseconds ?? 0}ms";
+}

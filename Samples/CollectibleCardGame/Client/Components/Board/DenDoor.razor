@@ -1,0 +1,126 @@
+@namespace Game.Client.Components.Board
+@using Game.Logic
+@using Game.Client.Services
+
+@* One seat's Den: a fixed, card-height landmark in the middle of its battlefield row.
+
+   Both seats draw the same Den art inside the same physical backing. The backing is both the visual target
+   and the hit target, so eligibility, hover and the click cannot disagree about its geometry. A resolution
+   beat keys only the animated shell inside it; the interactive root survives the render that resolves a
+   click and stays anchored in place. *@
+
+<div class="den @(IsLocal ? "den-mine" : "den-enemy") @(IsGuarded ? "den-gated" : "") @(IsTargetable ? "den-targetable" : "") @(IsHealTarget ? "den-targetable-heal" : "")"
+     data-testid="@(IsLocal ? "den-mine" : "den-enemy")"
+     data-seat="@Seat.ToString()"
+     data-targetable="@IsTargetable.ToString().ToLowerInvariant()"
+     role="@(IsTargetable ? "button" : "group")"
+     tabindex="@(IsTargetable ? "0" : "-1")"
+     aria-label="@(AccessibleName + (IsTargetable && Delta != null ? ". " + Delta.Description : ""))"
+     @onclick="Clicked"
+     @onkeydown="KeyDown">
+
+    <div class="den-shell @BeatClass" @key="AnimationKey">
+        <img class="den-art" src="art/den.webp" alt="" aria-hidden="true" draggable="false" />
+
+        <div class="den-panel">
+            <div class="den-who">
+                <span class="den-name" data-testid="den-name">@Roster.DisplayName</span>
+                @if (Roster.ShowsComputerMark)
+                {
+                    <span class="den-bot" title="A computer player is playing this seat" data-testid="den-bot-mark">🤖</span>
+                }
+                @if (!Roster.IsConnected && Roster.Occupancy != SeatOccupancy.Bot)
+                {
+                    <span class="den-away" title="This player is not at the table right now" data-testid="den-away-mark">…</span>
+                }
+            </div>
+            <div class="den-hp">
+                <img src="art/icon-health.webp" alt="" aria-hidden="true" draggable="false" />
+                <b data-testid="den-hp" data-seat="@Seat.ToString()">@Public.DenHp</b>
+                <small data-testid="den-hp-max">/ @MaxHp</small>
+            </div>
+        </div>
+    </div>
+
+    @if (IsGuarded)
+    {
+        <div class="den-guarded" data-testid="den-guarded" title="Guarded · attack a Guard first"
+             aria-label="Guarded · attack a Guard first">
+            <img src="art/icon-guard.webp" alt="" aria-hidden="true" draggable="false" />
+            Guarded
+        </div>
+    }
+
+    @if (IsTargetable && Delta != null)
+    {
+        <DeltaPreview Value="@Delta" />
+    }
+    else if (IsTargetable && !string.IsNullOrEmpty(Tag))
+    {
+        <span class="den-preview" data-testid="heal-preview" data-amount="@TagAmount">@Tag</span>
+    }
+</div>
+
+@code {
+    [Parameter] public TargetDelta? Delta { get; set; }
+    [Parameter, EditorRequired] public int Seat { get; set; }
+    [Parameter, EditorRequired] public MatchSeat Roster { get; set; } = default!;
+    [Parameter, EditorRequired] public BoardVisualSeat Public { get; set; } = default!;
+    [Parameter] public bool IsLocal { get; set; }
+    [Parameter] public bool IsTargetable { get; set; }
+    [Parameter] public TargetingLayer.TargetingKind TargetingKind { get; set; }
+    [Parameter] public BoardBeat? Beat { get; set; }
+    [Parameter] public string? Tag { get; set; }
+
+    /// <summary> The number inside that tag, for a fixture to read rather than parse out of the copy. </summary>
+    [Parameter] public int? TagAmount { get; set; }
+    [Parameter] public int MaxHp { get; set; }
+    [Parameter] public EventCallback<int> OnClick { get; set; }
+
+    bool IsGuarded
+    {
+        get
+        {
+            foreach (BoardVisualCritter critter in Public.Board)
+            {
+                if (KeywordRules.GatesTheDen(critter.Keywords))
+                    return true;
+            }
+
+            return false;
+        }
+    }
+
+    string BeatClass
+    {
+        get
+        {
+            if (Beat?.Target.IsDen != true || Beat.Target.DenSeat != Seat)
+                return "";
+            return Beat.Kind switch
+            {
+                BoardBeatKind.Heal => "den-beat-heal",
+                BoardBeatKind.Damage or BoardBeatKind.DenDamage => "den-beat-damage",
+                _ => "",
+            };
+        }
+    }
+
+    bool IsHealTarget => IsTargetable && TargetingKind == TargetingLayer.TargetingKind.Heal;
+
+    string AnimationKey
+        => Beat?.Target.IsDen == true && Beat.Target.DenSeat == Seat
+            ? $"{Seat}:{Beat.Sequence}"
+            : $"{Seat}:settled";
+
+    string AccessibleName
+        => IsTargetable
+            ? $"Aim at {(IsLocal ? "your" : "the enemy")} Den, {Public.DenHp} health"
+            : $"{Roster.DisplayName}'s Den, {Public.DenHp} health";
+
+    Task KeyDown(Microsoft.AspNetCore.Components.Web.KeyboardEventArgs args)
+        => IsTargetable && (args.Key is "Enter" or " ") ? Clicked() : Task.CompletedTask;
+
+    Task Clicked()
+        => IsTargetable && OnClick.HasDelegate ? OnClick.InvokeAsync(Seat) : Task.CompletedTask;
+}

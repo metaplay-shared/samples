@@ -1,0 +1,80 @@
+@namespace Game.Client.Components.Board
+@using Game.Client.Services
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@code {
+    [Parameter] public BoardBeat? Beat { get; set; }
+    [Parameter] public int LocalSeat { get; set; }
+
+    /// <summary>
+    /// The attachment this board is drawn from. The motion layer keeps clones and hidden-source bookkeeping
+    /// in module state that no C# member can see, and a re-attach redraws the board from current state — so
+    /// anything it was still holding would be stamped onto elements belonging to a board that no longer
+    /// exists. Bumping this drops it.
+    /// </summary>
+    [Parameter] public int Epoch { get; set; }
+
+    int _lastSequence = -1;
+    int _lastEpoch    = -1;
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("stickyPawsBoardMotion.reset");
+        }
+        catch (JSException)
+        {
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Epoch != _lastEpoch)
+        {
+            _lastEpoch    = Epoch;
+            _lastSequence = -1;
+            try
+            {
+                await JS.InvokeVoidAsync("stickyPawsBoardMotion.reset");
+            }
+            catch (JSException)
+            {
+            }
+        }
+
+        BoardBeat? beat = Beat;
+        int sequence = beat?.Sequence ?? 0;
+        if (sequence == _lastSequence)
+            return;
+
+        _lastSequence = sequence;
+        string kind = beat?.Kind.ToString().ToLowerInvariant() ?? "none";
+        long source = beat?.Source.Value ?? 0;
+        string targetKind = beat?.Target.IsCritter == true ? "critter" : beat?.Target.IsDen == true ? "den" : "none";
+        long target = beat?.Target.IsCritter == true
+            ? beat.Target.Critter.Value
+            : beat?.Target.IsDen == true ? beat.Target.DenSeat : 0;
+        long duration = beat?.RemainingDuration.Milliseconds ?? 0;
+        bool suppressImpact = beat?.SuppressImpact ?? false;
+
+        try
+        {
+            await JS.InvokeVoidAsync(
+                "stickyPawsBoardMotion.run",
+                sequence,
+                kind,
+                source,
+                targetKind,
+                target,
+                duration,
+                suppressImpact,
+                beat?.Seat != LocalSeat);
+        }
+        catch (JSException)
+        {
+        }
+    }
+}

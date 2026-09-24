@@ -1,0 +1,31 @@
+@namespace Game.Client.Components.Board
+@using Game.Client.Services
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@code {
+    [Parameter] public BoardBeat? Beat { get; set; }
+    int _sequence = -1;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Beat == null || Beat.Sequence == _sequence)
+            return;
+        _sequence = Beat.Sequence;
+        List<BoardImpact> impacts = BoardImpact.FromEvents(Beat.Events);
+        if (impacts.Count == 0)
+            return;
+        try
+        {
+            await JS.InvokeVoidAsync("stickyPawsBoardEffects.play", Beat.Sequence, impacts);
+        }
+        catch (JSException) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { await JS.InvokeVoidAsync("stickyPawsBoardEffects.reset"); }
+        catch (JSException) { }
+    }
+}
