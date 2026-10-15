@@ -1,0 +1,176 @@
+/* The whole-game transition: the shadow train that covers the portrait area while one view replaces another. */
+
+/* ---------------------------------------------------------------------------
+   Mandatory whole-game transition
+   A shadow train crosses right-to-left above the portrait game area. Mirrored copies of the same
+   alpha-backed bamboo art form its organic leading and trailing boundaries. Each silhouette's dense
+   bamboo edge meets the opaque body while the foliage reaches outward into the visible scene.
+
+   Everything below is laid out in train-width percentages, which is also the unit `translate3d` uses, so
+   the stops are arithmetic on one scale. The train is 320% of the portrait area, so the area itself is
+   31.25% of the train: the figure every stop is derived from:
+
+     leading foliage [0, 35]   body [34.5, 78.5]   trailing foliage [78, 113]
+
+   hidden   +31.25%  the leading edge sits exactly on the area's right edge, so nothing shows
+   covered  -40.875% the body is centred on the area: it reaches 6.375% (a fifth of the area's width)
+                     past both edges, and both foliage panels are off-stage, so the swap happens behind
+                     solid black rather than behind a translucent frond
+   revealed -113%    the trailing edge sits exactly on the area's left edge
+
+   Both passes therefore travel the same 72.125%, so cover and reveal read as one continuous crossing.
+   --------------------------------------------------------------------------- */
+.screen-transition {
+    position: absolute;
+    inset: 0;
+    z-index: 1000;
+    overflow: hidden;
+    pointer-events: auto;
+    visibility: visible;
+}
+
+.screen-transition-train {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 320%;
+    transition: transform var(--screen-transition-duration) linear;
+    will-change: transform;
+}
+
+.screen-transition-body {
+    position: absolute;
+    z-index: 0;
+    top: 0;
+    bottom: 0;
+    left: 34.5%;
+    width: 44%;
+    background: #000;
+}
+
+.screen-transition-foliage {
+    position: absolute;
+    z-index: 1;
+    top: -4%;
+    width: 35%;
+    height: 108%;
+}
+
+.screen-transition-foliage-image {
+    display: block;
+    width: 100%;
+    height: 100%;
+    background: url("../art/transition-bamboo-shadow.sha256-4daa59880d1c1b95.webp") left center / 100% 100% no-repeat;
+    image-rendering: pixelated;
+}
+
+.screen-transition-foliage-leading {
+    left: 0;
+    transform: scaleX(-1);
+}
+
+.screen-transition-foliage-trailing {
+    left: 78%;
+}
+
+.screen-transition-hidden {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.screen-transition-hidden .screen-transition-train,
+.screen-transition-covering .screen-transition-train {
+    transform: translate3d(31.25%, 0, 0);
+}
+
+.screen-transition-hidden .screen-transition-train {
+    transition: none;
+}
+
+.screen-transition-covering .screen-transition-train {
+    transform: translate3d(-40.875%, 0, 0);
+}
+
+.screen-transition-covered .screen-transition-train {
+    transform: translate3d(-40.875%, 0, 0);
+    transition: none;
+}
+
+.screen-transition-revealing .screen-transition-train {
+    transform: translate3d(-113%, 0, 0);
+}
+
+/* The notice over the covered curtain while a run's art is still coming in behind it; Components/ScreenCurtain.razor renders it
+   for exactly that wait. It stands still above the train, and fades in only after a beat, so the usual wait
+   (over before then) never shows it and the reveal is never preceded by a flash of it. */
+.screen-transition-loading {
+    position: absolute;
+    z-index: 2;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.625rem;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.875rem;
+    letter-spacing: 0.02em;
+    text-align: center;
+    white-space: nowrap;
+    opacity: 0;
+    animation: screen-transition-loading-appear 240ms ease-out 600ms forwards;
+    pointer-events: none;
+}
+
+.screen-transition-loading-ring {
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 50%;
+    border: 3px solid rgba(255, 255, 255, 0.18);
+    border-top-color: rgba(255, 255, 255, 0.85);
+    animation: screen-transition-loading-turn 0.9s linear infinite;
+}
+
+.screen-transition-loading-count {
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+@keyframes screen-transition-loading-appear {
+    to { opacity: 1; }
+}
+
+@keyframes screen-transition-loading-turn {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mute-toggle,
+    .fullscreen-toggle,
+    .exit-run-button {
+        transition: none;
+    }
+
+    .mute-toggle:active,
+    .fullscreen-toggle:active,
+    .exit-run-button:active {
+        transform: none;
+    }
+
+    .screen-transition-train {
+        transition-duration: var(--screen-transition-reduced-duration);
+        transition-timing-function: linear;
+    }
+
+    /* The notice still waits its beat and is then simply there; the count is what shows the load moving. */
+    .screen-transition-loading {
+        animation-duration: 0s;
+    }
+
+    .screen-transition-loading-ring {
+        animation: none;
+    }
+}

@@ -1,0 +1,50 @@
+/* The time trial game view: the stage the run is drawn on, and the score screen it gives way to. */
+
+/* ---------------------------------------------------------------------------
+   Time trial game view
+   The stage fills the column and is itself the jump button, so there is nothing to aim at one-handed.
+   The view gives the stage the real height it sizes its canvas from. The segment callout and the result sit
+   over it as plain DOM and let taps through.
+   --------------------------------------------------------------------------- */
+.time-trial-view {
+    position: relative;
+    height: 100%;
+    overflow: hidden;
+    /* The view is a button, not a scroll surface: no panning, no double-tap zoom, no long-press menu. */
+    touch-action: none;
+    --result-ground: #050c1c;
+}
+
+/* Under the score screen the course is hidden and the view takes the score screen's ground, so a sub-pixel
+   seam at the score screen's edge shows that ground rather than a sliver of the last frame. */
+.time-trial-view:has(> .time-trial-result) {
+    background: var(--result-ground);
+}
+
+.time-trial-view:has(> .time-trial-result) > .time-trial-stage {
+    visibility: hidden;
+}
+
+/* The run is over: the score screen takes the view, and taps no longer go to the runner. It is opaque
+   because it arrives from behind the curtain rather than fading over the course, so there is no finishing
+   frame left to show through it. The whole surface is the control that leaves it, so it carries a button's
+   cursor and no text selection to get in the way of a press. */
+.time-trial-result {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    text-align: center;
+    padding: 1.5rem;
+    background: var(--result-ground);
+    overflow-y: auto;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+    /* Its own stacking context, so the ground below can sit under the score at a negative z-index. */
+    isolation: isolate;
+}

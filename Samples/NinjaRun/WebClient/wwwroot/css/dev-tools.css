@@ -1,0 +1,606 @@
+/* The developer course tools and the part editor. Developer-only. */
+
+/* ---------------------------------------------------------------------------
+   Developer course tools (/dev/courses) and part editor (/dev/parts). Developer-only, so plain and dense:
+   each page sits under the shared top bar and does its own scrolling, because the document never scrolls.
+   --------------------------------------------------------------------------- */
+.dev-courses {
+    position: fixed;
+    inset: calc(3rem + env(safe-area-inset-top)) 0 0 0;
+    overflow-y: auto;
+    padding: 0 16px 32px;
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    font-size: 0.8125rem;
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+.dev-courses > * {
+    max-width: 60rem;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.dev-courses h1 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.dev-courses h2 {
+    margin: 0;
+    font-size: 0.9375rem;
+    font-weight: 700;
+}
+
+.dev-courses-header {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    padding: 0.5rem 0 1rem;
+}
+
+.dev-back,
+.dev-link {
+    color: var(--accent-blue);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: none;
+    font: inherit;
+}
+
+.dev-back:hover,
+.dev-link:hover {
+    text-decoration: underline;
+}
+
+.dev-note {
+    color: var(--text-muted);
+}
+
+.dev-section,
+.dev-selected {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    margin-bottom: 1.5rem;
+    padding: 0.875rem;
+    border: 0;
+    border-radius: 0.5rem;
+    background: var(--bg-card);
+    box-shadow: inset 0 0 0 1px var(--border-color);
+}
+
+.dev-section-title,
+.dev-selected-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.dev-tag {
+    padding: 0.0625rem 0.375rem;
+    border-radius: 9999px;
+    font-size: 0.6875rem;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.dev-id {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
+}
+
+.dev-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+}
+
+.dev-item {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.375rem 0.625rem;
+    border: 0;
+    border-radius: 0.375rem;
+    box-shadow: inset 0 0 0 1px var(--border-color);
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.03);
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+}
+
+.dev-item:hover {
+    background: var(--bg-hover);
+}
+
+.dev-item.selected {
+    box-shadow: inset 0 0 0 1px var(--accent-blue);
+}
+
+.dev-item.selected,
+tr.selected {
+    background: rgba(31, 127, 255, 0.16);
+}
+
+.dev-item-name {
+    font-weight: 600;
+}
+
+.dev-button {
+    padding: 0.375rem 0.75rem;
+    border: 0;
+    border-radius: 0.375rem;
+    box-shadow: inset 0 0 0 1px var(--border-color);
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+    font: inherit;
+}
+
+.dev-button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.dev-button-primary {
+    box-shadow: inset 0 0 0 1px var(--accent-blue);
+    background: var(--accent-blue);
+    color: white;
+}
+
+.dev-preview {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    max-height: 22rem;
+    overflow: hidden;
+    border-radius: 0.375rem;
+    background: #000;
+}
+
+.dev-preview canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.dev-scrub {
+    width: 100%;
+}
+
+.dev-facts {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.25rem 1rem;
+    margin: 0;
+}
+
+.dev-facts dt {
+    color: var(--text-muted);
+}
+
+.dev-facts dd {
+    margin: 0;
+}
+
+.dev-table-scroll {
+    overflow-x: auto;
+}
+
+.dev-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.dev-table th,
+.dev-table td {
+    padding: 0.25rem 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+    text-align: left;
+    vertical-align: top;
+}
+
+.dev-table th {
+    color: var(--text-muted);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.dev-problems,
+.dev-problem {
+    margin: 0;
+    color: var(--accent-red, #f87171);
+}
+
+.dev-play,
+.dev-composer,
+.dev-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.625rem;
+}
+
+.dev-composer label,
+.dev-filters label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    color: var(--text-muted);
+}
+
+.dev-composer select,
+.dev-filters select {
+    padding: 0.25rem;
+    border: 0;
+    border-radius: 0.25rem;
+    box-shadow: inset 0 0 0 1px var(--border-color);
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+    font: inherit;
+}
+
+.dev-maps {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.dev-maps .dev-item {
+    width: 100%;
+    justify-content: space-between;
+}
+
+.dev-map-time {
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+.dev-courses h3 {
+    margin: 0;
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+.dev-editor-fields {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.625rem 1rem;
+}
+
+.dev-editor-fields label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    color: var(--text-muted);
+}
+
+.dev-editor-lists {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    gap: 1rem;
+}
+
+.dev-editor-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.dev-editor-row {
+    display: grid;
+    grid-template-columns: 2rem repeat(3, minmax(0, 4.5rem)) auto;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.125rem 0.25rem;
+    border: 0;
+    border-radius: 0.25rem;
+    box-shadow: inset 0 0 0 1px transparent;
+}
+
+.dev-editor-row.no-height {
+    grid-template-columns: 2rem repeat(2, minmax(0, 4.5rem)) auto;
+}
+
+/* Ground rows carry a Pit checkbox between the height and Remove. */
+.dev-editor-row.has-pit {
+    grid-template-columns: 2rem repeat(3, minmax(0, 4.5rem)) 1.75rem auto;
+}
+
+/* Vine rows carry five numbers: the anchor's X and height, and the platform's start, end and height. */
+.dev-editor-row.dev-editor-vine-row {
+    grid-template-columns: 2rem repeat(5, minmax(0, 3.5rem)) auto;
+}
+
+.dev-editor-row.has-pit input[type="checkbox"] {
+    justify-self: center;
+    box-shadow: none;
+}
+
+.dev-editor-row.pit-floor:not(.selected) {
+    box-shadow: inset 0 0 0 1px rgba(196, 140, 255, 0.7);
+    background: rgba(196, 140, 255, 0.10);
+}
+
+.dev-editor-row.selected {
+    box-shadow: inset 0 0 0 1px #ffd166;
+    background: rgba(255, 209, 102, 0.12);
+}
+
+.dev-editor-row-header {
+    color: var(--text-muted);
+    font-size: 0.6875rem;
+}
+
+.dev-editor-row .dev-button {
+    justify-self: start;
+    padding: 0.125rem 0.5rem;
+}
+
+.dev-editor-fields input:not([type="checkbox"]),
+.dev-editor-fields select,
+.dev-editor-row input {
+    min-width: 0;
+    padding: 0.25rem;
+    border: 0;
+    border-radius: 0.25rem;
+    box-shadow: inset 0 0 0 1px var(--border-color);
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+    font: inherit;
+}
+
+.dev-editor-code {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 14rem;
+    padding: 0.5rem;
+    border: 0;
+    border-radius: 0.375rem;
+    box-shadow: inset 0 0 0 1px var(--border-color);
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 0.75rem;
+    white-space: pre;
+    overflow: auto;
+    resize: vertical;
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+/* The part editor fills the viewport under the top bar with two panes side by side: the stage (toolbar, the
+   editing canvas taking every pixel of height left, and a fixed-height strip of gaps and runner times) and a
+   fixed-width side pane that scrolls on its own. Nothing in the stage changes height when the draft changes,
+   so the canvas never moves under the mouse. Narrower than 1100px the panes stack and the page scrolls, with
+   the canvas held at 60vh. */
+.dev-parts-page {
+    position: fixed;
+    inset: calc(3rem + env(safe-area-inset-top)) 0 0 0;
+    display: flex;
+    flex-direction: column;
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    font-size: 0.8125rem;
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+.dev-parts-page h1 {
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 700;
+}
+
+.dev-parts-page h2 {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 700;
+}
+
+.dev-parts-page h3 {
+    margin: 0;
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+.dev-parts-header {
+    flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 1rem;
+    padding: 0.375rem 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.dev-parts-unavailable {
+    padding: 1rem 16px;
+}
+
+.dev-parts-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+}
+
+.dev-parts-stage {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.dev-parts-toolbar {
+    flex: none;
+    padding: 0.375rem 16px;
+    gap: 0.375rem 0.875rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.dev-parts-toolbar .dev-button {
+    padding: 0.25rem 0.625rem;
+}
+
+.dev-parts-id {
+    width: 9rem;
+}
+
+.dev-parts-notes input {
+    width: 14rem;
+}
+
+.dev-parts-zoom-value {
+    min-width: 3.75rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.dev-parts-canvas {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    background: #000;
+}
+
+.dev-parts-canvas canvas {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.dev-parts-preview {
+    pointer-events: none;
+}
+
+.dev-parts-overlay {
+    pointer-events: auto;
+    touch-action: none;
+    outline: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.dev-parts-overlay:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--accent-blue);
+}
+
+.dev-parts-strip {
+    flex: none;
+    height: 9.5rem;
+    display: flex;
+    gap: 1rem;
+    padding: 0.375rem 16px;
+    overflow: auto;
+    border-top: 1px solid var(--border-color);
+}
+
+.dev-parts-strip-block {
+    flex: 1 1 0;
+    min-width: 18rem;
+}
+
+.dev-parts-strip-block .dev-note {
+    margin: 0.25rem 0 0;
+}
+
+.dev-parts-gap-kind {
+    padding: 0 0.375rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    color: #0b0f14;
+}
+
+.dev-parts-gap-jump {
+    background: rgb(123, 216, 143);
+}
+
+.dev-parts-gap-poor {
+    background: rgb(255, 179, 71);
+}
+
+.dev-parts-gap-run {
+    background: rgb(255, 122, 122);
+}
+
+.dev-parts-side {
+    flex: none;
+    width: 26rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.875rem;
+    padding: 0.75rem 16px 1.5rem;
+    border-left: 1px solid var(--border-color);
+    background: var(--bg-card);
+}
+
+.dev-parts-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.dev-parts-panel .dev-problems {
+    padding-left: 1.25rem;
+}
+
+.dev-parts-side .dev-editor-lists {
+    grid-template-columns: 1fr;
+}
+
+.dev-parts-legend {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.25rem 0.75rem;
+    margin: 0;
+}
+
+.dev-parts-legend dt {
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.dev-parts-legend dd {
+    margin: 0;
+    color: var(--text-muted);
+}
+
+@media (max-width: 1099px) {
+    .dev-parts-body {
+        flex-direction: column;
+        overflow-y: auto;
+    }
+
+    .dev-parts-stage {
+        flex: none;
+    }
+
+    .dev-parts-canvas {
+        flex: none;
+        height: 60vh;
+    }
+
+    .dev-parts-side {
+        width: auto;
+        overflow-y: visible;
+        border-left: none;
+        border-top: 1px solid var(--border-color);
+    }
+}

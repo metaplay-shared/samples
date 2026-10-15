@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Offline game config build. Reads the CSV sheets in GameConfigSource/ and writes both archives:
+    Backend/Server/GameConfig/StaticGameConfig.mpa (the one the server boots from) and
+    WebClient/wwwroot/Assets/SharedGameConfig.mpa (the client's built-in copy). It also has a dry-run form that
+    writes nothing, and can print an archive back. See Program.cs for the commands.
+
+    References Backend/SharedCode rather than GameLogic because the config builder lives in Metaplay.Cloud,
+    the server-side SDK assembly.
+
+    Usage: run this project from the repo root. The commands are listed in AGENTS.md.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <LangVersion>Latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <Version>0.1.0.0</Version>
+    <!-- Run with the caller's working directory (the repo root) so the default output paths land where the
+         user expects, rather than under the project directory. -->
+    <RunWorkingDirectory>$(MSBuildStartupDirectory)</RunWorkingDirectory>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The SDK's integration discovery reads source-generated type info from the entry assembly, so the tool
+         needs the same analyzers every other Metaplay assembly in the repo has. Projects under Backend/ get
+         them from Backend/Directory.Build.props; tools/ is outside it and asks for them here. -->
+    <ProjectReference Include="..\..\..\..\MetaplaySDK\Backend\CodeAnalyzers\Metaplay.CodeAnalyzers.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\..\MetaplaySDK\Backend\CodeAnalyzers.Shared\Metaplay.CodeAnalyzers.Shared.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <OutputItemType>Analyzer</OutputItemType>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Backend\SharedCode\SharedCode.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Shared with the file-based apps in tools/, which take it with #:include. -->
+    <Compile Include="..\Shared\RepoRoot.cs" Link="Shared\RepoRoot.cs" />
+  </ItemGroup>
+
+</Project>

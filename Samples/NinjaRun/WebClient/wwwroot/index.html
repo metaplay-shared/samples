@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="utf-8" />
+    <!-- Full-screen, app-like behavior: lock zoom and cover notches/safe areas. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <!-- Minimal browser chrome when launched/added to home screen. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Ninja Time Trial" />
+    <!-- The deep blue the app icon's torii gate stands against, so the browser chrome matches it. -->
+    <meta name="theme-color" content="#061752" />
+    <!-- PWA manifest: enables standalone (chrome-free) launch from the home screen. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- Home-screen icon on iOS. Absolute paths so they resolve to the site root regardless of the
+         current SPA route (a relative path can resolve against a sub-route and 404 / hit the SPA
+         fallback, which makes iOS fall back to the generated "M" tile). -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <base href="/" />
+    <link rel="stylesheet" href="_content/WebClientBase/css/preflight.css" />
+    <link rel="stylesheet" href="_content/WebClientBase/css/app-base.css" />
+    <!-- The game's own styles, one per view, in cascade order. -->
+    <link rel="stylesheet" href="css/base.css" />
+    <link rel="stylesheet" href="css/menu.css" />
+    <link rel="stylesheet" href="css/customize.css" />
+    <link rel="stylesheet" href="css/run.css" />
+    <link rel="stylesheet" href="css/score.css" />
+    <link rel="stylesheet" href="css/controls.css" />
+    <link rel="stylesheet" href="css/transition.css" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
+    <!-- The document title and theme CSS variables are rendered into the head by the App component via HeadOutlet. -->
+    <title>Ninja Time Trial</title>
+</head>
+
+<body style="background: var(--bg-primary, #121218);">
+    <div id="app">
+        <div style="position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: #a1a1aa; font-family: system-ui, sans-serif;">
+            Loading…
+        </div>
+    </div>
+
+    <div id="blazor-error-ui" data-nosnippet>
+        An unhandled error has occurred.
+        <a href="." class="reload">Reload</a>
+        <span class="dismiss">🗙</span>
+    </div>
+
+    <!-- Suppress the right-click context menu (CSS can't block this). A touch long-press is left alone: Chrome
+         on Android buzzes whenever the page consumes a long-press, and a cancelled contextmenu counts as
+         consumed, so cancelling it would trade a menu for a haptic buzz on every long hold. Uncancelled, a
+         long-press on anything that is not a link, image or selectable text shows no menu and gives no buzz. -->
+    <script>
+        window.addEventListener('contextmenu', function (e) {
+            if (e.pointerType !== 'touch')
+                e.preventDefault();
+        });
+    </script>
+    <!-- Warm the race curtain's foliage (a CSS background in css/transition.css) from the moment the page is parsed, so
+         a run started the instant the menu appears already has it. An ordinary low-priority image load rather
+         than a <link rel="preload">, which the browser would report as unused: the WASM boot puts the menu,
+         and with it the first use, well past the window's load event. The reference keeps it decoded. -->
+    <script>
+        window.hsrCurtainFoliage = new Image();
+        window.hsrCurtainFoliage.src = 'art/transition-bamboo-shadow.sha256-4daa59880d1c1b95.webp';
+    </script>
+    <script src="_framework/blazor.webassembly.js"></script>
+</body>
+
+</html>

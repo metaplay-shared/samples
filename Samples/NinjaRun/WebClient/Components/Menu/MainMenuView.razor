@@ -1,0 +1,72 @@
+@using Game.Logic
+@inject MetaplayClientService MetaplayService
+
+@* ---------------- Main menu ----------------
+   The title, the medallion and the one button that opens a run. A map has no name: it is shown by its
+   geometry, so nothing is named here online; offline practice plays one fixed course and says which. The
+   player ID, connection status and reset controls live in the shared top bar (WebClientBase/MainLayout).
+   Home.razor puts it in the portrait area behind the screen curtain, like every other view. *@
+<div class="menu-view" data-testid="main-menu">
+
+    @* Pinned to the same corner as during a run, so the switches do not move when the run opens. *@
+    @Toggles
+
+    @* Developer course tools and part editor, for a session that may run developer-only actions.
+       Separate routed pages rather than views behind the curtain, because no player ever sees them. *@
+    @if (MetaplayService.AllowsDeveloperTools)
+    {
+        <div class="menu-dev-links">
+            <a class="menu-dev-link" href="dev/courses" data-testid="open-dev-courses">Course tools</a>
+            <a class="menu-dev-link" href="dev/parts" data-testid="open-dev-parts">Part editor</a>
+        </div>
+    }
+
+    <h1 class="menu-brand"><img src="art/ninja-time-trial-title.sha256-dcc923d5de7ea81f.webp" alt="Ninja Time Trial"></h1>
+
+    @ChildContent
+
+    <div class="menu-bottom">
+        @if (MetaplayService.IsOfflineMode)
+        {
+            <p class="menu-practice">
+                <span class="menu-practice-label">Practice course</span>
+                <span class="menu-practice-name">@PracticeCourseName</span>
+            </p>
+        }
+
+        @* Space opens a run from anywhere on the menu as well (wwwroot/js/homeControls.js). Both are
+           shut while the Name Tag tutorial holds the menu. *@
+        <button type="button" class="menu-run" aria-label="Start run"
+                disabled="@StartDisabled"
+                @onclick="OnStartRun">
+            <svg class="icon" aria-hidden="true"><use href="#control-icon-run"/></svg>
+        </button>
+    </div>
+</div>
+
+@code {
+    /// <summary>The mute and fullscreen switches (<see cref="ViewToggles"/>).</summary>
+    [Parameter] public RenderFragment? Toggles { get; set; }
+
+    /// <summary>The medallion, between the title and the run button.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Whether the run button is shut: a run or the curtain is on its way, or the Name Tag tutorial holds the menu.</summary>
+    [Parameter] public bool StartDisabled { get; set; }
+
+    [Parameter] public EventCallback OnStartRun { get; set; }
+
+    /// <summary>
+    /// What offline practice opens, named. A map has no name of its own (its id is its three parts), so it is
+    /// simply a practice map.
+    /// </summary>
+    private string PracticeCourseName
+    {
+        get
+        {
+            SharedGameConfig? gameConfig = MetaplayService.GameConfig;
+            CourseId? courseId = OfflineCourseOverride.RequestedCourseId ?? gameConfig?.Global.OfflinePracticeMapId;
+            return CourseResolver.TryResolve(courseId, gameConfig) != null ? "Practice map" : "—";
+        }
+    }
+}

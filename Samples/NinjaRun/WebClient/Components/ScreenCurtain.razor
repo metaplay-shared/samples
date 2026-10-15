@@ -1,0 +1,41 @@
+@using WebClient.Gameplay
+
+@* The curtain every view of the portrait area is swapped behind (Gameplay/ScreenTransition.cs): a train of
+   foliage that crosses the area, holds it covered while the views are swapped, and uncovers it again
+   (css/transition.css). Its durations come from the same constants the waits use. *@
+<div class="screen-transition @Transition.CssClass"
+     style="--screen-transition-duration: @(ScreenTransition.DurationMs)ms; --screen-transition-reduced-duration: @(ScreenTransition.ReducedDurationMs)ms;"
+     data-testid="screen-transition"
+     data-transition-state="@Transition.StateName"
+     aria-hidden="true">
+    <div class="screen-transition-train" data-testid="screen-transition-train">
+        <div class="screen-transition-foliage screen-transition-foliage-leading"
+             data-testid="screen-transition-leading">
+            <span class="screen-transition-foliage-image"
+                  data-testid="screen-transition-leading-image"></span>
+        </div>
+        <div class="screen-transition-body" data-testid="screen-transition-body"></div>
+        <div class="screen-transition-foliage screen-transition-foliage-trailing"
+             data-testid="screen-transition-trailing">
+            <span class="screen-transition-foliage-image"></span>
+        </div>
+    </div>
+    @* The notice over the covered curtain while the run's art is still coming in behind it: in the document
+       from the moment the wait starts, but faded in by css/transition.css only after a beat, so the usual
+       wait (over before then) is never seen. It stands still above the train. *@
+    @if (Transition.ShowsLoadingNotice)
+    {
+        <div class="screen-transition-loading" data-testid="run-loading">
+            <span class="screen-transition-loading-ring" aria-hidden="true"></span>
+            <span>Loading the course…</span>
+            @if (Transition.RunArtTotal > 0)
+            {
+                <span class="screen-transition-loading-count" data-testid="run-loading-count">@Transition.RunArtSettled / @Transition.RunArtTotal</span>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ScreenTransition Transition { get; set; } = default!;
+}

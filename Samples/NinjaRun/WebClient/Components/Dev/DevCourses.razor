@@ -1,0 +1,626 @@
+@page "/dev/courses"
+@using System.Globalization
+@using Game.Logic
+@using Metaplay.Core.Math
+@using WebClient.Gameplay
+@using static WebClient.Gameplay.CourseToolsText
+@inherits GamePageBase
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+@* The developer course tools: every part and legal map in the session's own config,
+   drawn by the run renderer and timed by the scripted runners in the browser, a composer for maps, and a way
+   to practise or race any course a run can be opened on. Every part links to the part editor
+   (DevPartEditor.razor, /dev/parts), its own full-screen page, started from that part. A routed page rather
+   than a view behind the curtain, because it is for developers only and no player ever sees it. Hiding it is
+   presentation: the server's refusal of a developer-only request is what gates it. *@
+
+<PageTitle>Course tools</PageTitle>
+
+@* The developer tools' own styles, loaded with the page rather than with the game, which never uses them. *@
+<link rel="stylesheet" href="css/dev-tools.css" />
+
+<GameConnectionGate>
+    <div class="dev-courses" data-testid="dev-courses">
+        <div class="dev-courses-header">
+            <a class="dev-back" href="" data-testid="dev-back">‹ Menu</a>
+            <h1>Course tools</h1>
+            <a class="dev-back" href="dev/parts" data-testid="dev-open-part-editor">Part editor ›</a>
+        </div>
+
+        @if (!MetaplayService.AllowsDeveloperTools || Config == null)
+        {
+            <p class="dev-note" data-testid="dev-courses-unavailable">
+                The course tools are for developers. This session cannot run developer actions.
+            </p>
+        }
+        else
+        {
+            @if (_selected == null)
+            {
+                <p class="dev-note" data-testid="dev-nothing-selected">Pick a part or a map below to look at it.</p>
+            }
+            else
+            {
+                <section class="dev-selected" data-testid="dev-selected"
+                         data-selected-kind="@KindName(_selected.Kind)" data-selected-id="@_selected.Key">
+                    <div class="dev-selected-title">
+                        <h2>@SelectedTitle</h2>
+                        <span class="dev-tag">@KindLabel(_selected.Kind)</span>
+                    </div>
+
+                    @if (_selectedProblems.Count > 0)
+                    {
+                        <ul class="dev-problems" data-testid="dev-selected-problems">
+                            @foreach (string problem in _selectedProblems)
+                            {
+                                <li>@problem</li>
+                            }
+                        </ul>
+                    }
+
+                    @if (_selectedCourse != null)
+                    {
+                        <div class="dev-preview">
+                            <canvas data-testid="dev-preview-canvas"
+                                    data-course-id="@_selectedCourse.Id"
+                                    @ref="_previewCanvas"></canvas>
+                        </div>
+                        <input type="range" class="dev-scrub" data-testid="dev-preview-scrub"
+                               aria-label="Position along the course"
+                               min="@Number(_selectedCourse.StartX.Float - PreviewMarginMetres)"
+                               max="@Number(_selectedCourse.FinishX.Float + PreviewMarginMetres)"
+                               step="0.25"
+                               value="@Number(_previewX)"
+                               @oninput="OnScrub" />
+
+                        <dl class="dev-facts">
+                            <dt>Length</dt>
+                            <dd data-testid="dev-course-length">@Metres(_selectedCourse.FinishX - _selectedCourse.StartX)</dd>
+                            <dt>Segments</dt>
+                            <dd data-testid="dev-segment-lengths">@string.Join(" · ", _segmentLengths.Select(Metres))</dd>
+                            <dt>Climbs</dt>
+                            <dd>@_selectedCourse.Climbs.Count</dd>
+                            <dt>Spike beds</dt>
+                            <dd>@_selectedCourse.Hazards.Count</dd>
+                            <dt>Pits</dt>
+                            <dd>@_selectedCourse.Pits.Count</dd>
+                            <dt>Bridges</dt>
+                            <dd>@_selectedCourse.DroopingBridges.Count</dd>
+                        </dl>
+
+                        <DevRunnerTimes Times="_runnerTimes" />
+                    }
+
+                    <div class="dev-play">
+                        @if (_playableId != null)
+                        {
+                            <button type="button" class="dev-button dev-button-primary" data-testid="dev-practice" @onclick="OnPractice">Practice</button>
+                            <button type="button" class="dev-button" data-testid="dev-race" @onclick="OnRace">Race</button>
+                            <span class="dev-note">Developer runs count for nothing: no best, no run count, no Orbs, nothing in a pool.</span>
+                        }
+                        else
+                        {
+                            <span class="dev-note" data-testid="dev-not-playable">A part alone is not a course a run can be opened on. Compose it into a map below to play it.</span>
+                        }
+                        @if (_selected.Kind == SelectionKind.Part)
+                        {
+                            <a class="dev-button" href="@PartEditorHref(_selected.Key)" data-testid="dev-selected-edit-part">Edit in the part editor</a>
+                        }
+                    </div>
+                </section>
+            }
+
+            <section class="dev-section">
+                <div class="dev-section-title">
+                    <h2>Parts</h2>
+                    <button type="button" class="dev-button" data-testid="dev-time-parts"
+                            disabled="@(_partTimes != null)" @onclick="OnTimeParts">Time every part alone</button>
+                </div>
+                <div class="dev-table-scroll">
+                    <table class="dev-table dev-parts">
+                        <thead>
+                            <tr>
+                                <th>Part</th><th>Positions</th><th>Set piece</th><th>Length</th>
+                                <th>Spike beds</th><th>Pits</th><th>Bridges</th><th>Competent alone</th><th>Rules</th><th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (PartRow row in PartRows)
+                            {
+                                <tr class="@SelectedClass(SelectionKind.Part, row.Part.Id.Value)">
+                                    <td>
+                                        <button type="button" class="dev-link" data-testid="dev-part" data-part-id="@row.Part.Id"
+                                                @onclick="() => Select(SelectionKind.Part, row.Part.Id.Value)">@row.Part.Id</button>
+                                    </td>
+                                    <td>@string.Join(", ", row.Part.Positions)</td>
+                                    <td>@(row.Part.IsSetPiece ? "yes" : "no")</td>
+                                    <td>@Metres(row.Part.Length)</td>
+                                    <td>@row.Part.Hazards.Count</td>
+                                    <td>@(row.Alone?.Pits.Count.ToString(CultureInfo.InvariantCulture) ?? "—")</td>
+                                    <td>@row.Part.Bridges.Count</td>
+                                    <td data-testid="dev-part-time">@PartTimeText(row.Part.Id)</td>
+                                    <td data-testid="dev-part-rules">@(row.Problems.Count == 0 ? "sound" : string.Join(" ", row.Problems))</td>
+                                    <td>
+                                        <a class="dev-link" href="@PartEditorHref(row.Part.Id.Value)" data-testid="dev-edit-part"
+                                           data-part-id="@row.Part.Id">Edit in the part editor</a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="dev-section">
+                <div class="dev-section-title">
+                    <h2>Maps</h2>
+                    <button type="button" class="dev-button" data-testid="dev-time-maps"
+                            disabled="@(_mapTimes != null)" @onclick="OnTimeMaps">Time every map</button>
+                </div>
+
+                <div class="dev-composer" data-testid="dev-composer">
+                    @for (int position = 0; position < CourseComposer.PartsPerMap; position++)
+                    {
+                        int slot = position;
+                        <label>
+                            <span>@PositionNames[slot]</span>
+                            <select data-testid="@($"dev-compose-{PositionNames[slot].ToLowerInvariant()}")"
+                                    value="@_composeParts[slot]"
+                                    @onchange="args => OnComposePart(slot, args)">
+                                @foreach (PartRow row in PartRows)
+                                {
+                                    <option value="@row.Part.Id">@row.Part.Id</option>
+                                }
+                            </select>
+                        </label>
+                    }
+                    @if (ComposedMapId(out string reason) is CourseId composed)
+                    {
+                        <button type="button" class="dev-button" data-testid="dev-compose-show"
+                                @onclick="() => Select(SelectionKind.Map, composed.Value)">Show this map</button>
+                    }
+                    else
+                    {
+                        <span class="dev-problem" data-testid="dev-compose-reason">@reason</span>
+                    }
+                </div>
+
+                <div class="dev-filters">
+                    <label>
+                        <span>Part</span>
+                        <select data-testid="dev-map-filter-part" @bind="_filterPart">
+                            <option value="">Any part</option>
+                            @foreach (PartRow row in PartRows)
+                            {
+                                <option value="@row.Part.Id">@row.Part.Id</option>
+                            }
+                        </select>
+                    </label>
+                    <label>
+                        <span>Position</span>
+                        <select data-testid="dev-map-filter-position" @bind="_filterPosition">
+                            <option value="">Anywhere</option>
+                            @for (int position = 0; position < CourseComposer.PartsPerMap; position++)
+                            {
+                                <option value="@position">@PositionNames[position]</option>
+                            }
+                        </select>
+                    </label>
+                </div>
+
+                @{
+                    List<CourseId> shown = FilteredMapIds();
+                }
+                <p class="dev-note" data-testid="dev-map-count" data-count="@shown.Count">
+                    @shown.Count of @LegalMaps.Count legal maps
+                    @if (_mapTimes != null && _mapTimes.Count < LegalMaps.Count)
+                    {
+                        <span data-testid="dev-map-timing-progress"> · timed @_mapTimes.Count</span>
+                    }
+                </p>
+                <ul class="dev-maps">
+                    @foreach (CourseId mapId in shown)
+                    {
+                        <li>
+                            <button type="button" class="dev-item @SelectedClass(SelectionKind.Map, mapId.Value)"
+                                    data-testid="dev-map" data-map-id="@mapId"
+                                    @onclick="() => Select(SelectionKind.Map, mapId.Value)">
+                                <span class="dev-id">@mapId</span>
+                                @if (_mapTimes != null && _mapTimes.TryGetValue(mapId.Value, out int mapMs))
+                                {
+                                    <span class="dev-map-time" data-testid="dev-map-time">@(mapMs > 0 ? FormatMs(mapMs) : "did not finish")</span>
+                                }
+                            </button>
+                        </li>
+                    }
+                </ul>
+            </section>
+        }
+    </div>
+</GameConnectionGate>
+
+@code {
+    /// <summary>What a selection names: a part looked at on its own, or a map.</summary>
+    private enum SelectionKind
+    {
+        Part,
+        Map,
+    }
+
+    private sealed record Selection(SelectionKind Kind, string Key);
+
+    /// <summary>One part as the table lists it, with the course it composes into on its own.</summary>
+    private sealed record PartRow(CoursePartInfo Part, CourseDefinition? Alone, IReadOnlyList<string> Problems);
+
+    private static readonly string[] PositionNames = { "First", "Middle", "Last" };
+
+    /// <summary>How far past either end of the course the preview may be scrolled, in metres.</summary>
+    private const float PreviewMarginMetres = 6f;
+
+    private SharedGameConfig? Config => MetaplayService.GameConfig;
+
+    private Selection? _selected;
+    private CourseDefinition? _selectedCourse;
+    private CourseId? _playableId;
+    private IReadOnlyList<string> _selectedProblems = Array.Empty<string>();
+    private List<F32> _segmentLengths = new List<F32>();
+    private List<CourseRunnerTime>? _runnerTimes;
+    private int _selectionToken;
+
+    private ElementReference _previewCanvas;
+    private bool _previewDirty;
+    private float _previewX;
+    private IJSObjectReference? _hostModule;
+
+    private List<PartRow>? _partRows;
+    private IReadOnlyList<CourseId>? _legalMaps;
+
+    /// <summary>Each part's Competent time composed alone, by part id, once asked for; null until then.</summary>
+    private Dictionary<string, int>? _partTimes;
+
+    /// <summary>Each legal map's Competent time, by map id, filled in as it is computed; null until asked for.</summary>
+    private Dictionary<string, int>? _mapTimes;
+
+    private readonly string[] _composeParts = new string[CourseComposer.PartsPerMap];
+    private string _filterPart = "";
+    private string _filterPosition = "";
+
+    private bool _restored;
+    private bool _disposed;
+
+    /// <summary>Every part in the session's config, in ordinal id order, the order maps are enumerated in.</summary>
+    private List<PartRow> PartRows
+    {
+        get
+        {
+            if (_partRows != null || Config?.CourseParts == null)
+                return _partRows ?? new List<PartRow>();
+
+            List<CoursePartInfo> parts = new List<CoursePartInfo>(Config.CourseParts.Values);
+            parts.Sort((a, b) => string.CompareOrdinal(a.Id.Value, b.Id.Value));
+
+            _partRows = new List<PartRow>();
+            foreach (CoursePartInfo part in parts)
+                _partRows.Add(new PartRow(part, CourseInspection.PartAlone(part, Config.Global), part.Validate()));
+
+            for (int slot = 0; slot < _composeParts.Length; slot++)
+                _composeParts[slot] ??= _partRows[Math.Min(slot, _partRows.Count - 1)].Part.Id.Value;
+
+            return _partRows;
+        }
+    }
+
+    private IReadOnlyList<CourseId> LegalMaps => _legalMaps ??= Config != null ? CourseComposer.LegalMapIds(Config) : Array.Empty<CourseId>();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_restored && Config != null && MetaplayService.AllowsDeveloperTools)
+        {
+            _restored = true;
+            if (TryParseSelection(MetaplayService.DeveloperToolsSelection) is Selection previous)
+                Select(previous.Kind, previous.Key);
+
+            StateHasChanged();
+            return;
+        }
+
+        if (!_previewDirty || _selectedCourse == null)
+            return;
+
+        _previewDirty = false;
+        try
+        {
+            _hostModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/timeTrialHost.js");
+            await _hostModule.InvokeVoidAsync("startPreview", _previewCanvas, TimeTrialCourseView.FromCourse(_selectedCourse), AssetBaseUrl);
+            await _hostModule.InvokeVoidAsync("previewAt", _previewX);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (JSException)
+        {
+            // No renderer to hand the course to: the facts and the times below still stand.
+        }
+    }
+
+    /// <summary>
+    /// Look at one part or map: resolve it against the session's config, draw it from its start line,
+    /// and time the scripted runners over it. The times are computed once the selection has been drawn, so
+    /// the page answers the click before the runners are driven.
+    /// </summary>
+    private void Select(SelectionKind kind, string key)
+    {
+        SharedGameConfig? config = Config;
+        if (config == null)
+            return;
+
+        _selected         = new Selection(kind, key);
+        _selectedCourse   = null;
+        _playableId       = null;
+        _selectedProblems = Array.Empty<string>();
+        MetaplayService.DeveloperToolsSelection = $"{KindName(kind)}:{key}";
+
+        if (kind == SelectionKind.Part)
+        {
+            CoursePartInfo? part = config.CourseParts?.GetValueOrDefault(CoursePartId.FromString(key));
+            if (part != null)
+            {
+                _selectedProblems = part.Validate();
+                _selectedCourse   = CourseInspection.PartAlone(part, config.Global);
+            }
+        }
+        else
+        {
+            CourseId courseId = CourseId.FromString(key);
+            _selectedCourse = CourseResolver.TryResolve(courseId, config);
+            if (_selectedCourse != null)
+                _playableId = courseId;
+        }
+
+        _segmentLengths = _selectedCourse != null ? CourseInspection.SegmentLengths(_selectedCourse) : new List<F32>();
+        _previewDirty   = _selectedCourse != null;
+        _runnerTimes    = null;
+
+        _previewX       = _selectedCourse != null ? _selectedCourse.StartX.Float : 0f;
+
+        int token = ++_selectionToken;
+        if (_selectedCourse != null)
+            _ = TimeSelectedAsync(token, _selectedCourse, config.TimeTrialRules);
+    }
+
+    private async Task TimeSelectedAsync(int token, CourseDefinition course, TimeTrialRules rules)
+    {
+        await Task.Delay(1);
+        if (token != _selectionToken || _disposed)
+            return;
+
+        List<CourseRunnerTime> times;
+        try
+        {
+            times = CourseInspection.RunnerTimes(course, rules);
+        }
+        catch (Exception)
+        {
+            // A course the simulation cannot run gets no times; its facts and preview still stand.
+            times = new List<CourseRunnerTime>();
+        }
+
+        if (token != _selectionToken || _disposed)
+            return;
+
+        _runnerTimes = times;
+        StateHasChanged();
+    }
+
+    private async Task OnScrub(ChangeEventArgs args)
+    {
+        if (!float.TryParse(args.Value?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out float x))
+            return;
+
+        _previewX = x;
+        if (_hostModule == null)
+            return;
+
+        try
+        {
+            await _hostModule.InvokeVoidAsync("previewAt", x);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    private void OnPractice() => OpenRun(race: false);
+
+    private void OnRace() => OpenRun(race: true);
+
+    /// <summary>
+    /// Hand the chosen course to the run screen, which opens it the way it opens any run. The run comes back
+    /// here when it is left.
+    /// </summary>
+    private void OpenRun(bool race)
+    {
+        if (_playableId == null)
+            return;
+
+        MetaplayService.RequestDeveloperRun(_playableId, race);
+        Navigation.NavigateTo("");
+    }
+
+    /// <summary>Time every part on its own at the Competent level, all at once: there are only a handful.</summary>
+    private async Task OnTimeParts()
+    {
+        SharedGameConfig? config = Config;
+        if (config == null || _partTimes != null)
+            return;
+
+        _partTimes = new Dictionary<string, int>();
+        foreach (PartRow row in PartRows)
+        {
+            await Task.Delay(1);
+            if (_disposed)
+                return;
+            _partTimes[row.Part.Id.Value] = CompetentTimeMs(row.Alone, config.TimeTrialRules);
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Time every legal map at the Competent level, one map per beat so the list fills in as it goes. Only on
+    /// demand: it drives a runner over every composition the parts allow.
+    /// </summary>
+    private async Task OnTimeMaps()
+    {
+        SharedGameConfig? config = Config;
+        if (config == null || _mapTimes != null)
+            return;
+
+        _mapTimes = new Dictionary<string, int>();
+        foreach (CourseId mapId in LegalMaps)
+        {
+            await Task.Delay(1);
+            if (_disposed)
+                return;
+            _mapTimes[mapId.Value] = CompetentTimeMs(CourseResolver.TryResolve(mapId, config), config.TimeTrialRules);
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>The Competent runner's finish time over <paramref name="course"/>, or 0 when it never finishes.</summary>
+    private static int CompetentTimeMs(CourseDefinition? course, TimeTrialRules rules)
+    {
+        if (course == null)
+            return 0;
+
+        TimeTrialResult result = TimeTrialSimulation.Replay(course, rules, TimeTrialBotDriver.Drive(course, rules, TimeTrialBotSkill.Competent));
+        return result?.FinishTimeMs ?? 0;
+    }
+
+    private string PartTimeText(CoursePartId partId)
+    {
+        if (_partTimes == null || !_partTimes.TryGetValue(partId.Value, out int ms))
+            return "—";
+        return ms > 0 ? FormatMs(ms) : "did not finish";
+    }
+
+    private void OnComposePart(int slot, ChangeEventArgs args)
+    {
+        _composeParts[slot] = args.Value?.ToString() ?? "";
+    }
+
+    /// <summary>The map the composer's three parts make, or null with the reason they make none.</summary>
+    private CourseId? ComposedMapId(out string reason)
+    {
+        SharedGameConfig? config = Config;
+        List<CoursePartInfo> parts = new List<CoursePartInfo>();
+        foreach (string partId in _composeParts)
+        {
+            CoursePartInfo part = string.IsNullOrEmpty(partId) ? null : config?.CourseParts?.GetValueOrDefault(CoursePartId.FromString(partId));
+            parts.Add(part);
+        }
+
+        if (!CourseComposer.IsLegalTriplet(parts, out string illegal))
+        {
+            reason = illegal;
+            return null;
+        }
+
+        reason = "";
+        return CourseComposer.MapIdFor(parts[0].Id, parts[1].Id, parts[2].Id);
+    }
+
+    /// <summary>
+    /// The legal maps the filters leave: every map holding the chosen part, or holding it in the chosen
+    /// position when one is chosen too.
+    /// </summary>
+    private List<CourseId> FilteredMapIds()
+    {
+        List<CourseId> shown = new List<CourseId>();
+        int position = int.TryParse(_filterPosition, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed) ? parsed : -1;
+
+        foreach (CourseId mapId in LegalMaps)
+        {
+            if (string.IsNullOrEmpty(_filterPart))
+            {
+                shown.Add(mapId);
+                continue;
+            }
+
+            if (!CourseComposer.TryParseMapId(mapId, out CoursePartId[] partIds))
+                continue;
+
+            bool matches = false;
+            for (int ndx = 0; ndx < partIds.Length; ndx++)
+            {
+                if (partIds[ndx].Value == _filterPart && (position < 0 || position == ndx))
+                    matches = true;
+            }
+
+            if (matches)
+                shown.Add(mapId);
+        }
+
+        return shown;
+    }
+
+    private string SelectedTitle => _selected?.Key ?? "";
+
+    private string SelectedClass(SelectionKind kind, string key)
+        => _selected != null && _selected.Kind == kind && _selected.Key == key ? "selected" : "";
+
+    private static string KindName(SelectionKind kind) => kind switch
+    {
+        SelectionKind.Part   => "part",
+        _                    => "map",
+    };
+
+    private static string KindLabel(SelectionKind kind) => kind switch
+    {
+        SelectionKind.Part   => "Part, composed alone",
+        _                    => "Map",
+    };
+
+    private static Selection? TryParseSelection(string? stored)
+    {
+        if (string.IsNullOrEmpty(stored))
+            return null;
+
+        int colon = stored.IndexOf(':');
+        if (colon <= 0)
+            return null;
+
+        string kind = stored.Substring(0, colon);
+        string key  = stored.Substring(colon + 1);
+        return kind switch
+        {
+            "part"   => new Selection(SelectionKind.Part, key),
+            "map"    => new Selection(SelectionKind.Map, key),
+            _        => null,
+        };
+    }
+
+    /// <summary>The part editor, started from the part <paramref name="partId"/>.</summary>
+    private static string PartEditorHref(string partId) => $"dev/parts?source={Uri.EscapeDataString(partId)}";
+
+    protected override async ValueTask DisposePageAsync()
+    {
+        _disposed = true;
+
+        if (_hostModule != null)
+        {
+            try
+            {
+                // The host module is shared with every page that previews a course, so only this page's own
+                // preview is stopped.
+                await _hostModule.InvokeVoidAsync("stopPreview", _previewCanvas);
+                await _hostModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+
+            _hostModule = null;
+        }
+    }
+}

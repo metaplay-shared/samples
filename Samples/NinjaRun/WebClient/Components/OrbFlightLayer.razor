@@ -1,0 +1,202 @@
+@using System.Globalization
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@* The Orbs an accepted run paid, on their way from the score screen into the medallion's orbit. The layer
+   sits above the curtain, so the Orbs stay in sight while the views are swapped under them. Each Orb is
+   rendered once, at its reward mark, and wwwroot/js/orbFlight.js moves it from there. Home.razor says when
+   each stage starts. *@
+<div class="orb-flight" data-testid="orb-flight" @ref="_layer">
+    @foreach (FlyingOrb orb in _orbs)
+    {
+        <span @key="orb.Id" class="flying-orb orb-mark" data-testid="flying-orb" data-orb-id="@orb.Id"
+              style="@Style(orb)"></span>
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// One Orb has reached the orbit at <paramref name="AngleDegrees"/>, the screen angle clockwise from
+    /// straight up where it met the ring, or null when it had no ring to land on. <paramref name="InFlightBefore"/>
+    /// is how many Orbs were still uncounted before it landed.
+    /// </summary>
+    public sealed record OrbLanding(double? AngleDegrees, int InFlightBefore);
+
+    /// <summary>One Orb has landed and been counted.</summary>
+    [Parameter] public Action<OrbLanding>? Landed { get; set; }
+
+    /// <summary>The Orbs in the layer, or how many are uncounted, changed.</summary>
+    [Parameter] public Action? Changed { get; set; }
+
+    /// <summary>One Orb in the layer, rendered at the reward mark it was paid at, in area pixels.</summary>
+    private sealed record FlyingOrb(int Id, double X, double Y);
+
+    /// <summary>The Orbs on screen in the layer, from the score screen until each lands in the orbit.</summary>
+    private readonly List<FlyingOrb> _orbs = new List<FlyingOrb>();
+
+    /// <summary>
+    /// Which flight the Orbs on screen belong to. Settling a flight moves this on, so a landing reported by
+    /// an animation that was cut short is not counted against the next one.
+    /// </summary>
+    private int _generation;
+
+    private ElementReference _layer;
+    private OrbFlightModule? _module;
+    private DotNetObjectReference<OrbFlightLayer>? _selfReference;
+
+    /// <summary>
+    /// How many of the player's Orbs have not reached the orbit yet. The medallion leaves them out of the count
+    /// it shows until each one lands.
+    /// </summary>
+    public int OrbsInFlight { get; private set; }
+
+    /// <summary>Whether any Orb is in the layer.</summary>
+    public bool HasOrbs => _orbs.Count > 0;
+
+    private OrbFlightModule Module => _module ??= new OrbFlightModule(JS);
+
+    private static string Style(FlyingOrb orb)
+        => $"left: {orb.X.ToString("0.#", CultureInfo.InvariantCulture)}px; top: {orb.Y.ToString("0.#", CultureInfo.InvariantCulture)}px;";
+
+    /// <summary>
+    /// Lift the <paramref name="orbsEarned"/> Orbs a run paid off the score screen's reward marks into a float
+    /// that lasts until <see cref="FlyAsync"/>, held out of the medallion's count. <paramref name="paidForSegment"/>
+    /// gives how many Orbs a segment paid. Returns the flight the Orbs belong to, or -1 when none lifted.
+    /// </summary>
+    public async Task<int> LiftAsync(int orbsEarned, Func<int, int> paidForSegment)
+    {
+        (bool measured, double[] marks) = await Module.MeasureRewardMarksAsync(_layer);
+        if (!measured || marks == null)
+            return -1;
+
+        // Each mark is its segment followed by the centre of its orb glyph, in the layer's pixels. Every Orb a
+        // mark paid starts on that mark; the burst is what spreads them.
+        int remaining = orbsEarned;
+        int nextId    = 0;
+        for (int ndx = 0; ndx + 2 < marks.Length && remaining > 0; ndx += 3)
+        {
+            int segment = (int)marks[ndx];
+            int paid    = Math.Min(paidForSegment(segment), remaining);
+            for (int orb = 0; orb < paid; orb++)
+                _orbs.Add(new FlyingOrb(nextId++, marks[ndx + 1], marks[ndx + 2]));
+
+            remaining -= paid;
+        }
+
+        if (_orbs.Count == 0)
+            return -1;
+
+        OrbsInFlight = _orbs.Count;
+        NotifyChanged();
+
+        int flight = _generation;
+        List<double> starts = new List<double>(_orbs.Count * 3);
+        foreach (FlyingOrb orb in _orbs)
+        {
+            starts.Add(orb.Id);
+            starts.Add(orb.X);
+            starts.Add(orb.Y);
+        }
+
+        // Without the animation the Orbs hold on their marks and are gathered from there.
+        await Module.BurstAsync(_layer, flight, starts);
+        return flight;
+    }
+
+    /// <summary>
+    /// Draw the floating Orbs of <paramref name="flight"/> into the orbit, each counted as it lands
+    /// (<see cref="OnOrbLanded"/>). Does nothing for a flight that has since been settled.
+    /// </summary>
+    public async Task FlyAsync(int flight)
+    {
+        if (flight != _generation || _orbs.Count == 0)
+            return;
+
+        _selfReference ??= DotNetObjectReference.Create(this);
+        if (!await Module.GatherAsync(_layer, _selfReference, flight))
+        {
+            // The Orbs cannot be animated, so they are counted where they are.
+            await SettleAsync();
+        }
+    }
+
+    /// <summary>
+    /// One Orb of <paramref name="flight"/> has reached the orbit: it leaves the layer and is counted, and
+    /// <see cref="Landed"/> is told where it met the ring.
+    /// </summary>
+    [JSInvokable]
+    public void OnOrbLanded(int flight, int orbId, double? angleDegrees)
+    {
+        if (flight != _generation)
+            return;
+
+        int index = _orbs.FindIndex(orb => orb.Id == orbId);
+        if (index < 0)
+            return;
+
+        int inFlightBefore = OrbsInFlight;
+        _orbs.RemoveAt(index);
+        OrbsInFlight = Math.Max(0, OrbsInFlight - 1);
+
+        Landed?.Invoke(new OrbLanding(angleDegrees, inFlightBefore));
+        NotifyChanged();
+    }
+
+    /// <summary>
+    /// Count every Orb still in the air at once and clear the layer.
+    /// </summary>
+    public async Task SettleAsync()
+    {
+        if (_orbs.Count == 0 && OrbsInFlight == 0)
+            return;
+
+        _generation++;
+        _orbs.Clear();
+        OrbsInFlight = 0;
+        NotifyChanged();
+
+        // Nothing is left animating once the layer is empty; a module never loaded has nothing to cancel.
+        if (_module?.IsLoaded == true)
+            await _module.CancelAsync();
+    }
+
+    private void NotifyChanged()
+    {
+        StateHasChanged();
+        Changed?.Invoke();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _generation++;
+        if (_module != null)
+        {
+            if (_orbs.Count > 0 && _module.IsLoaded)
+                await _module.CancelAsync();
+            await _module.DisposeAsync();
+            _module = null;
+        }
+
+        _selfReference?.Dispose();
+        _selfReference = null;
+    }
+
+    /// <summary>The flight's module (<c>wwwroot/js/orbFlight.js</c>), imported the first time an accepted run pays out.</summary>
+    private sealed class OrbFlightModule : JsModuleInterop
+    {
+        public OrbFlightModule(IJSRuntime js) : base(js, "./js/orbFlight.js")
+        {
+        }
+
+        public Task<(bool Succeeded, double[] Result)> MeasureRewardMarksAsync(ElementReference layer)
+            => SafeInvokeAsync<double[]>("measureRewardMarks", layer);
+
+        public Task<bool> BurstAsync(ElementReference layer, int flight, List<double> starts)
+            => SafeInvokeVoidAsync("burst", layer, flight, starts);
+
+        public Task<bool> GatherAsync(ElementReference layer, object owner, int flight)
+            => SafeInvokeVoidAsync("gather", layer, owner, flight);
+
+        public Task<bool> CancelAsync() => SafeInvokeVoidAsync("cancel");
+    }
+}

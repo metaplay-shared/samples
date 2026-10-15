@@ -69,3 +69,9 @@ To run it, start the server with `metaplay dev server` and the web client with `
 The project was written primarily by AI from specs, and people have only spot-checked it. Read the known issues in its README before copying a part of it into a game.
 
 To run it, start the server with `metaplay dev server` and the web client with `dotnet run --project WebClient/WebClient.csproj` (both from `Samples/TableStakes`), then open [http://localhost:5290](http://localhost:5290). See [`Samples/TableStakes/README.md`](Samples/TableStakes/README.md) for the dashboard, offline mode, bots and tests.
+
+### Ninja Time Trial
+
+[`Samples/NinjaRun`](Samples/NinjaRun) is a one-button ninja autorunner that shows how a real-time game connects to a Metaplay backend: the client simulates the run at 60 Hz with no server round trips, and the server validates it afterwards by replaying the recorded inputs through the same deterministic simulation. Around it are per-course ghost pools that pick each run's opponents, a map registry that rotates the maps in play, and game configs authored as CSV sheets.
+
+To run it, start the server and the web client together with `dotnet run tools/DevStack.cs` (from `Samples/NinjaRun`), then open [http://localhost:5290](http://localhost:5290). See [`Samples/NinjaRun/README.md`](Samples/NinjaRun/README.md) for how a run is validated, the release build and tests.

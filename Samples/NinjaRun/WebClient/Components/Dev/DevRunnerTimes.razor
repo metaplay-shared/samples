@@ -1,0 +1,39 @@
+@using System.Globalization
+@using Game.Logic
+@using static WebClient.Gameplay.CourseToolsText
+
+@* The run with no input and each scripted runner's finish, gate and climb times over one course, as the
+   developer course tools and the part editor list them. Null times read as still being computed. *@
+
+<table class="dev-table" data-testid="dev-runner-times">
+    <thead>
+        <tr><th>Runner</th><th>Finish</th><th>Gates</th><th>Climbs</th></tr>
+    </thead>
+    <tbody>
+        @if (Times == null)
+        {
+            <tr><td colspan="4" data-testid="dev-runner-times-pending">@PendingText</td></tr>
+        }
+        else
+        {
+            @foreach (CourseRunnerTime time in Times)
+            {
+                <tr data-testid="dev-runner-time" data-runner="@RunnerKey(time.Skill)"
+                    data-finish-ms="@(time.Result?.FinishTimeMs.ToString(CultureInfo.InvariantCulture) ?? "")">
+                    <td>@RunnerLabel(time.Skill)</td>
+                    <td>@(time.Result != null ? FormatMs(time.Result.FinishTimeMs) : "did not finish")</td>
+                    <td>@(time.Result != null ? string.Join(" ", time.Result.GateTimesMs.Select(FormatMs)) : "")</td>
+                    <td>@(time.Result != null ? string.Join(" ", time.Result.ClimbEntryTimesMs.Select(FormatMs)) : "")</td>
+                </tr>
+            }
+        }
+    </tbody>
+</table>
+
+@code {
+    /// <summary>The times, the run with no input first; null while they are being computed.</summary>
+    [Parameter] public IReadOnlyList<CourseRunnerTime> Times { get; set; }
+
+    /// <summary>What the table says while <see cref="Times"/> is null.</summary>
+    [Parameter] public string PendingText { get; set; } = "Timing…";
+}

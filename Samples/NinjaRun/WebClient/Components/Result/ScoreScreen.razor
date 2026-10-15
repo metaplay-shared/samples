@@ -1,0 +1,211 @@
+@using Game.Logic
+@using WebClient.Gameplay
+
+@* The score screen. Placement first: a gate per segment, sized and lit by where the run came in, with what
+   that place paid underneath it. The field it was raced in is the readout below, and where the run stands on
+   the course is the panel after it.
+
+   The whole screen is the only control, so the score is read and dismissed without aiming at anything.
+   Home.razor puts it in the run's place behind the curtain. *@
+<div class="time-trial-result animate-pop-in"
+     data-testid="run-result"
+     data-result-panel="@(_panel == ResultPanel.Standing ? "standing" : "field")"
+     data-result-sliding="@(_sliding ? "true" : "false")"
+     role="button" tabindex="0"
+     aria-label="Continue"
+     @onclick="AdvanceAsync"
+     @onkeydown="OnKeyDown">
+    @* The ground under the score, drawn by css/score.css. Decoration only: it takes no input and says nothing
+       about the run. *@
+    <div class="result-backdrop" data-testid="result-backdrop" aria-hidden="true">
+        <div class="result-backdrop-sheet">
+            <div class="result-backdrop-rows result-backdrop-rows-above" data-testid="result-backdrop-rows-above">
+                <span class="result-backdrop-lane"></span>
+                <span class="result-backdrop-lane"></span>
+                <span class="result-backdrop-lane"></span>
+                <span class="result-backdrop-lane"></span>
+            </div>
+            <div class="result-backdrop-band" data-testid="result-backdrop-band"></div>
+            <div class="result-backdrop-rows result-backdrop-rows-below" data-testid="result-backdrop-rows-below">
+                <span class="result-backdrop-lane"></span>
+                <span class="result-backdrop-lane"></span>
+                <span class="result-backdrop-lane"></span>
+                <span class="result-backdrop-lane"></span>
+            </div>
+        </div>
+    </div>
+    @if (RunResultView.ShowPlacement(Trial))
+    {
+        bool provisional = RunResultView.ArePlacementsProvisional(Trial);
+        <div class="gate-symbols @(provisional ? "gate-symbols-provisional" : "") @(OrbsLifted ? "gate-symbols-lifted" : "")"
+             data-testid="gate-symbols"
+             data-provisional="@(provisional ? "true" : "false")">
+            @for (int segment = 0; segment < Trial.SegmentCount; segment++)
+            {
+                int placement = RunResultView.PlacementForSegment(Trial, Player, segment);
+                <div class="gate-symbol-slot">
+                    <span class="gate-symbol @RunResultView.GateSymbolSizeCssClass(placement) @RunResultView.PlacementCssClass(placement)"
+                          data-testid="gate-symbol"
+                          data-segment="@segment"
+                          data-placement="@placement"
+                          role="img"
+                          aria-label="@($"Segment {segment + 1}: {RunResultView.PlacementLabel(placement)}")">
+                        <span class="gate-symbol-lintel"></span>
+                        <span class="gate-symbol-beam"></span>
+                        <span class="gate-symbol-post gate-symbol-post-left"></span>
+                        <span class="gate-symbol-post gate-symbol-post-right"></span>
+                    </span>
+                    @{ int reward = RunResultView.OrbsForPlacement(Player, placement); }
+                    @if (reward > 0)
+                    {
+                        <span class="gate-symbol-reward font-display"
+                              data-testid="gate-reward"
+                              data-segment="@segment">+@reward<span class="orb-mark" role="img" aria-label="orbs"></span></span>
+                    }
+                    else
+                    {
+                        @* A gate that paid nothing keeps the reward's room, so it stands level with the rest. *@
+                        <span class="gate-symbol-reward gate-symbol-reward-empty font-display" aria-hidden="true">+0<span class="orb-mark"></span></span>
+                    }
+                </div>
+            }
+        </div>
+
+        @if (provisional)
+        {
+            <span data-testid="placements-provisional" class="gate-symbols-marker">Provisional</span>
+        }
+    }
+
+    @if (RunResultView.StatusText(Trial) is { } status)
+    {
+        <span data-testid="run-status" class="run-status">@status</span>
+    }
+
+    @* Under the gates, one panel at a time: the field the run was raced in, then, when there is one, where the
+       run stands among everyone who has run the course. The gates stay put through the slide, because the Orbs
+       burst off their reward marks when the screen is left. Both panels share one grid cell, so the slide
+       never moves anything around it. *@
+    <div class="result-panels" data-testid="result-panels">
+        <div @key="@("field")"
+             class="result-panel @FieldPanelCssClass"
+             aria-hidden="@(_panel == ResultPanel.Field ? "false" : "true")">
+            @* Who was in the field, in the order it came home, which is also where the player reads their own
+               time. Names belong here, never over a moving opponent. *@
+            @if (RunResultView.FinishOrder(Trial) is { Count: > 0 } finishOrder)
+            {
+                <div class="result-field" data-testid="result-field">
+                    @foreach ((int place, string name, int timeMs, bool isPlayer) in finishOrder)
+                    {
+                        <div class="result-field-row @(isPlayer ? "result-field-row-player" : "")"
+                             data-testid="result-field-row"
+                             data-place="@place">
+                            <span class="result-field-place @RunResultView.PlacementCssClass(place)">@place</span>
+                            <span class="result-field-name">@name</span>
+                            @* Every row's time carries a handle, the player's own distinct from the
+                               opponents': this line is the only place a finished time is written. *@
+                            <span class="result-field-time" data-testid="@(isPlayer ? "player-finish-time" : "opponent-finish-time")">@CourseToolsText.FormatMs(timeMs)</span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @if (RunResultView.StandingFor(Trial) is { } standing)
+        {
+            <StandingHistogram @key="@("standing")"
+                               Standing="standing"
+                               PanelCssClass="@StandingPanelCssClass"
+                               Shown="_panel == ResultPanel.Standing" />
+        }
+    </div>
+</div>
+
+@code {
+    /// <summary>The run whose score this is.</summary>
+    [Parameter, EditorRequired] public TimeTrial Trial { get; set; } = default!;
+
+    /// <summary>The player's model, which holds the placements the server computed once it accepts the run.</summary>
+    [Parameter] public PlayerModel? Player { get; set; }
+
+    /// <summary>Whether the run's Orbs have burst off the reward marks, which lifts the gates' rewards away.</summary>
+    [Parameter] public bool OrbsLifted { get; set; }
+
+    /// <summary>The screen curtain: no press acts while it moves, and it says whether the browser wants reduced motion.</summary>
+    [Parameter, EditorRequired] public ScreenTransition Transition { get; set; } = default!;
+
+    /// <summary>A press on the last panel: the run is left for the menu.</summary>
+    [Parameter] public EventCallback OnLeave { get; set; }
+
+    /// <summary>The score screen's panels under the gates, in the order a press turns through them.</summary>
+    private enum ResultPanel
+    {
+        Field,
+        Standing,
+    }
+
+    /// <summary>
+    /// How long the field and the standing take to trade places; css/score.css runs its keyframes for as long.
+    /// </summary>
+    private const int SlideMs = 320;
+
+    /// <summary>Which panel the score screen is on. Every score screen opens on the field.</summary>
+    private ResultPanel _panel;
+
+    /// <summary>
+    /// Whether the field is sliding out and the standing in. A press in the middle of it does nothing, so a
+    /// double tap never skips the standing on its way to the menu.
+    /// </summary>
+    private bool _sliding;
+
+    /// <summary>The field panel's motion: in place on the field, sliding out to the left, then held out of sight.</summary>
+    private string FieldPanelCssClass => _panel == ResultPanel.Field
+        ? ""
+        : _sliding ? "result-panel-leaving" : "result-panel-away";
+
+    /// <summary>The standing panel's motion: held out of sight on the field, sliding in from the right, then in place.</summary>
+    private string StandingPanelCssClass => _panel == ResultPanel.Field
+        ? "result-panel-away"
+        : _sliding ? "result-panel-entering" : "";
+
+    /// <summary>
+    /// The press from the keyboard while the screen itself has focus, on the two keys a button answers. With
+    /// focus anywhere else wwwroot/js/homeControls.js forwards the same keys through Home.razor.
+    /// </summary>
+    private async Task OnKeyDown(KeyboardEventArgs args)
+    {
+        if (!args.Repeat && (args.Key == "Enter" || args.Key == " "))
+            await AdvanceAsync();
+    }
+
+    /// <summary>
+    /// Every press on the score screen, from a click, a tap, or Space or Enter wherever focus is: turns to the
+    /// standing when there is one, and leaves the run (<see cref="OnLeave"/>) from the last panel.
+    /// </summary>
+    public async Task AdvanceAsync()
+    {
+        // No press acts while the panels trade places or the curtain moves.
+        if (_sliding || Transition.IsTransitioning)
+            return;
+
+        if (_panel == ResultPanel.Standing || RunResultView.StandingFor(Trial) == null)
+        {
+            await OnLeave.InvokeAsync();
+            return;
+        }
+
+        _sliding = true;
+        bool reducedMotion = await Transition.PrefersReducedMotionAsync();
+
+        // Under reduced motion the standing replaces the field at once.
+        _panel   = ResultPanel.Standing;
+        _sliding = !reducedMotion;
+        StateHasChanged();
+        if (reducedMotion)
+            return;
+
+        await Task.Delay(SlideMs);
+        _sliding = false;
+        StateHasChanged();
+    }
+}

@@ -1,0 +1,1156 @@
+@page "/dev/parts"
+@using Game.Logic
+@using WebClient.Gameplay
+@using static WebClient.Gameplay.CourseToolsText
+@inherits GamePageBase
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+@* The developer part editor: drafts one course part, edited with the mouse on an overlay canvas
+   (wwwroot/js/coursePartEditor.js) or in the side pane, and writes it out as a GameConfigSource/CourseParts.json
+   part object. It saves nothing. ?source=<part id> starts a fresh draft from that part, otherwise the draft
+   kept in MetaplayClientService is restored. Developer-only. *@
+
+<PageTitle>Part editor</PageTitle>
+
+@* The developer tools' own styles, loaded with the page rather than with the game, which never uses them. *@
+<link rel="stylesheet" href="css/dev-tools.css" />
+
+<GameConnectionGate>
+    <div class="dev-parts-page" data-testid="dev-parts">
+        <div class="dev-parts-header">
+            <a class="dev-back" href="" data-testid="dev-back">‹ Menu</a>
+            <a class="dev-back" href="dev/courses" data-testid="dev-parts-open-courses">‹ Course tools</a>
+            <h1>Part editor</h1>
+            <span class="dev-note">Writes a CourseParts.json part object. Nothing here is saved.</span>
+        </div>
+
+        @if (!MetaplayService.AllowsDeveloperTools || Config == null)
+        {
+            <p class="dev-note dev-parts-unavailable" data-testid="dev-parts-unavailable">
+                The part editor is for developers. This session cannot run developer actions.
+            </p>
+        }
+        else if (_review != null)
+        {
+            <div class="dev-parts-body">
+                <section class="dev-parts-stage">
+                    <div class="dev-parts-toolbar dev-editor-fields">
+                        <label>
+                            <span>Start from</span>
+                            <select data-testid="dev-editor-source" value="@_draft.Source" @onchange="OnEditorSource">
+                                <option value="@CoursePartDraft.BlankSource">Blank</option>
+                                @foreach (CoursePartInfo part in Parts)
+                                {
+                                    <option value="@part.Id">@part.Id</option>
+                                }
+                            </select>
+                        </label>
+                        <label>
+                            <span>Id</span>
+                            <input type="text" class="dev-parts-id" data-testid="dev-editor-id" spellcheck="false"
+                                   @bind="_draft.Id" @bind:after="OnFieldChanged" />
+                        </label>
+                        <label>
+                            <span>Theme</span>
+                            <select data-testid="dev-editor-theme"
+                                    title="The altitude band the draft is drawn in, here and on the run screen. In a map a part takes its band from its position."
+                                    @bind="_draft.AltitudeBand" @bind:after="OnFieldChanged">
+                                @foreach (string band in TimeTrialAltitudeBands.All)
+                                {
+                                    <option value="@band">@TimeTrialAltitudeBands.DisplayName(band)</option>
+                                }
+                            </select>
+                        </label>
+                        <label>
+                            <input type="checkbox" data-testid="dev-editor-first" @bind="_draft.First" @bind:after="OnFieldChanged" />
+                            <span>First</span>
+                        </label>
+                        <label>
+                            <input type="checkbox" data-testid="dev-editor-middle" @bind="_draft.Middle" @bind:after="OnFieldChanged" />
+                            <span>Middle</span>
+                        </label>
+                        <label>
+                            <input type="checkbox" data-testid="dev-editor-last" @bind="_draft.Last" @bind:after="OnFieldChanged" />
+                            <span>Last</span>
+                        </label>
+                        <label>
+                            <input type="checkbox" data-testid="dev-editor-set-piece" @bind="_draft.IsSetPiece" @bind:after="OnFieldChanged" />
+                            <span>Set piece</span>
+                        </label>
+                        <label class="dev-parts-notes">
+                            <span>Notes</span>
+                            <input type="text" data-testid="dev-editor-notes" placeholder="written as the part's notes"
+                                   @bind="_draft.Notes" @bind:after="OnFieldChanged" />
+                        </label>
+                        <label>
+                            <span>Zoom</span>
+                            <input type="range" data-testid="dev-parts-zoom" aria-label="Zoom, pixels per meter"
+                                   min="@MinPxPerMetre" max="@MaxPxPerMetre" step="1"
+                                   value="@_pxPerMetre" @oninput="OnZoomInput" />
+                            <span class="dev-parts-zoom-value" data-testid="dev-parts-zoom-value">@_pxPerMetre px/m</span>
+                        </label>
+                        <button type="button" class="dev-button" data-testid="dev-parts-fit" @onclick="OnFit">Fit part</button>
+                        <button type="button" class="dev-button" data-testid="dev-parts-play-ghost-effects"
+                                title="Play the ghost poof at the part's end torii and the warp-in under its start torii"
+                                @onclick="OnPlayGhostEffects">Play ghost effects</button>
+                        <button type="button" class="dev-button" data-testid="dev-parts-play-pass-by"
+                                title="Play every decoration's pass-by animation once, as a run plays it when the runner reaches it"
+                                @onclick="OnPlayPassBy">Play pass-by</button>
+                        <button type="button" class="dev-button" data-testid="dev-parts-practice" disabled="@(!CanPlay)"
+                                title="@PlayTitle"
+                                @onclick="OnPractice">Practice</button>
+                        <button type="button" class="dev-button" data-testid="dev-parts-race" disabled="@(!CanPlay)"
+                                title="@PlayTitle"
+                                @onclick="OnRace">Race</button>
+                        <button type="button" class="dev-button dev-button-primary" data-testid="dev-editor-copy" @onclick="OnCopyCode">Copy JSON</button>
+                        @if (!string.IsNullOrEmpty(_copyStatus))
+                        {
+                            <span class="dev-note" data-testid="dev-editor-copy-status">@_copyStatus</span>
+                        }
+                    </div>
+
+                    <div class="dev-parts-canvas">
+                        <canvas @key="PreviewCanvasKey" class="dev-parts-preview" data-testid="dev-parts-preview"
+                                @ref="_previewCanvas"></canvas>
+                        <canvas @key="OverlayCanvasKey" class="dev-parts-overlay" data-testid="dev-parts-overlay" tabindex="0"
+                                aria-label="The draft composed alone. Drag its handles to edit it; the legend in the side pane lists every gesture."
+                                @ref="_overlayCanvas"></canvas>
+                    </div>
+
+                    <div class="dev-parts-strip">
+                        <div class="dev-parts-strip-block">
+                            <table class="dev-table" data-testid="dev-editor-gaps">
+                                <thead>
+                                    <tr><th>Gap</th><th>Width</th><th>Depth</th><th>Pit</th></tr>
+                                </thead>
+                                <tbody>
+                                    @if (_review.Gaps.Count == 0)
+                                    {
+                                        <tr><td colspan="4" class="dev-note">No gaps or pit floors: the ground runs unbroken.</td></tr>
+                                    }
+                                    @foreach (CoursePartDraftGap gap in _review.Gaps)
+                                    {
+                                        <tr data-testid="dev-editor-gap" data-width="@gap.Width" data-kind="@gap.Kind">
+                                            <td>@gap.StartX–@gap.EndX m</td>
+                                            <td>@gap.Width m</td>
+                                            <td>@Metres(gap.Depth)</td>
+                                            <td><span class="dev-parts-gap-kind dev-parts-gap-@gap.Kind">@gap.Kind</span> @gap.Label</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                            <p class="dev-note">A full charge clears @Metres(_review.JumpRange) of level gap. Wider is a long pit, run into and climbed out of.</p>
+                        </div>
+                        <div class="dev-parts-strip-block">
+                            <DevRunnerTimes Times="_runnerTimes" PendingText="@TimesPendingText" />
+                        </div>
+                    </div>
+                </section>
+
+                <aside class="dev-parts-side">
+                    <section class="dev-parts-panel">
+                        <h2>Rules</h2>
+                        <ul class="dev-problems" data-testid="dev-editor-problems" data-count="@_review.Problems.Count">
+                            @foreach (string problem in _review.Problems)
+                            {
+                                <li>@problem</li>
+                            }
+                        </ul>
+                        @if (_review.Problems.Count == 0)
+                        {
+                            <p class="dev-note" data-testid="dev-editor-sound">The draft is sound, and is drawn composed alone.</p>
+                        }
+                    </section>
+
+                    <section class="dev-parts-panel dev-editor-lists">
+                        @RowsEditor(GroundKind, "Ground", _draft.Ground, true)
+                        @RowsEditor(SpikeKind, "Spike beds", _draft.Spikes, false)
+                        @RowsEditor(BridgeKind, "Bridges", _draft.Bridges, false)
+                        @DecorationsEditor()
+                        @VinesEditor()
+                    </section>
+
+                    <section class="dev-parts-panel" data-testid="dev-editor-space">
+                        <h3>Add / remove space</h3>
+                        <div class="dev-editor-fields">
+                            <label>
+                                <span>At m</span>
+                                <input type="number" step="1" data-testid="dev-editor-space-x" aria-label="Where the space is added or removed, meters"
+                                       @bind="_spaceX" @bind:after="OnSpaceFieldChanged" />
+                            </label>
+                            <label>
+                                <span>Amount m</span>
+                                <input type="number" step="1" min="1" data-testid="dev-editor-space-amount" aria-label="How much space, meters"
+                                       @bind="_spaceAmount" @bind:after="OnSpaceFieldChanged" />
+                            </label>
+                            <button type="button" class="dev-button @(_tool == SpaceTool ? "dev-button-primary" : "")" data-testid="dev-editor-space-pick"
+                                    aria-pressed="@(_tool == SpaceTool ? "true" : "false")"
+                                    title="Click the canvas to set where the space goes"
+                                    @onclick="() => ToggleTool(SpaceTool)">Pick on canvas</button>
+                            <button type="button" class="dev-button" data-testid="dev-editor-space-add" @onclick="() => ShiftSpace(add: true)">Add space</button>
+                            <button type="button" class="dev-button" data-testid="dev-editor-space-remove" @onclick="() => ShiftSpace(add: false)">Remove space</button>
+                        </div>
+                        @if (!string.IsNullOrEmpty(_spaceStatus))
+                        {
+                            <p class="dev-note" data-testid="dev-editor-space-status">@_spaceStatus</p>
+                        }
+                    </section>
+
+                    <section class="dev-parts-panel">
+                        <div class="dev-section-title">
+                            <h2>JSON</h2>
+                            <button type="button" class="dev-button" data-testid="dev-editor-copy-side" @onclick="OnCopyCode">Copy</button>
+                        </div>
+                        <textarea class="dev-editor-code" data-testid="dev-editor-code" readonly spellcheck="false"
+                                  aria-label="The draft as a CourseParts.json part object" onfocus="this.select()"
+                                  @ref="_codeArea" value="@_review.Code"></textarea>
+                        <p class="dev-note">
+                            Paste the object into the array in GameConfigSource/CourseParts.json and rebuild the config
+                            with dotnet run --project tools/GameConfigGen. A published part is never edited in place —
+                            new geometry is a new id.
+                        </p>
+                    </section>
+
+                    <section class="dev-parts-panel" data-testid="dev-parts-legend">
+                        <h2>Mouse and keys</h2>
+                        <dl class="dev-parts-legend">
+                            <dt>Click</dt><dd>Select a stretch, spike bed, bridge, decoration or vine; its row is highlighted here. Focusing a row selects it on the canvas.</dd>
+                            <dt>Drag an edge</dt><dd>Resize, a whole meter at a time.</dd>
+                            <dt>Drag ground</dt><dd>Sideways moves it a meter at a time; up or down changes its height a decimeter at a time. The first few pixels decide which.</dd>
+                            <dt>Drag spikes, bridge</dt><dd>Move along the part; the edges resize.</dd>
+                            <dt>Double-click a gap</dt><dd>Add ground filling it, a meter short of each side (the whole gap under 4 m). Past the end: 20 m more ground.</dd>
+                            <dt>Double-click ground</dt><dd>Add a 2 m spike bed; with Shift, a 6 m bridge.</dd>
+                            <dt>Place decoration</dt><dd>Pick a kind under Decorations and press Place; each click on ground then stands one there, a decimeter at a time, in its kind's layer (the lantern Behind, the reeds Front). Escape or Place again stops placing.</dd>
+                            <dt>Play pass-by</dt><dd>Plays every decoration's pass-by animation once in the preview, the sequence a run plays when the runner reaches it.</dd>
+                            <dt>Drag a decoration</dt><dd>Move it along the ground a decimeter at a time. B toggles Behind / Front, F flips it.</dd>
+                            <dt>Vines</dt><dd>Add under Vines hangs one where it first fits the rules; Place hangs one at each click instead. Either way the anchor stands the default height above the ground there, with its platform just ahead. Drag the anchor or the rope to move the whole vine a meter at a time, or up and down to raise or lower the anchor a decimeter at a time; drag the platform to move it or change its height, and its edges to resize it. ← → move the selected vine, ↑ ↓ raise or lower its anchor. The rope is the tuned one every vine hangs: the dashed arc is how far its swing reaches.</dd>
+                            <dt>Add / remove space</dt><dd>Pick on canvas (or type At), set Amount, then Add space to open that much at X and push everything past it along, or Remove space to take X to X + Amount out. A stretch across X is lengthened or shortened; a removal that would cut a spike bed or bridge, take a decoration, a whole stretch or a whole gap, or break a rule is refused and says why.</dd>
+                            <dt>Delete, Backspace</dt><dd>Remove the selection. Escape clears it.</dd>
+                            <dt>← →</dt><dd>Move the selection a meter (Shift: 5 m); a decoration a decimeter (Shift: a meter).</dd>
+                            <dt>↑ ↓, Alt+← →</dt><dd>Raise or lower the selected ground a decimeter (Shift: 5 dm).</dd>
+                            <dt>P</dt><dd>Flag the selected ground as a pit floor at its own height, or unflag it (the Pit box in its row). A pit floor must touch higher ground on both sides and may carry a spike bed (double-click it) but no bridge; it is drawn hatched in violet and listed with the gaps.</dd>
+                            <dt>Pan</dt><dd>Drag empty background, drag with the middle button, or hold Space and drag. The wheel pans along the part; Shift+wheel pans up and down.</dd>
+                            <dt>Zoom</dt><dd>Ctrl+wheel about the cursor, the zoom slider, or Fit part.</dd>
+                            <dt>Play ghost effects</dt><dd>Plays the ghost poof at the end torii — where the field leaves, as it does at a map's finish line and at every climb's bottom torii — and the warp-in under the start torii, where it arrives, as at a map's start line and every climb's gate.</dd>
+                            <dt>Practice, Race</dt><dd>Play the draft composed alone on the run screen, alone or against its three scripted runners. The run counts for nothing and comes back here; a draft that breaks a rule cannot be played.</dd>
+                            <dt>Frames</dt><dd>The dashed white box is what a phone's portrait stage shows with its camera here. The blue bands are the entry and exit clearances; the dashed boxes in the gaps are the pits the rule cuts, labelled with their width and kind.</dd>
+                        </dl>
+                    </section>
+                </aside>
+            </div>
+        }
+    </div>
+</GameConnectionGate>
+
+@code {
+    private const string GroundKind = "ground";
+    private const string SpikeKind  = "spike";
+    private const string BridgeKind = "bridge";
+    private const string DecorationKind = "decoration";
+    private const string VineKind   = "vine";
+
+    /// <summary>The overlay tools a click can be handed to: placing a decoration or a vine, or picking the space tool's X.</summary>
+    private const string DecorationTool = "decoration";
+    private const string VineTool       = "vine";
+    private const string SpaceTool      = "space";
+
+    private const string PreviewCanvasKey = "dev-parts-preview";
+    private const string OverlayCanvasKey = "dev-parts-overlay";
+
+    /// <summary>How long the draft waits after a change before the runners are driven over it, milliseconds.</summary>
+    private const int TimingDelayMs = 300;
+
+    /// <summary>The game's own scale, about what a metre is at the widest portrait column, CSS pixels per meter.</summary>
+    private const int DefaultPxPerMetre = 35;
+    private const int MinPxPerMetre     = 15;
+    private const int MaxPxPerMetre     = 80;
+
+    /// <summary>The part a fresh draft is started from, from <c>?source=</c> on the URL.</summary>
+    [SupplyParameterFromQuery(Name = "source")]
+    public string Source { get; set; }
+
+    private SharedGameConfig Config => MetaplayService.GameConfig;
+
+    private CoursePartDraft _draft = CoursePartDraft.Blank();
+    private CoursePartDraftReview _review;
+    private List<CoursePartInfo> _parts;
+    private List<CourseRunnerTime> _runnerTimes;
+    private int _timingToken;
+
+    private Selection _selection = Selection.None;
+
+    /// <summary>
+    /// What is selected: a row of <see cref="GroundKind"/>, <see cref="SpikeKind"/> or <see cref="BridgeKind"/>,
+    /// a <see cref="DecorationKind"/> or a <see cref="VineKind"/>, by the element itself, or nothing, with an
+    /// empty kind.
+    /// </summary>
+    private sealed record Selection(string Kind, CoursePartDraftRow Row, CoursePartDraftDecoration Decoration, CoursePartDraftVine Vine)
+    {
+        public static readonly Selection None = new Selection("", null, null, null);
+
+        public static Selection OfRow(string kind, CoursePartDraftRow row) => row != null ? new Selection(kind, row, null, null) : None;
+
+        public static Selection OfDecoration(CoursePartDraftDecoration decoration) => decoration != null ? new Selection(DecorationKind, null, decoration, null) : None;
+
+        public static Selection OfVine(CoursePartDraftVine vine) => vine != null ? new Selection(VineKind, null, null, vine) : None;
+    }
+
+    /// <summary>The kinds a part may place, as the renderer's catalogue lists them once the overlay is attached.</summary>
+    private List<DecorationKindChoice> _decorationKinds = new List<DecorationKindChoice>();
+
+    /// <summary>The kind the Place tool stands on the ground.</summary>
+    private string _placeKind = "";
+
+    /// <summary>The tool the next click on the canvas goes to, or empty for selecting and dragging.</summary>
+    private string _tool = "";
+
+    private int _spaceX;
+    private int _spaceAmount = 5;
+    private string _spaceStatus = "";
+
+    private int _pxPerMetre = DefaultPxPerMetre;
+    private string _copyStatus = "";
+
+    private ElementReference _previewCanvas;
+    private ElementReference _overlayCanvas;
+    private ElementReference _codeArea;
+    private IJSObjectReference _editorModule;
+    private DotNetObjectReference<DevPartEditor> _selfReference;
+
+    private bool _restored;
+    private bool _attached;
+
+    /// <summary>The draft's rows or the selection changed in a way the overlay has not been handed yet.</summary>
+    private bool _syncPending;
+
+    /// <summary>
+    /// A drag the overlay is still reporting changed the draft's pits, which the overlay takes on their own while
+    /// the drag owns its rows.
+    /// </summary>
+    private bool _gapsPending;
+
+    /// <summary>The draft changed in a way the renderer has not drawn yet.</summary>
+    private bool _coursePending;
+
+    private bool _disposed;
+
+    /// <summary>Every part in the session's config, in ordinal id order.</summary>
+    private List<CoursePartInfo> Parts
+    {
+        get
+        {
+            if (_parts != null || Config?.CourseParts == null)
+                return _parts ?? new List<CoursePartInfo>();
+
+            _parts = new List<CoursePartInfo>(Config.CourseParts.Values);
+            _parts.Sort((a, b) => string.CompareOrdinal(a.Id.Value, b.Id.Value));
+            return _parts;
+        }
+    }
+
+    private string TimesPendingText => _review?.Course == null
+        ? "The draft breaks a rule, so no runner is driven over it."
+        : "Timing…";
+
+    /// <summary>Whether the draft composes alone, which is what a run on it is played on.</summary>
+    private bool CanPlay => _review?.Course != null;
+
+    private string PlayTitle => CanPlay
+        ? "Play the draft composed alone on the run screen. The run counts for nothing and comes back here."
+        : "The draft breaks a rule, so it cannot be played.";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_disposed)
+            return;
+
+        if (!_restored)
+        {
+            if (Config == null || !MetaplayService.AllowsDeveloperTools)
+                return;
+
+            _restored = true;
+            CoursePartInfo source = FindPart(Source);
+            if (source != null)
+            {
+                _draft = CoursePartDraft.FromPart(source);
+                MetaplayService.DeveloperPartDraft = _draft;
+            }
+            else
+            {
+                _draft = MetaplayService.DeveloperPartDraft ?? CoursePartDraft.Blank();
+            }
+
+            Review();
+            ScheduleTiming(1);
+            _syncPending   = true;
+            _coursePending = true;
+            StateHasChanged();
+            return;
+        }
+
+        if (!_attached)
+        {
+            _attached = true;
+            try
+            {
+                _editorModule  = await JS.InvokeAsync<IJSObjectReference>("import", "./js/coursePartEditor.js");
+                _selfReference = DotNetObjectReference.Create(this);
+                await _editorModule.InvokeVoidAsync("attach", _previewCanvas, _overlayCanvas, _selfReference, AssetBaseUrl, _pxPerMetre);
+                _decorationKinds = await _editorModule.InvokeAsync<List<DecorationKindChoice>>("decorationKinds") ?? new List<DecorationKindChoice>();
+                if (string.IsNullOrEmpty(_placeKind) && _decorationKinds.Count > 0)
+                    _placeKind = _decorationKinds[0].Id;
+                StateHasChanged();
+            }
+            catch (JSDisconnectedException)
+            {
+                return;
+            }
+            catch (JSException)
+            {
+                // No overlay to edit with: the side pane still edits, checks and writes the draft.
+                _editorModule = null;
+                return;
+            }
+
+            if (_disposed)
+            {
+                await DetachAsync();
+                return;
+            }
+        }
+
+        await FlushEditorAsync();
+    }
+
+    /// <summary>Hand the overlay the draft's rows and the selection, and the renderer the draft composed alone, when either is behind.</summary>
+    private async Task FlushEditorAsync()
+    {
+        if (_editorModule == null || _review == null)
+            return;
+
+        try
+        {
+            if (_syncPending)
+            {
+                _syncPending = false;
+                _gapsPending = false;
+                await _editorModule.InvokeVoidAsync("setDraft", new CoursePartEditorView(_draft, _review, _selection.Kind, SelectedIndex, _spaceX, _spaceAmount));
+            }
+            else if (_gapsPending)
+            {
+                _gapsPending = false;
+                await _editorModule.InvokeVoidAsync("setGaps", CoursePartEditorGap.Of(_review));
+            }
+
+            if (_coursePending)
+            {
+                _coursePending = false;
+                // A draft that breaks a rule composes into nothing, so the last sound draft stays drawn under it.
+                if (_review.Course != null)
+                    await _editorModule.InvokeVoidAsync("setCourse", TimeTrialCourseView.FromCourse(_review.Course, altitudeBand: _draft.AltitudeBand));
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (JSException)
+        {
+            // The renderer refused the course: the side pane still stands.
+        }
+    }
+
+    private CoursePartInfo FindPart(string partId)
+    {
+        if (string.IsNullOrEmpty(partId) || partId == CoursePartDraft.BlankSource)
+            return null;
+
+        foreach (CoursePartInfo part in Parts)
+        {
+            if (part.Id.Value == partId)
+                return part;
+        }
+        return null;
+    }
+
+    private void Review()
+    {
+        if (Config != null)
+            _review = CoursePartDraftReview.Of(_draft, Config);
+    }
+
+    /// <summary>
+    /// Keep and re-check the draft after an edit. <paramref name="final"/> is false only while a drag is still
+    /// in progress.
+    /// </summary>
+    private void DraftChanged(bool final)
+    {
+        _copyStatus = "";
+        MetaplayService.DeveloperPartDraft = _draft;
+        Review();
+
+        // A drag in progress only refreshes the overlay's pits. The overlay's rows, the renderer and the
+        // runner times catch up once it is let go.
+        if (!final)
+        {
+            _gapsPending = true;
+            return;
+        }
+
+        _syncPending   = true;
+        _coursePending = true;
+        ScheduleTiming(TimingDelayMs);
+    }
+
+    private void OnFieldChanged() => DraftChanged(final: true);
+
+    /// <summary>Drive the runners over the draft composed alone once <paramref name="delayMs"/> passes with no newer change.</summary>
+    private void ScheduleTiming(int delayMs)
+    {
+        int token = ++_timingToken;
+        _runnerTimes = null;
+
+        CourseDefinition course = _review?.Course;
+        SharedGameConfig config = Config;
+        if (course != null && config != null)
+            _ = TimeDraftAsync(token, course, config.TimeTrialRules, delayMs);
+    }
+
+    private async Task TimeDraftAsync(int token, CourseDefinition course, TimeTrialRules rules, int delayMs)
+    {
+        await Task.Delay(delayMs);
+        if (token != _timingToken || _disposed)
+            return;
+
+        List<CourseRunnerTime> times;
+        try
+        {
+            times = CourseInspection.RunnerTimes(course, rules);
+        }
+        catch (Exception)
+        {
+            // A drafted course the simulation cannot run gets no times; its rules and preview still stand.
+            times = new List<CourseRunnerTime>();
+        }
+
+        if (token != _timingToken || _disposed)
+            return;
+
+        _runnerTimes = times;
+        StateHasChanged();
+    }
+
+    private List<CoursePartDraftRow> RowsOf(string kind) => kind switch
+    {
+        GroundKind => _draft.Ground,
+        SpikeKind  => _draft.Spikes,
+        BridgeKind => _draft.Bridges,
+        _          => null,
+    };
+
+    private int SelectedIndex
+    {
+        get
+        {
+            if (_selection.Kind == DecorationKind)
+                return _selection.Decoration != null ? _draft.Decorations.IndexOf(_selection.Decoration) : -1;
+            if (_selection.Kind == VineKind)
+                return _selection.Vine != null ? _draft.Vines.IndexOf(_selection.Vine) : -1;
+            List<CoursePartDraftRow> rows = RowsOf(_selection.Kind);
+            return rows != null && _selection.Row != null ? rows.IndexOf(_selection.Row) : -1;
+        }
+    }
+
+    private bool IsSelected(string kind, CoursePartDraftRow row) => _selection.Kind == kind && ReferenceEquals(_selection.Row, row);
+
+    private bool IsSelected(CoursePartDraftDecoration decoration) => _selection.Kind == DecorationKind && ReferenceEquals(_selection.Decoration, decoration);
+
+    private bool IsSelected(CoursePartDraftVine vine) => _selection.Kind == VineKind && ReferenceEquals(_selection.Vine, vine);
+
+    /// <summary>Select from the side pane: the overlay is told, unless the element is already selected.</summary>
+    private void SelectFromPane(Selection selection)
+    {
+        if (_selection == selection)
+            return;
+
+        _selection   = selection;
+        _syncPending = true;
+    }
+
+    private void SelectDecoration(CoursePartDraftDecoration decoration) => SelectFromPane(Selection.OfDecoration(decoration));
+
+    private void SelectVine(CoursePartDraftVine vine) => SelectFromPane(Selection.OfVine(vine));
+
+    private void SelectRow(string kind, CoursePartDraftRow row) => SelectFromPane(Selection.OfRow(kind, row));
+
+    private void ClearSelection() => _selection = Selection.None;
+
+    /// <summary>One list of the draft's rows (ground, spike beds or bridges) with a way to add, remove and select them.</summary>
+    private RenderFragment RowsEditor(string kind, string title, List<CoursePartDraftRow> rows, bool hasHeight) => __builder =>
+    {
+        <div class="dev-editor-rows" data-testid="@($"dev-editor-{kind}-rows")">
+            <div class="dev-section-title">
+                <h3>@title</h3>
+                <button type="button" class="dev-button" data-testid="@($"dev-editor-add-{kind}")"
+                        @onclick="() => AddRow(kind, rows, hasHeight)">Add</button>
+            </div>
+            @if (rows.Count > 0)
+            {
+                <div class="dev-editor-row dev-editor-row-header @(hasHeight ? "has-pit" : "no-height")">
+                    <span></span><span>Start m</span><span>End m</span>
+                    @if (hasHeight)
+                    {
+                        <span>Height dm</span>
+                        <span title="A pit floor at its own height, between two higher stretches">Pit</span>
+                    }
+                    <span></span>
+                </div>
+            }
+            @foreach (CoursePartDraftRow row in rows)
+            {
+                int number = rows.IndexOf(row) + 1;
+                bool selected = IsSelected(kind, row);
+                bool pitFloor = hasHeight && row.IsPit;
+                <div class="dev-editor-row @(hasHeight ? "has-pit" : "no-height") @(selected ? "selected" : "") @(pitFloor ? "pit-floor" : "")"
+                     data-testid="@($"dev-editor-{kind}-row")" data-selected="@(selected ? "true" : "false")"
+                     data-pit="@(pitFloor ? "true" : "false")"
+                     @key="row" @onfocusin="() => SelectRow(kind, row)">
+                    <button type="button" class="dev-link" data-testid="@($"dev-editor-{kind}-pick")"
+                            aria-label="@($"Select {title.ToLowerInvariant()} {number}")"
+                            @onclick="() => SelectRow(kind, row)">#@number</button>
+                    <input type="number" step="1" aria-label="@($"{title} start, meters")" data-testid="@($"dev-editor-{kind}-start")"
+                           @bind="row.Start" @bind:after="OnFieldChanged" />
+                    <input type="number" step="1" aria-label="@($"{title} end, meters")" data-testid="@($"dev-editor-{kind}-end")"
+                           @bind="row.End" @bind:after="OnFieldChanged" />
+                    @if (hasHeight)
+                    {
+                        <input type="number" step="1" aria-label="@($"{title} height, decimeters")" data-testid="@($"dev-editor-{kind}-height")"
+                               @bind="row.Height" @bind:after="OnFieldChanged" />
+                        <input type="checkbox" aria-label="Pit floor" data-testid="@($"dev-editor-{kind}-pit")"
+                               title="A pit floor at its own height: it must touch higher ground on both sides"
+                               @bind="row.IsPit" @bind:after="OnFieldChanged" />
+                    }
+                    <button type="button" class="dev-button" data-testid="@($"dev-editor-remove-{kind}")"
+                            @onclick="() => RemoveRow(kind, rows, row)">Remove</button>
+                </div>
+            }
+        </div>
+    };
+
+    /// <summary>The list of the draft's decorations, with the Place tool and the kind it places.</summary>
+    private RenderFragment DecorationsEditor() => __builder =>
+    {
+        <div class="dev-editor-rows" data-testid="dev-editor-decoration-rows">
+            <div class="dev-section-title">
+                <h3>Decorations</h3>
+                <select data-testid="dev-editor-decoration-kind" aria-label="The kind of decoration Place stands on the ground"
+                        value="@_placeKind" @onchange="OnPlaceKindChanged">
+                    @foreach (DecorationKindChoice choice in _decorationKinds)
+                    {
+                        <option value="@choice.Id">@choice.Label</option>
+                    }
+                </select>
+                <button type="button" class="dev-button @(_tool == DecorationTool ? "dev-button-primary" : "")" data-testid="dev-editor-place-decoration"
+                        aria-pressed="@(_tool == DecorationTool ? "true" : "false")" disabled="@(string.IsNullOrEmpty(_placeKind))"
+                        title="Each click on the ground stands one there"
+                        @onclick="() => ToggleTool(DecorationTool)">Place</button>
+            </div>
+            @if (_draft.Decorations.Count > 0)
+            {
+                <div class="dev-editor-row dev-editor-decoration-row dev-editor-row-header">
+                    <span></span><span>Kind</span><span>X dm</span><span>Layer</span><span>Flip</span><span></span>
+                </div>
+            }
+            @foreach (CoursePartDraftDecoration decoration in _draft.Decorations)
+            {
+                int number = _draft.Decorations.IndexOf(decoration) + 1;
+                bool selected = IsSelected(decoration);
+                bool known = _decorationKinds.Count == 0 || _decorationKinds.Exists(choice => choice.Id == decoration.Kind);
+                <div class="dev-editor-row dev-editor-decoration-row @(selected ? "selected" : "")"
+                     data-testid="dev-editor-decoration-row" data-selected="@(selected ? "true" : "false")"
+                     data-kind="@decoration.Kind" data-layer="@decoration.Layer"
+                     @key="decoration" @onfocusin="() => SelectDecoration(decoration)">
+                    <button type="button" class="dev-link" data-testid="dev-editor-decoration-pick"
+                            aria-label="@($"Select decoration {number}")"
+                            @onclick="() => SelectDecoration(decoration)">#@number</button>
+                    <select data-testid="dev-editor-decoration-row-kind" aria-label="Decoration kind"
+                            @bind="decoration.Kind" @bind:after="OnFieldChanged">
+                        @if (!known)
+                        {
+                            <option value="@decoration.Kind">@decoration.Kind (unknown)</option>
+                        }
+                        @foreach (DecorationKindChoice choice in _decorationKinds)
+                        {
+                            <option value="@choice.Id">@choice.Label</option>
+                        }
+                    </select>
+                    <input type="number" step="1" aria-label="Decoration X, decimeters" data-testid="dev-editor-decoration-x"
+                           @bind="decoration.X" @bind:after="OnFieldChanged" />
+                    <select data-testid="dev-editor-decoration-layer" aria-label="Decoration layer"
+                            value="@(decoration.Front ? "front" : "behind")"
+                            @onchange="args => OnDecorationLayerChanged(decoration, args)">
+                        <option value="behind">Behind</option>
+                        <option value="front">Front</option>
+                    </select>
+                    <input type="checkbox" aria-label="Mirror the decoration" data-testid="dev-editor-decoration-flip"
+                           @bind="decoration.Flip" @bind:after="OnFieldChanged" />
+                    <button type="button" class="dev-button" data-testid="dev-editor-remove-decoration"
+                            @onclick="() => RemoveDecoration(decoration)">Remove</button>
+                </div>
+            }
+        </div>
+    };
+
+    /// <summary>The list of the draft's vines, with Add and the Place tool.</summary>
+    private RenderFragment VinesEditor() => __builder =>
+    {
+        <div class="dev-editor-rows" data-testid="dev-editor-vine-rows">
+            <div class="dev-section-title">
+                <h3>Vines</h3>
+                <button type="button" class="dev-button" data-testid="dev-editor-add-vine"
+                        title="Hang a vine where it first fits the part's rules"
+                        @onclick="AddVine">Add</button>
+                <button type="button" class="dev-button @(_tool == VineTool ? "dev-button-primary" : "")" data-testid="dev-editor-place-vine"
+                        aria-pressed="@(_tool == VineTool ? "true" : "false")"
+                        title="Each click on the canvas hangs a vine there"
+                        @onclick="() => ToggleTool(VineTool)">Place</button>
+            </div>
+            @if (_draft.Vines.Count > 0)
+            {
+                <div class="dev-editor-row dev-editor-vine-row dev-editor-row-header">
+                    <span></span><span>Anchor m</span><span>Height dm</span><span>Platform m</span><span>to m</span><span>Height dm</span><span></span>
+                </div>
+            }
+            @foreach (CoursePartDraftVine vine in _draft.Vines)
+            {
+                int number = _draft.Vines.IndexOf(vine) + 1;
+                bool selected = IsSelected(vine);
+                <div class="dev-editor-row dev-editor-vine-row @(selected ? "selected" : "")"
+                     data-testid="dev-editor-vine-row" data-selected="@(selected ? "true" : "false")"
+                     @key="vine" @onfocusin="() => SelectVine(vine)">
+                    <button type="button" class="dev-link" data-testid="dev-editor-vine-pick"
+                            aria-label="@($"Select vine {number}")"
+                            @onclick="() => SelectVine(vine)">#@number</button>
+                    <input type="number" step="1" aria-label="Vine anchor X, meters" data-testid="dev-editor-vine-anchor-x"
+                           @bind="vine.AnchorX" @bind:after="OnFieldChanged" />
+                    <input type="number" step="1" aria-label="Vine anchor height, decimeters" data-testid="dev-editor-vine-anchor-height"
+                           @bind="vine.AnchorHeight" @bind:after="OnFieldChanged" />
+                    <input type="number" step="1" aria-label="Vine platform start, meters" data-testid="dev-editor-vine-platform-start"
+                           @bind="vine.PlatformStart" @bind:after="OnFieldChanged" />
+                    <input type="number" step="1" aria-label="Vine platform end, meters" data-testid="dev-editor-vine-platform-end"
+                           @bind="vine.PlatformEnd" @bind:after="OnFieldChanged" />
+                    <input type="number" step="1" aria-label="Vine platform height, decimeters" data-testid="dev-editor-vine-platform-height"
+                           @bind="vine.PlatformHeight" @bind:after="OnFieldChanged" />
+                    <button type="button" class="dev-button" data-testid="dev-editor-remove-vine"
+                            @onclick="() => RemoveVine(vine)">Remove</button>
+                </div>
+            }
+        </div>
+    };
+
+    private void AddVine()
+    {
+        CoursePartDraftVine vine = _draft.AddVine();
+        SelectVine(vine);
+        DraftChanged(final: true);
+    }
+
+    private void RemoveVine(CoursePartDraftVine vine)
+    {
+        _draft.Vines.Remove(vine);
+        if (IsSelected(vine))
+            ClearSelection();
+        DraftChanged(final: true);
+    }
+
+    private Task OnPlaceKindChanged(ChangeEventArgs args)
+    {
+        _placeKind = args.Value?.ToString() ?? "";
+        return _tool == DecorationTool ? PushToolAsync() : Task.CompletedTask;
+    }
+
+    /// <summary>Set a decoration's layer from its row's layer select.</summary>
+    private void OnDecorationLayerChanged(CoursePartDraftDecoration decoration, ChangeEventArgs args)
+    {
+        // The select carries string values because Blazor formats a bound bool as a present-or-absent
+        // attribute, which a select cannot match against its options.
+        decoration.Front = args.Value?.ToString() == "front";
+        OnFieldChanged();
+    }
+
+    private void RemoveDecoration(CoursePartDraftDecoration decoration)
+    {
+        _draft.Decorations.Remove(decoration);
+        if (IsSelected(decoration))
+            ClearSelection();
+        DraftChanged(final: true);
+    }
+
+    /// <summary>Arm <paramref name="tool"/> for the next clicks on the canvas, or disarm it when it is already armed.</summary>
+    private Task ToggleTool(string tool)
+    {
+        _tool = _tool == tool ? "" : tool;
+        return PushToolAsync();
+    }
+
+    private Task PushToolAsync() => InvokeEditorAsync("setTool", _tool, _placeKind);
+
+    private void OnSpaceFieldChanged()
+    {
+        _spaceStatus = "";
+        _syncPending = true;
+    }
+
+    /// <summary>Add or remove the space tool's amount at its X, or say why the draft refuses it.</summary>
+    private void ShiftSpace(bool add)
+    {
+        if (_spaceAmount <= 0)
+        {
+            _spaceStatus = "The amount must be at least 1 m.";
+            return;
+        }
+
+        if (!_draft.TryShiftSpace(add, _spaceX, _spaceAmount, out string refusal))
+        {
+            _spaceStatus = refusal;
+            _syncPending = true;
+            return;
+        }
+
+        _spaceStatus = add
+            ? $"Added {_spaceAmount} m at {_spaceX} m."
+            : $"Removed {_spaceX}–{_spaceX + _spaceAmount} m.";
+        // The rows were rebuilt, so a selection would name a row that is no longer there.
+        ClearSelection();
+        DraftChanged(final: true);
+    }
+
+    private void OnEditorSource(ChangeEventArgs args)
+    {
+        CoursePartInfo part = FindPart(args.Value?.ToString());
+        _draft = part != null ? CoursePartDraft.FromPart(part) : CoursePartDraft.Blank();
+        ClearSelection();
+        DraftChanged(final: true);
+    }
+
+    /// <summary>Add a row past the last one of its kind, and select it.</summary>
+    private void AddRow(string kind, List<CoursePartDraftRow> rows, bool isGround)
+    {
+        int after = rows.Count > 0 ? rows[rows.Count - 1].End : 0;
+        CoursePartDraftRow row = isGround
+            ? new CoursePartDraftRow { Start = rows.Count > 0 ? after + 5 : 0, End = (rows.Count > 0 ? after + 5 : 0) + 20, Height = 0 }
+            : new CoursePartDraftRow { Start = after + (rows.Count > 0 ? 4 : 10), End = after + (rows.Count > 0 ? 4 : 10) + 2 };
+
+        rows.Add(row);
+        SelectRow(kind, row);
+        DraftChanged(final: true);
+    }
+
+    private void RemoveRow(string kind, List<CoursePartDraftRow> rows, CoursePartDraftRow row)
+    {
+        rows.Remove(row);
+        if (IsSelected(kind, row))
+            ClearSelection();
+        DraftChanged(final: true);
+    }
+
+    /// <summary>The overlay selected a row, or cleared the selection with an empty <paramref name="kind"/>.</summary>
+    [JSInvokable]
+    public Task OnSelectionChanged(string kind, int index)
+    {
+        List<CoursePartDraftRow> rows = RowsOf(kind);
+        if (kind == DecorationKind && index >= 0 && index < _draft.Decorations.Count)
+            _selection = Selection.OfDecoration(_draft.Decorations[index]);
+        else if (kind == VineKind && index >= 0 && index < _draft.Vines.Count)
+            _selection = Selection.OfVine(_draft.Vines[index]);
+        else if (rows != null && index >= 0 && index < rows.Count)
+            _selection = Selection.OfRow(kind, rows[index]);
+        else
+            ClearSelection();
+
+        return InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// The overlay moved or resized a row. A drag reports its rows while it lasts and once more, as
+    /// <paramref name="final"/>, when it is let go.
+    /// </summary>
+    [JSInvokable]
+    public Task OnGeometryChanged(string kind, int index, int start, int end, int height, bool final)
+    {
+        List<CoursePartDraftRow> rows = RowsOf(kind);
+        if (rows == null || index < 0 || index >= rows.Count)
+            return Task.CompletedTask;
+
+        CoursePartDraftRow row = rows[index];
+        row.Start = start;
+        row.End   = end;
+        if (kind == GroundKind)
+            row.Height = height;
+
+        DraftChanged(final);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>The overlay flagged or unflagged the ground row at <paramref name="index"/> as a pit floor.</summary>
+    [JSInvokable]
+    public Task OnGroundPitChanged(int index, bool isPit)
+    {
+        if (index < 0 || index >= _draft.Ground.Count)
+            return Task.CompletedTask;
+
+        _draft.Ground[index].IsPit = isPit;
+        DraftChanged(final: true);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>The overlay added a row, which goes in start order among its kind and is selected.</summary>
+    [JSInvokable]
+    public Task OnElementAdded(string kind, int start, int end, int height)
+    {
+        List<CoursePartDraftRow> rows = RowsOf(kind);
+        if (rows == null || end <= start)
+            return Task.CompletedTask;
+
+        CoursePartDraftRow row = new CoursePartDraftRow { Start = start, End = end, Height = kind == GroundKind ? height : 0 };
+        int at = rows.FindIndex(existing => existing.Start > start);
+        rows.Insert(at < 0 ? rows.Count : at, row);
+
+        _selection = Selection.OfRow(kind, row);
+        DraftChanged(final: true);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// The Place tool stood a decoration of <paramref name="kind"/> on the ground at <paramref name="x"/>
+    /// decimeters, in the layer its kind is placed in, and it is selected.
+    /// </summary>
+    [JSInvokable]
+    public Task OnDecorationPlaced(string kind, int x, bool front)
+    {
+        if (string.IsNullOrEmpty(kind))
+            return Task.CompletedTask;
+
+        CoursePartDraftDecoration decoration = new CoursePartDraftDecoration { Kind = kind, X = x, Front = front };
+        _draft.Decorations.Add(decoration);
+        _selection = Selection.OfDecoration(decoration);
+        DraftChanged(final: true);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// The vine Place tool hung a vine at <paramref name="anchorX"/> whole meters, with the default anchor
+    /// height and platform above the ground there. It goes in order among the others and is selected.
+    /// </summary>
+    [JSInvokable]
+    public Task OnVinePlaced(int anchorX)
+    {
+        CoursePartDraftVine vine = _draft.PlaceVine(anchorX);
+        _selection = Selection.OfVine(vine);
+        DraftChanged(final: true);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// The overlay moved a vine's anchor or its platform: the anchor in whole meters and decimeters, the platform
+    /// from and to whole meters at a height in decimeters. A drag reports while it lasts and once more, as
+    /// <paramref name="final"/>, when it is let go.
+    /// </summary>
+    [JSInvokable]
+    public Task OnVineChanged(int index, int anchorX, int anchorHeight, int platformStart, int platformEnd, int platformHeight, bool final)
+    {
+        if (index < 0 || index >= _draft.Vines.Count)
+            return Task.CompletedTask;
+
+        CoursePartDraftVine vine = _draft.Vines[index];
+        vine.AnchorX        = anchorX;
+        vine.AnchorHeight   = anchorHeight;
+        vine.PlatformStart  = platformStart;
+        vine.PlatformEnd    = platformEnd;
+        vine.PlatformHeight = platformHeight;
+        DraftChanged(final);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// The overlay moved a decoration to <paramref name="x"/> decimeters, or changed its layer or flip. A drag
+    /// reports while it lasts and once more, as <paramref name="final"/>, when it is let go.
+    /// </summary>
+    [JSInvokable]
+    public Task OnDecorationChanged(int index, int x, bool front, bool flip, bool final)
+    {
+        if (index < 0 || index >= _draft.Decorations.Count)
+            return Task.CompletedTask;
+
+        CoursePartDraftDecoration decoration = _draft.Decorations[index];
+        decoration.X     = x;
+        decoration.Front = front;
+        decoration.Flip  = flip;
+        DraftChanged(final);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>The space tool's X was picked on the canvas, in whole meters.</summary>
+    [JSInvokable]
+    public Task OnSpacePicked(int x)
+    {
+        _spaceX      = x;
+        _spaceStatus = "";
+        _syncPending = true;
+        return InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>The overlay put its tool down itself, with Escape.</summary>
+    [JSInvokable]
+    public Task OnToolChanged(string tool)
+    {
+        _tool = tool ?? "";
+        return InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>The overlay removed a row, a decoration or a vine.</summary>
+    [JSInvokable]
+    public Task OnElementRemoved(string kind, int index)
+    {
+        List<CoursePartDraftRow> rows = RowsOf(kind);
+        if (kind == VineKind && index >= 0 && index < _draft.Vines.Count)
+            RemoveVine(_draft.Vines[index]);
+        else if (kind == DecorationKind && index >= 0 && index < _draft.Decorations.Count)
+            RemoveDecoration(_draft.Decorations[index]);
+        else if (rows != null && index >= 0 && index < rows.Count)
+            RemoveRow(kind, rows, rows[index]);
+        else
+            return Task.CompletedTask;
+
+        return InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>The overlay was zoomed, by the wheel or by Fit part.</summary>
+    [JSInvokable]
+    public Task OnZoomChanged(int pxPerMetre)
+    {
+        _pxPerMetre = Math.Clamp(pxPerMetre, MinPxPerMetre, MaxPxPerMetre);
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnZoomInput(ChangeEventArgs args)
+    {
+        if (!int.TryParse(args.Value?.ToString(), out int pxPerMetre))
+            return;
+
+        _pxPerMetre = Math.Clamp(pxPerMetre, MinPxPerMetre, MaxPxPerMetre);
+        await InvokeEditorAsync("setZoom", _pxPerMetre);
+    }
+
+    private Task OnFit() => InvokeEditorAsync("fit");
+
+    /// <summary>Play the ghost poof at the part's end torii and the warp-in under its start torii once in the preview.</summary>
+    private Task OnPlayGhostEffects() => InvokeEditorAsync("playGhostEffects");
+
+    /// <summary>Play every decoration's pass-by animation once in the preview, the sequence a run plays.</summary>
+    private Task OnPlayPassBy() => InvokeEditorAsync("playDecorationPassBy");
+
+    private void OnPractice() => OpenRun(race: false);
+
+    private void OnRace() => OpenRun(race: true);
+
+    /// <summary>
+    /// Play the draft composed alone on the run screen, in the draft's theme. The run comes back here when it
+    /// is left.
+    /// </summary>
+    private void OpenRun(bool race)
+    {
+        if (!CanPlay)
+            return;
+
+        // The page is restored from the draft the service keeps when the run comes back.
+        MetaplayService.DeveloperPartDraft = _draft;
+        // The draft is in no published config, so it travels by value on the practice ticket.
+        MetaplayService.RequestDraftPartRun(new DraftCoursePart(_review.Part), race, _draft.AltitudeBand);
+        Navigation.NavigateTo("");
+    }
+
+    private async Task InvokeEditorAsync(string method, params object[] args)
+    {
+        if (_editorModule == null)
+            return;
+
+        try
+        {
+            await _editorModule.InvokeVoidAsync(method, args);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (JSException)
+        {
+        }
+    }
+
+    /// <summary>
+    /// Put the code on the clipboard. The browser may refuse, so the code is then focused instead, which
+    /// selects it for copying by hand.
+    /// </summary>
+    private async Task OnCopyCode()
+    {
+        if (_review == null)
+            return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _review.Code);
+            _copyStatus = "Copied.";
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (JSException)
+        {
+            _copyStatus = "The clipboard was refused. The code is selected: copy it by hand.";
+            try
+            {
+                await _codeArea.FocusAsync();
+            }
+            catch (JSException)
+            {
+            }
+        }
+    }
+
+    private async Task DetachAsync()
+    {
+        if (_editorModule != null)
+        {
+            try
+            {
+                await _editorModule.InvokeVoidAsync("detach");
+                await _editorModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+            catch (JSException)
+            {
+            }
+
+            _editorModule = null;
+        }
+
+        _selfReference?.Dispose();
+        _selfReference = null;
+    }
+
+    /// <summary>One placeable kind as the renderer's catalogue lists it (<c>placeableDecorationKinds</c>).</summary>
+    public sealed class DecorationKindChoice
+    {
+        public string Id    { get; set; } = "";
+        public string Label { get; set; } = "";
+    }
+
+    protected override async ValueTask DisposePageAsync()
+    {
+        _disposed = true;
+        await DetachAsync();
+    }
+}

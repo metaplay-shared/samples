@@ -1,0 +1,17 @@
+Id #key,DisplayName,Tier,Prerequisite,OrbCost,RunSpeedPermille,RunAccelerationPermille,MaxLaunchSpeedPermille,FootingPermille,Icon
+"// The Skill tree, 1-2-4-4. Every permille is more-is-better: 1000 leaves its stat alone, above is a benefit and below a penalty. The speeds are multiplied by it; footing is a rate its step counts are divided by. Every prerequisite sits exactly one tier lower, and the whole shape, trades included, is checked by the config build."
+"// Tier 1: the root. It buys a name and no movement at all, and it cannot be equipped."
+name-tag,Name Tag,1,,1,1000,1000,1000,1000,Tag
+"// Tier 2: the two branches, one small benefit each and nothing else. Speed on one side, footing on the other."
+shoe-a,Light Sandals,2,name-tag,3,1020,1000,1000,1000,Sandal
+shield,Knee Pads,2,name-tag,3,1000,1000,1000,1150,Shield
+"// Tier 3: a trade per node, one larger benefit and one penalty on a stat the benefit plausibly worsens. Jump is never a penalty."
+swift-step,Running Shoes,3,shoe-a,8,1050,1000,1000,800,Bolt
+quick-start,Spring Heels,3,shoe-a,8,990,1300,1000,1000,Dash
+high-vault,Jump Boots,3,shield,8,1000,900,1060,1000,Jump
+iron-guard,Shin Guards,3,shield,8,990,1000,1000,1300,Shield
+"// Tier 4: every stat the tier-3 parent moves, moved the same way and further, plus exactly one new penalty."
+wind-stride,Fast Shoes,4,swift-step,20,1080,900,1000,700,Bolt
+burst-start,Rocket Heels,4,quick-start,20,980,1600,1000,900,Dash
+sky-vault,Sky Boots,4,high-vault,20,1000,850,1120,850,Jump
+stone-guard,Full Armor,4,iron-guard,20,980,900,1000,1600,Mountain

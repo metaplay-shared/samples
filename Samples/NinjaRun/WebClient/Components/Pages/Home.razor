@@ -1,0 +1,826 @@
+@page "/"
+@using Game.Logic
+@using WebClient.Gameplay
+@using WebClientBase.Configuration
+@inherits GamePageBase
+@inject WebClientConfig Config
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<PageTitle>@Config.AppTitle</PageTitle>
+
+<GameConnectionGate>
+    @* The menu and every run state occupy one canonical portrait area. The transition is clipped here so
+       it covers the game composition without sweeping across the shared application shell or margins. Every
+       view is swapped in and out behind the one curtain, inside this one page. *@
+    <div class="portrait-game-area" data-testid="portrait-game-area">
+        <IconSprite />
+
+        @switch (_view)
+        {
+            case HomeView.Customize:
+                @* The ninja's name, what is in the one slot, and the Skill tree the Orbs are spent in. *@
+                <CustomizeView @ref="_customizeView" Player="Player" DisplayedOrbs="DisplayedOrbs" OnBack="OnCustomizeBack" />
+                break;
+
+            case HomeView.Menu:
+                <MainMenuView Toggles="Toggles"
+                              StartDisabled="@(_opening == HomeView.Run || IsTransitioning || IsMenuTutorialActive)"
+                              OnStartRun="OnStartRun">
+                    <Medallion Player="Player"
+                               DisplayedOrbs="DisplayedOrbs"
+                               OrbsInFlight="OrbsInFlight"
+                               LandedPearlAngles="_landedPearlAngles"
+                               HasCompletedARun="HasCompletedARun"
+                               IsTutorialActive="IsMenuTutorialActive"
+                               ShowTutorialPointer="@(IsMenuTutorialActive && OrbsInFlight == 0)"
+                               Disabled="@(!HasCompletedARun || _opening == HomeView.Run || IsTransitioning)"
+                               OnOpen="OnOpenSkills" />
+                </MainMenuView>
+                break;
+
+            default:
+                @if (_timeTrial is { } trial)
+                {
+                    <RunView @ref="_runView"
+                             Trial="trial"
+                             Toggles="Toggles"
+                             Result="@(_view == HomeView.Result ? ResultScreen : null)"
+                             ExitDisabled="IsTransitioning"
+                             OnExit="LeaveRunAsync" />
+                }
+                break;
+        }
+
+        <OrbFlightLayer @ref="_orbFlight" Landed="OnOrbLanded" Changed="StateHasChanged" />
+
+        <ScreenCurtain Transition="_transition" />
+    </div>
+</GameConnectionGate>
+
+@code {
+
+    /// <summary>Where the run's sound loads its clips from, relative to the site root.</summary>
+    private const string AudioBaseUrl = "audio/";
+
+    /// <summary>The views of the portrait area, one on screen at a time.</summary>
+    private enum HomeView
+    {
+        Menu,
+        Customize,
+
+        /// <summary>A run being played.</summary>
+        Run,
+
+        /// <summary>The run's score screen, which has taken its place on the same stage.</summary>
+        Result,
+    }
+
+    /// <summary>
+    /// The view on screen. It changes behind the covered curtain, so the swap happens while nothing of either
+    /// view is visible.
+    /// </summary>
+    private HomeView _view = HomeView.Menu;
+
+    /// <summary>
+    /// The view a curtain pass is bringing in, from the moment the pass begins until it is uncovered: a run
+    /// while its ticket is asked for, or the customize view. A history entry left in that window is held in
+    /// <see cref="_leaveQueued"/>.
+    /// </summary>
+    private HomeView? _opening;
+
+    /// <summary>
+    /// The history entry of the view on screen, or on its way in, was left while the curtain was moving:
+    /// the view is left once the curtain has stopped. Cleared whenever a run starts opening.
+    /// </summary>
+    private bool _leaveQueued;
+
+    private PlayerModel? Player => MetaplayService.PlayerModel;
+
+    /// <summary>
+    /// Whether the portrait area is on screen at all: the session is up and the player model is in, so the
+    /// connection gate is showing its content rather than a spinner or an error.
+    /// </summary>
+    private bool IsContentShown => Player != null
+        && MetaplayService.ConnectionState != ConnectionState.Disconnected
+        && MetaplayService.ConnectionState != ConnectionState.Connecting
+        && MetaplayService.ConnectionState != ConnectionState.Error;
+
+    private RunHostInterop _host = default!;
+    private HomeControlsInterop _controls = default!;
+    private ScreenTransition _transition = default!;
+    private DotNetObjectReference<Home>? _selfReference;
+
+    private TimeTrial? _timeTrial;
+    private DotNetObjectReference<TimeTrial>? _trialReference;
+    private bool _loopRunning;
+    private TaskCompletionSource<bool>? _trialReady;
+
+    private RunView? _runView;
+    private ScoreScreen? _scoreScreen;
+    private CustomizeView? _customizeView;
+    private OrbFlightLayer? _orbFlight;
+
+    private bool IsTransitioning => _transition.IsTransitioning;
+
+    /// <summary>
+    /// The mute switch as the browser has it, read back from the host module on the first render. Sound is
+    /// off until the player asks for it, so the first paint already shows the switch that way.
+    /// </summary>
+    private bool _muted = true;
+
+    /// <summary>
+    /// Whether the browser lets the page go fullscreen at all, read from the controls module on the first
+    /// render, and whether the document is fullscreen, kept current by the browser's fullscreenchange event.
+    /// </summary>
+    private bool _fullscreenAvailable;
+    private bool _fullscreen;
+
+    /// <summary>The mute and fullscreen switches, under the same corner in the menu and in the run.</summary>
+    private RenderFragment Toggles => @<ViewToggles Muted="_muted"
+                                                    OnToggleMute="OnToggleMute"
+                                                    FullscreenAvailable="_fullscreenAvailable"
+                                                    Fullscreen="_fullscreen"
+                                                    OnToggleFullscreen="OnToggleFullscreen" />;
+
+    /// <summary>The score screen, on the run's stage in the run's place.</summary>
+    private RenderFragment ResultScreen => @<ScoreScreen @ref="_scoreScreen"
+                                                         Trial="_timeTrial"
+                                                         Player="Player"
+                                                         OrbsLifted="@(_orbFlight?.HasOrbs == true)"
+                                                         Transition="_transition"
+                                                         OnLeave="LeaveRunAsync" />;
+
+    // ---------------- Menu state ----------------
+
+    /// <summary>The Orb balance segment placements have paid into, and that Skills are bought with.</summary>
+    private int OrbBalance => Player?.Orbs ?? 0;
+
+    /// <summary>How many of the player's Orbs are still flying in from the score screen.</summary>
+    private int OrbsInFlight => _orbFlight?.OrbsInFlight ?? 0;
+
+    /// <summary>
+    /// The balance as the medallion shows it: the Orbs still flying in from the score screen are counted
+    /// only once they have landed in the orbit, so the charm and the ring fill one Orb at a time.
+    /// </summary>
+    private int DisplayedOrbs => Math.Max(0, OrbBalance - OrbsInFlight);
+
+    /// <summary>The screen angles the Orbs that have flown in since the page loaded landed at, oldest first.</summary>
+    private readonly List<double> _landedPearlAngles = new List<double>();
+
+    /// <summary>
+    /// Whether the player has completed a run, which is what opens the medallion and puts the Orb charm on
+    /// it (<see cref="MetaplayClientService.HasCompletedARun"/>).
+    /// </summary>
+    private bool HasCompletedARun => MetaplayService.HasCompletedARun;
+
+    /// <summary>
+    /// Whether the Name Tag tutorial holds the main menu, leaving the medallion the only way forward. The step
+    /// is read off the model, so it holds across a reload.
+    /// </summary>
+    private bool IsMenuTutorialActive => (Player?.NameTagTutorialStep ?? NameTagTutorialStep.None) != NameTagTutorialStep.None
+        && HasCompletedARun
+        && _view == HomeView.Menu;
+
+    // ---------------- Lifecycle ----------------
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+
+        _host       = new RunHostInterop(JS);
+        _controls   = new HomeControlsInterop(JS);
+        _transition = new ScreenTransition(_host.PrefersReducedMotionAsync, StateHasChanged);
+
+        MetaplayService.TimeTrialStarted   += OnTimeTrialStarted;
+        MetaplayService.TimeTrialAccepted  += OnTimeTrialAccepted;
+        MetaplayService.TimeTrialRejected  += OnTimeTrialRejected;
+        MetaplayService.DeveloperRunQueued += OnDeveloperRunQueued;
+    }
+
+    /// <summary>
+    /// The connection or the player model changed: the page is drawn again, and a developer run waiting for
+    /// the session is opened once the player model is in.
+    /// </summary>
+    protected override void OnServiceStateChanged() => InvokeAsync(() =>
+    {
+        StateHasChanged();
+        _ = TryOpenPendingDeveloperRunAsync();
+    });
+
+    /// <summary>
+    /// Hand the run to the frame loop once its canvas is in the document. The loop runs until the run is
+    /// over, so it is started once per attempt.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _muted = await _host.IsMutedAsync(_muted);
+            StateHasChanged();
+            await AttachControlsAsync();
+
+            // Not awaited: opening a run waits on the curtain and the ticket, and the render that follows the
+            // ticket's arrival is the one that starts its loop below.
+            _ = TryOpenPendingDeveloperRunAsync();
+        }
+
+        await _controls.SyncKeyModeAsync(KeyMode);
+
+        TimeTrial? trial = _timeTrial;
+        if (trial == null || _loopRunning || _runView == null)
+            return;
+
+        _loopRunning    = true;
+        _trialReference = DotNetObjectReference.Create(trial);
+        _selfReference ??= DotNetObjectReference.Create(this);
+
+        // A part editor draft is played alone, with no climb to carry it up the mountain, so it is drawn in the
+        // band the editor previews it in, which the request carried.
+        string? altitudeBand = trial.Ticket?.DraftPart != null ? _developerRunAltitudeBand : null;
+        TimeTrialCourseView course = TimeTrialCourseView.FromCourse(trial.Course, trial.Rules, trial.GhostRules, altitudeBand);
+
+        // The host returns once the run's art is in, or its wait for it has run out, so the reveal below lands
+        // on a complete stage. The curtain holds covered meanwhile, with the loading notice on it.
+        _transition.BeginRunArtWait();
+        try
+        {
+            await _host.StartAsync(_runView.Canvas, _trialReference, course, AssetBaseUrl, AudioBaseUrl, _selfReference);
+        }
+        finally
+        {
+            _transition.EndRunArtWait();
+        }
+        await _host.SetInputEnabledAsync(false);
+
+        if (_transition.Phase == ScreenTransitionPhase.Covered)
+            await RevealAsync(enableGameInput: true);
+    }
+
+    /// <summary>
+    /// The frame loop's host says how many of the run's sheets are in, out of how many, while it waits for
+    /// them behind the curtain; the notice on the curtain counts them.
+    /// </summary>
+    [JSInvokable]
+    public void OnRunArtProgress(int settled, int total) => _transition.ReportRunArtProgress(settled, total);
+
+    /// <summary>
+    /// Start the controls module listening for this page, and read whether fullscreen is possible and already
+    /// on. Without the module the keys, browser back and the fullscreen button are simply not there.
+    /// </summary>
+    private async Task AttachControlsAsync()
+    {
+        _selfReference ??= DotNetObjectReference.Create(this);
+        (_fullscreenAvailable, _fullscreen) = await _controls.AttachAsync(_selfReference);
+        StateHasChanged();
+    }
+
+    protected override async ValueTask DisposePageAsync()
+    {
+        MetaplayService.TimeTrialStarted   -= OnTimeTrialStarted;
+        MetaplayService.TimeTrialAccepted  -= OnTimeTrialAccepted;
+        MetaplayService.TimeTrialRejected  -= OnTimeTrialRejected;
+        MetaplayService.DeveloperRunQueued -= OnDeveloperRunQueued;
+
+        if (_timeTrial != null)
+            _timeTrial.Finished -= OnRunFinished;
+
+        await StopGameLoopAsync();
+        await _controls.DisposeAsync();
+
+        _selfReference?.Dispose();
+        _selfReference = null;
+
+        await _host.DisposeAsync();
+    }
+
+    // ---------------- Switches ----------------
+
+    /// <summary>Flip the mute switch. The host module owns the flag and remembers it across visits.</summary>
+    private async Task OnToggleMute()
+    {
+        _muted = await _host.ToggleMutedAsync(_muted);
+    }
+
+    /// <summary>
+    /// Enter or leave fullscreen. The controls module is already loaded, so the request is made inside the
+    /// click that asked for it, which is the gesture the browser wants.
+    /// </summary>
+    private async Task OnToggleFullscreen()
+    {
+        _fullscreen = await _controls.ToggleFullscreenAsync(_fullscreen);
+    }
+
+    /// <summary>The document entered or left fullscreen, from the button or from the browser (Esc).</summary>
+    [JSInvokable]
+    public void OnFullscreenChanged(bool isFullscreen)
+    {
+        _fullscreen = isFullscreen;
+        StateHasChanged();
+    }
+
+    // ---------------- Keyboard ----------------
+
+    /// <summary>
+    /// The mode the controls module listens to the window's keys in for the view that is up.
+    /// </summary>
+    private string KeyMode
+    {
+        get
+        {
+            if (!IsContentShown)
+                return "none";
+
+            return _view switch
+            {
+                HomeView.Menu   => IsMenuTutorialActive ? "none" : "menu",
+                HomeView.Result => "result",
+                // The customize view has a text field, and the run's own Space is the jump (wwwroot/js/timeTrialHost.js).
+                _               => "none",
+            };
+        }
+    }
+
+    /// <summary>Space on the main menu: the same as the Start run button, while that button could be pressed.</summary>
+    [JSInvokable]
+    public async Task OnMenuStartKey()
+    {
+        if (KeyMode != "menu" || _opening == HomeView.Run || IsTransitioning)
+            return;
+
+        await OnStartRun();
+    }
+
+    /// <summary>Space or Enter on the score screen, wherever focus is: the same as a press on the screen.</summary>
+    [JSInvokable]
+    public async Task OnResultDismissKey()
+    {
+        if (KeyMode != "result" || _scoreScreen == null)
+            return;
+
+        await _scoreScreen.AdvanceAsync();
+    }
+
+    // ---------------- Browser history ----------------
+
+    /// <summary>
+    /// The history entry a view sits on has been left: browser back, the Android back gesture, or one of the
+    /// view's own ways out, which go through <c>history.back()</c>.
+    /// </summary>
+    [JSInvokable]
+    public async Task OnHistoryLeftView(string view)
+    {
+        switch (HomeControlsInterop.ParseView(view))
+        {
+            case HistoryView.Run:
+                await OnHistoryLeftRunAsync();
+                break;
+            case HistoryView.Customize:
+                await OnHistoryLeftCustomizeAsync();
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Browser forward has landed on the history entry of a closed view. Returns whether the view opens again.
+    /// On false the controls module steps back off the entry.
+    /// </summary>
+    [JSInvokable]
+    public bool OnHistoryEnteredView(string view)
+    {
+        if (HomeControlsInterop.ParseView(view) != HistoryView.Customize)
+            return false;
+
+        if (!IsContentShown || !HasCompletedARun || _view != HomeView.Menu || _opening != null || !_transition.TryBegin())
+            return false;
+
+        _ = OpenCustomizeBehindCurtainAsync();
+        return true;
+    }
+
+    /// <summary>
+    /// The run's history entry was left: the run, or its score screen, goes back to the menu as the exit button
+    /// takes it.
+    /// </summary>
+    private async Task OnHistoryLeftRunAsync()
+    {
+        if (_timeTrial == null && _opening != HomeView.Run)
+            return;
+
+        // A run still coming in, or crossing to its score screen, is left once it has been uncovered.
+        if (_opening == HomeView.Run || IsTransitioning)
+        {
+            _leaveQueued = true;
+            return;
+        }
+
+        await ReturnToMenuAsync();
+    }
+
+    /// <summary>
+    /// The customize view's history entry was left: the view goes back to the menu through the curtain.
+    /// </summary>
+    private async Task OnHistoryLeftCustomizeAsync()
+    {
+        // A view still coming in finishes coming in first.
+        if (_opening == HomeView.Customize)
+        {
+            _leaveQueued = true;
+            return;
+        }
+
+        // A close already under way is the one this entry asked for.
+        await CloseCustomizeBehindCurtainAsync();
+    }
+
+    // ---------------- Curtain ----------------
+
+    /// <summary>
+    /// Uncover the portrait area and end the pass. A history entry left while the curtain was moving is acted
+    /// on now that it has stopped, as it would have been straight away.
+    /// </summary>
+    private async Task RevealAsync(bool enableGameInput, int? knownDurationMs = null)
+    {
+        int durationMs = knownDurationMs ?? await _transition.GetDurationAsync();
+        await _transition.RevealAsync(durationMs, () => _opening = null);
+
+        if (_leaveQueued)
+        {
+            _leaveQueued = false;
+            if (_timeTrial != null)
+            {
+                _ = ReturnToMenuAsync();
+                return;
+            }
+            if (_view == HomeView.Customize)
+            {
+                _ = CloseCustomizeBehindCurtainAsync();
+                return;
+            }
+        }
+
+        if (enableGameInput && _host.IsLoaded)
+            await _host.SetInputEnabledAsync(true);
+    }
+
+    // ---------------- Customize view ----------------
+
+    /// <summary>
+    /// Open the customize view behind the curtain, on a history entry of its own so browser back closes it.
+    /// </summary>
+    private async Task OnOpenSkills()
+    {
+        if (!HasCompletedARun || _opening != null || !_transition.TryBegin())
+            return;
+
+        _opening = HomeView.Customize;
+        await _controls.PushViewEntryAsync(HistoryView.Customize);
+        await OpenCustomizeBehindCurtainAsync();
+    }
+
+    /// <summary>
+    /// The curtain pass that brings the customize view in, once a pass has been begun for it.
+    /// </summary>
+    private async Task OpenCustomizeBehindCurtainAsync()
+    {
+        _opening = HomeView.Customize;
+        // Orbs still flying in are counted first, so the view opens on the whole balance.
+        await SettleOrbFlightAsync();
+        await _host.PlayMenuTapAsync();
+
+        int durationMs = await _transition.GetDurationAsync();
+        await _transition.CoverAsync(durationMs);
+
+        _view = HomeView.Customize;
+        StateHasChanged();
+
+        await RevealAsync(enableGameInput: false, durationMs);
+    }
+
+    /// <summary>
+    /// The customize view's Back button. It steps back off the view's history entry, and the history change
+    /// that follows closes the view exactly as the browser's own back button does. With no entry to step off
+    /// it closes the view directly.
+    /// </summary>
+    private async Task OnCustomizeBack()
+    {
+        if (_view != HomeView.Customize)
+            return;
+
+        if (!await _controls.LeaveViewEntryAsync(HistoryView.Customize))
+            await CloseCustomizeBehindCurtainAsync();
+    }
+
+    /// <summary>
+    /// Carry the player from the customize view back to the menu behind the curtain.
+    /// </summary>
+    private async Task CloseCustomizeBehindCurtainAsync()
+    {
+        if (_view != HomeView.Customize || !_transition.TryBegin())
+            return;
+
+        // Commits a name still being typed under the same rules as Enter or leaving the field, since browser
+        // back and the Android back gesture close the view without blurring the field.
+        _customizeView?.CommitPendingName();
+        await _host.PlayMenuTapAsync();
+
+        int durationMs = await _transition.GetDurationAsync();
+        await _transition.CoverAsync(durationMs);
+
+        _view = HomeView.Menu;
+        StateHasChanged();
+
+        await RevealAsync(enableGameInput: false, durationMs);
+    }
+
+    // ---------------- Opening a run ----------------
+
+    /// <summary>
+    /// Open a run from the menu: the Start run button, or Space.
+    /// </summary>
+    private Task OnStartRun()
+    {
+        // The Name Tag tutorial holds the menu until the player is named: the medallion is the way on.
+        if (IsMenuTutorialActive)
+            return Task.CompletedTask;
+
+        return OpenRunBehindCurtainAsync(MetaplayService.StartTimeTrial);
+    }
+
+    /// <summary>
+    /// Whether the run on screen was opened from the developer tools, which is where leaving it goes back to
+    /// rather than the menu: the course tools, or the part editor for a run on its draft.
+    /// </summary>
+    private bool _developerRun;
+
+    /// <summary>The developer tools page a developer run goes back to when it is left.</summary>
+    private string _developerRunReturnPath = "dev/courses";
+
+    /// <summary>The altitude band a developer run on a part editor draft is drawn in.</summary>
+    private string? _developerRunAltitudeBand;
+
+    private void OnDeveloperRunQueued() => InvokeAsync(TryOpenPendingDeveloperRunAsync);
+
+    /// <summary>
+    /// Open the run the developer tools asked for behind the curtain, the same way the menu opens one. Waits
+    /// for the session, so a run asked for as the page loads is opened once the player model is there.
+    /// </summary>
+    private async Task TryOpenPendingDeveloperRunAsync()
+    {
+        if (Player == null || _timeTrial != null || _opening == HomeView.Run || IsTransitioning)
+            return;
+
+        MetaplayClientService.DeveloperRunRequest? request = MetaplayService.TakePendingDeveloperRun();
+        if (request == null)
+            return;
+
+        _developerRun             = true;
+        _developerRunReturnPath   = request.ReturnPath;
+        _developerRunAltitudeBand = request.AltitudeBand;
+        await OpenRunBehindCurtainAsync(() => MetaplayService.StartDeveloperTimeTrial(request));
+    }
+
+    /// <summary>
+    /// Cover the menu, ask for the run with <paramref name="requestRun"/>, and uncover it once its ticket is
+    /// on the model, or uncover the menu again if none arrives.
+    /// </summary>
+    private async Task OpenRunBehindCurtainAsync(Action requestRun)
+    {
+        if (_opening == HomeView.Run || !_transition.TryBegin())
+            return;
+
+        _opening     = HomeView.Run;
+        _leaveQueued = false;
+        // The run's own history entry is what browser back leaves it by.
+        await _controls.PushViewEntryAsync(HistoryView.Run);
+        await SettleOrbFlightAsync();
+        await _host.PlayMenuTapAsync();
+
+        int durationMs = await _transition.GetDurationAsync();
+        await _transition.CoverAsync(durationMs);
+
+        _trialReady = new TaskCompletionSource<bool>();
+        requestRun();
+
+        Task completed = await Task.WhenAny(_trialReady.Task, Task.Delay(5000));
+        if (completed != _trialReady.Task)
+        {
+            _trialReady   = null;
+            _opening      = null;
+            _developerRun = false;
+            await RevealAsync(enableGameInput: false);
+            await _controls.LeaveViewEntryAsync(HistoryView.Run);
+        }
+    }
+
+    /// <summary>
+    /// The ticket is on the model, so the run can be played against the field that came with it.
+    /// </summary>
+    private void OnTimeTrialStarted(TimeTrialTicket ticket, IReadOnlyList<TimeTrialGhost>? lineup)
+    {
+        SharedGameConfig? gameConfig = MetaplayService.GameConfig;
+        // Resolved from the ticket: a ticket opened on a part editor draft carries the draft, and its id names
+        // nothing on its own.
+        CourseDefinition? course = CourseResolver.TryResolve(ticket, gameConfig);
+        if (course == null || gameConfig == null)
+            return;
+
+        InvokeAsync(() =>
+        {
+            _view      = HomeView.Run;
+            _timeTrial = new TimeTrial(ticket, course, gameConfig, lineup);
+            _timeTrial.Finished += OnRunFinished;
+            _trialReady?.TrySetResult(true);
+            StateHasChanged();
+        });
+    }
+
+    // ---------------- The run's end ----------------
+
+    /// <summary>
+    /// The run is over and the browser has its own time for it.
+    /// </summary>
+    private void OnRunFinished()
+    {
+        TimeTrial? trial = _timeTrial;
+        if (trial == null)
+            return;
+
+        InvokeAsync(async () =>
+        {
+            // Every run, practice included, goes to the server, which recomputes the result from the recording
+            // and answers with its own time. Offline there is no server, so the browser's time is the one shown.
+            if (!MetaplayService.IsOfflineMode)
+            {
+                trial.MarkValidating();
+                MetaplayService.SubmitTimeTrial(trial.Ticket.TicketId, trial.Recording);
+            }
+            else if (trial.ProvisionalResult != null)
+            {
+                MetaplayService.MarkOfflineRunFinished();
+            }
+
+            StateHasChanged();
+            await ShowResultAsync();
+        });
+    }
+
+    /// <summary>
+    /// Cross from the finished run to the score screen behind the curtain.
+    /// </summary>
+    private async Task ShowResultAsync()
+    {
+        if (_timeTrial == null || _view == HomeView.Result)
+            return;
+
+        // A curtain already in flight, the player leaving the run as it finished, gets the score screen
+        // swapped in under it rather than a second pass.
+        if (!_transition.TryBegin())
+        {
+            _view = HomeView.Result;
+            StateHasChanged();
+            return;
+        }
+
+        // The runner runs on past the line for this long before the curtain starts, so the run is seen to end
+        // on the course rather than being taken off it the instant the line is crossed. The finish rank is
+        // up over it for the same beat.
+        await Task.Delay(TimeTrial.RunOutMs);
+
+        int durationMs = await _transition.GetDurationAsync();
+        await _transition.CoverAsync(durationMs);
+
+        _timeTrial?.EndRunOut();
+        _view = HomeView.Result;
+        StateHasChanged();
+
+        await RevealAsync(enableGameInput: false, durationMs);
+    }
+
+    private void OnTimeTrialAccepted(TimeTrialResult result, TimeTrialStanding? standing)
+    {
+        TimeTrial? trial = _timeTrial;
+        if (trial == null)
+            return;
+
+        InvokeAsync(() =>
+        {
+            trial.MarkAccepted(result, standing);
+            StateHasChanged();
+        });
+    }
+
+    private void OnTimeTrialRejected(int ticketId, TimeTrialRejectReason reason)
+    {
+        TimeTrial? trial = _timeTrial;
+        if (trial == null || trial.Ticket.TicketId != ticketId)
+            return;
+
+        InvokeAsync(() =>
+        {
+            trial.MarkRejected(reason);
+            StateHasChanged();
+        });
+    }
+
+    // ---------------- Leaving a run ----------------
+
+    /// <summary>
+    /// The exit button, or a press on the score screen's last panel. It steps back off the run's history
+    /// entry, and the history change that follows leaves the run exactly as the browser's own back button does.
+    /// With no entry to step off it leaves directly.
+    /// </summary>
+    private async Task LeaveRunAsync()
+    {
+        if (_timeTrial == null || IsTransitioning)
+            return;
+
+        if (!await _controls.LeaveViewEntryAsync(HistoryView.Run))
+            await ReturnToMenuAsync();
+    }
+
+    /// <summary>
+    /// Leave the run, or its score screen, for the menu behind the curtain. Its history entry has already been
+    /// left by the time this runs, or there never was one.
+    /// </summary>
+    private async Task ReturnToMenuAsync()
+    {
+        if (_timeTrial == null || !_transition.TryBegin())
+            return;
+
+        // An accepted run's Orbs lift off the score screen's reward marks, float over the curtain while the
+        // views are swapped under them, and fly into the medallion's orbit once the menu is uncovered.
+        await SettleOrbFlightAsync();
+        bool reducedMotion = await _transition.PrefersReducedMotionAsync();
+        int  flight        = _view == HomeView.Result && !reducedMotion ? await LiftOrbsAsync() : -1;
+
+        await _host.PlayMenuTapAsync();
+        await _host.SetInputEnabledAsync(false);
+
+        int durationMs = await _transition.GetDurationAsync();
+        await _transition.CoverAsync(durationMs);
+        await StopGameLoopAsync();
+
+        if (_timeTrial != null)
+            _timeTrial.Finished -= OnRunFinished;
+
+        // A developer run goes back to the tools page it was opened from, behind the cover.
+        if (_developerRun)
+        {
+            _developerRun = false;
+            _timeTrial    = null;
+            _view         = HomeView.Menu;
+            Navigation.NavigateTo(_developerRunReturnPath);
+            return;
+        }
+
+        _timeTrial = null;
+        _view      = HomeView.Menu;
+        StateHasChanged();
+
+        await RevealAsync(enableGameInput: false, durationMs);
+
+        if (flight >= 0 && _orbFlight != null)
+            await _orbFlight.FlyAsync(flight);
+    }
+
+    /// <summary>
+    /// Stop the frame loop and release the object reference it calls back through. The loop stops itself
+    /// when a run finishes; this is for leaving the run behind, whether by starting another or by navigating
+    /// away.
+    /// </summary>
+    private async Task StopGameLoopAsync()
+    {
+        _loopRunning = false;
+        await _host.StopAsync();
+
+        _trialReference?.Dispose();
+        _trialReference = null;
+    }
+
+    // ---------------- Orb flight ----------------
+
+    /// <summary>
+    /// Lift the Orbs the accepted run paid off the score screen's reward marks (<see cref="OrbFlightLayer"/>).
+    /// Returns the flight the Orbs belong to, or -1 when none lifted.
+    /// </summary>
+    private async Task<int> LiftOrbsAsync()
+    {
+        TimeTrial?   trial  = _timeTrial;
+        PlayerModel? player = Player;
+        if (_orbFlight == null || trial == null || player == null || trial.IsPractice || trial.Phase != TimeTrialPhase.Accepted || player.LastOrbsEarned <= 0)
+            return -1;
+
+        return await _orbFlight.LiftAsync(player.LastOrbsEarned,
+            segment => RunResultView.OrbsForPlacement(player, RunResultView.PlacementForSegment(trial, player, segment)));
+    }
+
+    /// <summary>One Orb has reached the orbit: it becomes a pearl that starts its own orbit where it landed.</summary>
+    private void OnOrbLanded(OrbFlightLayer.OrbLanding landing)
+    {
+        int displayedBefore = Math.Max(0, OrbBalance - landing.InFlightBefore);
+        PearlOrbit.RecordLanding(_landedPearlAngles, displayedBefore, landing.AngleDegrees);
+    }
+
+    private Task SettleOrbFlightAsync() => _orbFlight?.SettleAsync() ?? Task.CompletedTask;
+}

@@ -1,0 +1,412 @@
+/* The game's main menu: the title, the medallion and the run button, and the Orb mark. */
+
+/* ---------------------------------------------------------------------------
+   Main menu
+   The title top left, the medallion under it and the run button along the bottom, over the moonlit shrine,
+   set below the floating top bar.
+   --------------------------------------------------------------------------- */
+.menu-view {
+    --menu-brand-size: clamp(96px, calc(100cqh - 540px), 209px);
+    --menu-shrine-scale: 1;
+    --menu-run-height: 90px;
+    position: relative;
+    isolation: isolate;
+    height: 100%;
+    overflow: hidden;
+    container: menu / size;
+    font-family: "Trebuchet MS", system-ui, sans-serif;
+    color: #f9efd7;
+    background-color: #06142e;
+    background-image: url("../art/menu-moonlit-shrine.sha256-46b3beb0c2f56140.webp");
+    background-position: center;
+    background-size: cover;
+}
+
+.menu-view::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(180deg,
+        rgba(2, 6, 18, 0.05) 0%,
+        rgba(2, 6, 18, 0.18) 38%,
+        rgba(2, 6, 18, 0.58) 72%,
+        rgba(2, 6, 10, 0.88) 100%);
+    pointer-events: none;
+}
+
+/* The title art, top left, clear of the floating top bar. It gives up height first on a short portrait
+   area so the medallion and the run button keep theirs. */
+.menu-brand {
+    position: absolute;
+    top: calc(2.75rem + env(safe-area-inset-top));
+    left: 20px;
+    width: var(--menu-brand-size);
+    height: var(--menu-brand-size);
+    margin: 0;
+}
+
+.menu-brand img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    filter: drop-shadow(0 5px 12px #000b);
+    pointer-events: none;                /* a long-press on it would open the image menu */
+}
+
+/* The Skill drawings live in one hidden symbol set at the portrait area's root; the medallion and the
+   customize view draw them with <use>. */
+.skill-icon-set {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+}
+
+.menu-view .icon,
+.customize-view .icon {
+    width: 1em;
+    height: 1em;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vertical-align: -0.1em;
+}
+
+.menu-view button:focus-visible,
+.customize-view button:focus-visible,
+.customize-view input:focus-visible {
+    outline: 2px solid #ffe297;
+    outline-offset: 3px;
+}
+
+/* ---- The medallion ----
+   One button: the turning yin-yang, the ring of pearls (one per Orb), the equipped Skill upright in the
+   centre, the Orb charm and the name plaque. Its parts are laid out on a fixed 270 x 310 box, which is
+   scaled as a whole on a short portrait area. The box is centred by its left edge rather than by a
+   translate, so the only transform it carries is its scale: the press below shrinks it about its own
+   top centre and never moves it sideways. */
+.loadout-shrine {
+    position: absolute;
+    top: calc(2.75rem + env(safe-area-inset-top) + var(--menu-brand-size) + 9px);
+    left: calc(50% - 135px);
+    width: 270px;
+    height: 310px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: #f9efd7;
+    cursor: pointer;
+    touch-action: manipulation;
+    transform: scale(var(--menu-shrine-scale));
+    transform-origin: top center;
+}
+
+.loadout-shrine:active:not(:disabled) {
+    transform: scale(calc(var(--menu-shrine-scale) * 0.96));
+}
+
+.loadout-shrine:disabled {
+    cursor: default;
+}
+
+.yin-yang {
+    position: absolute;
+    top: 41px;
+    left: 50px;
+    width: var(--yin-yang-size);
+    height: var(--yin-yang-size);
+    opacity: 0.7;
+    filter: drop-shadow(0 9px 11px #000c);
+    animation: yin-turn 36s linear infinite;
+}
+
+.pearls {
+    position: absolute;
+    top: 10px;
+    left: 19px;
+    width: 232px;
+    height: 232px;
+    pointer-events: none;
+}
+
+/* Each pearl goes round on its own, at the base 14 s turn divided by its own --orbit-speed (spread by PearlOrbit.SpeedSpread), so
+   some overtake others. Its --orbit-delay is negative, starting the turn part-way through at the pearl's
+   start angle; the inline transform (Gameplay/PearlOrbit.cs Style) is that same position held still, which is
+   what shows under reduced motion. Both are drawn at --orbit-radius. */
+.pearl {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 10px;
+    height: 10px;
+    margin: -5px;
+    animation: pearl-orbit calc(14s / var(--orbit-speed, 1)) linear infinite;
+    animation-delay: var(--orbit-delay, 0s);
+}
+
+.pearl::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #fffefa, #d0ecf0 37%, #78c1e4a8 70%, transparent 100%);
+    box-shadow: 0 0 8px #b9eaffae, 0 0 17px #75cbff69;
+    animation: orb-breathe 2.8s ease-in-out infinite alternate;
+    animation-delay: var(--phase);
+}
+
+.pearls.full .pearl::before {
+    box-shadow: 0 0 11px #d4f2ffd9, 0 0 21px #8cd6ff9e;
+}
+
+.loadout-icon {
+    position: absolute;
+    top: 78px;
+    left: 91px;
+    width: 88px;
+    height: 88px;
+    display: grid;
+    place-items: center;
+    color: #ffe1a8;
+    filter: drop-shadow(0 0 10px #eda764c0);
+}
+
+.loadout-icon .icon {
+    width: 74px;
+    height: 74px;
+    stroke-width: 1.7;
+}
+
+.orb-charm {
+    position: absolute;
+    top: 146px;
+    left: 190px;
+    display: grid;
+    place-items: center;
+    width: 57px;
+    height: 57px;
+    border: 0;
+    border-radius: 50%;
+    color: #dff5ff;
+    background: radial-gradient(circle at 35% 28%, #26435bcf, #10263af2 72%);
+    box-shadow: inset 0 0 0 1px #b5dbe7bd, 0 5px 12px #000a, 0 0 12px #83cdf04d;
+    text-shadow: 0 0 8px #83cdf0, 0 2px 5px #000;
+    font-size: 20px;
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
+}
+
+.name-plaque {
+    position: absolute;
+    top: 260px;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    height: 50px;
+    padding: 0 15px;
+    border: 1px solid #d8b27baa;
+    background: linear-gradient(90deg, #12243aef, #26364bee, #12243aef);
+    clip-path: polygon(5% 0, 95% 0, 100% 50%, 95% 100%, 5% 100%, 0 50%);
+    box-shadow: 0 5px 20px #0009;
+}
+
+.name-plaque span:first-child {
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.name-plaque .chev {
+    flex: 0 0 auto;
+    width: 24px;
+    height: 24px;
+    color: #ffd083;
+    stroke-width: 2.6;
+}
+
+/* ---- Start run ----
+   The brightest warm control on the screen, with a gloss that sweeps across it now and then. */
+.menu-bottom {
+    position: absolute;
+    left: 24px;
+    right: 24px;
+    bottom: 26px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+}
+
+.menu-practice {
+    display: flex;
+    justify-content: center;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin: 0;
+    text-shadow: 0 2px 8px #000;
+}
+
+.menu-practice-label {
+    font-size: 0.6875rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.menu-practice-name {
+    font-size: 0.9375rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #ffe1a8;
+}
+
+.menu-run {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+    width: 100%;
+    height: var(--menu-run-height);
+    padding: 0;
+    border: 0;
+    border-radius: 17px;
+    background: linear-gradient(#e69e54, #b75031 52%, #8b332c);
+    box-shadow: inset 0 0 0 2px #ffe5aa, 0 9px 0 #502b2a, 0 16px 25px #0009;
+    color: #fff2cf;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.menu-run::after {
+    content: "";
+    position: absolute;
+    z-index: 0;
+    top: -30%;
+    bottom: -30%;
+    left: -45%;
+    width: 28%;
+    transform: skewX(-24deg);
+    background: linear-gradient(90deg, transparent, #fff4ca00 12%, #fff4ca59 49%, #fff4ca00 88%, transparent);
+    animation: go-gloss 7s linear infinite;
+    pointer-events: none;
+}
+
+/* The double chevron is drawn in the backdrop masks' own units and stroke (Components/IconSprite.razor control-icon-run),
+   at about half the button's height, with a drop shadow under it. */
+.menu-run .icon {
+    position: relative;
+    z-index: 1;
+    width: calc(var(--menu-run-height) * 0.54);
+    height: calc(var(--menu-run-height) * 0.5);
+    stroke-width: 4.5;
+    vertical-align: middle;
+    filter: drop-shadow(0 3px 0 #7b3a2d);
+}
+
+.menu-run:active:not(:disabled) {
+    transform: translateY(4px);
+    box-shadow: inset 0 0 0 2px #ffe5aa, 0 5px 0 #502b2a;
+}
+
+.menu-run:disabled {
+    cursor: default;
+    filter: saturate(0.7) brightness(0.85);
+}
+
+@keyframes yin-turn { to { transform: rotate(360deg); } }
+@keyframes pearl-orbit {
+    from { transform: rotate(0deg) translateY(calc(-1 * var(--orbit-radius))); }
+    to   { transform: rotate(360deg) translateY(calc(-1 * var(--orbit-radius))); }
+}
+@keyframes orb-breathe {
+    from { transform: translateY(1px) scale(0.88); opacity: 0.72; }
+    to   { transform: translateY(-2px) scale(1.12); opacity: 1; }
+}
+@keyframes go-gloss {
+    0%, 72%   { left: -45%; }
+    84%, 100% { left: 125%; }
+}
+
+/* A short portrait area gives up the title's height first, then shortens the run button and scales the
+   medallion down, so the three never overlap. The container is the menu itself, so these rules and the
+   title's size read the portrait area's height. */
+@container menu (max-height: 700px) {
+    .menu-bottom {
+        --menu-run-height: 76px;
+    }
+}
+
+@container menu (max-height: 620px) {
+    .loadout-shrine {
+        --menu-shrine-scale: 0.8;
+    }
+
+    .menu-bottom {
+        --menu-run-height: 64px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .yin-yang,
+    .pearl,
+    .pearl::before {
+        animation: none;
+    }
+
+    .menu-run::after {
+        animation: none;
+        display: none;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   The Orb
+   The currency's own mark: a small glowing pearl, sized to the text it sits in. The same pearl is what
+   flies from the score screen into the medallion's orbit.
+   --------------------------------------------------------------------------- */
+.orb-mark {
+    display: inline-block;
+    width: 0.85em;
+    height: 0.85em;
+    margin-left: 0.2em;
+    vertical-align: -0.1em;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #fffefa, #d0ecf0 40%, #78c1e4a8 80%, transparent);
+    box-shadow: 0 0 8px #b9eaffae;
+}
+
+/* Once the Orbs have lifted off the score screen, the marks they left from are empty. */
+.gate-symbols-lifted .gate-symbol-reward .orb-mark {
+    visibility: hidden;
+}
+
+/* Above the screen transition, so the Orbs hold on top of the curtain while the views swap under it. */
+.orb-flight {
+    position: absolute;
+    inset: 0;
+    z-index: 1001;
+    overflow: visible;
+    pointer-events: none;
+}
+
+.flying-orb {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 8px #b9eaffae, 0 0 17px #75cbff69;
+    will-change: transform, opacity;
+}

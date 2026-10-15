@@ -1,0 +1,110 @@
+@inherits LayoutComponentBase
+@using WebClientBase.Services
+@inject IMetaplayConnectionService MetaplayService
+@inject NavigationManager NavigationManager
+@implements IDisposable
+
+@* Lightweight, see-through top bar floating over the game. Debug info only.
+   pointer-events:none lets taps pass through to the game; the controls cluster
+   re-enables pointer events for itself. *@
+<header class="app-bar">
+    <div class="container">
+        <div class="app-bar-row">
+            <!-- Debug info cluster (interactive) -->
+            <div class="app-bar-cluster">
+                @if (!string.IsNullOrEmpty(GetPlayerIdText()))
+                {
+                    <span class="app-bar-chip" style="color: var(--text-muted);">
+                        @GetPlayerIdText()
+                    </span>
+                }
+
+                <div class="app-bar-chip">
+                    <div class="app-bar-dot @GetConnectionDotClass()"></div>
+                    <span style="color: var(--text-secondary);">@GetConnectionText()</span>
+                </div>
+
+                @if (MetaplayService.ConnectionState == ConnectionState.Error ||
+                     MetaplayService.ConnectionState == ConnectionState.Disconnected)
+                {
+                    <button class="app-bar-button"
+                            style="background: var(--accent-blue); color: white;"
+                            @onclick="OnReconnect">
+                        Reconnect
+                    </button>
+                }
+                @if (MetaplayService.ConnectionState == ConnectionState.Connected)
+                {
+                    <button type="button"
+                            class="app-bar-button"
+                            style="background: rgba(239, 68, 68, 0.15); color: var(--accent-red);"
+                            @onclick="OnReset">
+                        Reset
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+</header>
+
+<main class="container app-main">
+    @Body
+</main>
+
+@code {
+    protected override void OnInitialized()
+    {
+        MetaplayService.OnStateChanged += OnStateChanged;
+    }
+
+    /// <summary>
+    /// The service says so when the connection state or the player model changed, which is when the bar's
+    /// connection state or player ID can have.
+    /// </summary>
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    private string GetConnectionDotClass()
+    {
+        return MetaplayService.ConnectionState switch
+        {
+            ConnectionState.Connected => "is-connected",
+            ConnectionState.Connecting => "is-connecting",
+            ConnectionState.Error => "is-error",
+            _ => ""
+        };
+    }
+
+    private string GetConnectionText()
+    {
+        return MetaplayService.ConnectionState switch
+        {
+            ConnectionState.Connected => "Connected",
+            ConnectionState.Connecting => "Connecting...",
+            ConnectionState.Error => "Error",
+            _ => "Offline"
+        };
+    }
+
+    private string GetPlayerIdText()
+    {
+        return MetaplayService.PlayerId?.ToString() ?? "";
+    }
+
+    private async Task OnReconnect()
+    {
+        await MetaplayService.ConnectAsync();
+    }
+
+    private void OnReset()
+    {
+        if (MetaplayService.Reset())
+        {
+            NavigationManager.NavigateTo("/", forceLoad: true);
+        }
+    }
+
+    public void Dispose()
+    {
+        MetaplayService.OnStateChanged -= OnStateChanged;
+    }
+}

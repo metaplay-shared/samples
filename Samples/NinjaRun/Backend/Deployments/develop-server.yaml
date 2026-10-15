@@ -1,0 +1,15 @@
+# Helm values for the Develop environment (whole-impalas-strive-quickly on p2-eu.metaplay.dev).
+#
+# The Blazor WASM WebClient is served by the PublicWebApi host from the image's /gameserver/publicwebapp
+# (staged by `dotnet run tools/ServerImageBuild.cs`). `publicWebApi.enabled` turns that host on and
+# exposes it on the "-public" domain: https://whole-impalas-strive-quickly-public.p2-eu.metaplay.dev/.
+# The client then opens its game connection over the WebSocket gateway on the bare environment domain.
+
+# Configuration files to use
+config:
+  files:
+    - "./Config/Options.base.yaml"
+    - "./Config/Options.dev.yaml"
+
+publicWebApi:
+  enabled: true

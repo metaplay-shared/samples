@@ -1,0 +1,146 @@
+/* The game's own styles, loaded after WebClientBase's app-base.css as one stylesheet per view, linked from
+   index.html in cascade order: base, menu, customize, run, score, controls, transition, dev-tools. This one holds what every view shares.
+   The base palette (navy + command-blue) is set in Program.cs via ThemeColors; the display face and the
+   score screen's entrance animation (.font-display, .animate-pop-in) live in app-base.css. */
+
+/* ---------------------------------------------------------------------------
+   Design tokens
+   These are NEW variables (not overrides), so defining them here is safe even though App.razor injects
+   the theme :root block after this stylesheet.
+   --------------------------------------------------------------------------- */
+:root {
+    --accent-gold:       #f5c542;
+
+    /* Placement in the field of four, first to last, and the unlit colour of a segment not yet placed:
+       the segment callout over the run and the score screen colour a placement with these. */
+    --placement-first:   #f5c542;
+    --placement-second:  #d8dee8;
+    --placement-third:   #c1743a;
+    --placement-fourth:  #6b7280;
+    --placement-open:    rgba(198, 212, 233, 0.32);
+
+    /* The main menu medallion: the yin-yang's size, and the pearls' distance from its centre at the medallion's
+       unscaled size. The pearls orbit at that radius (menu.css), an Orb landing from the score screen stops on
+       it (js/orbFlight.js), and a pearl's resting position is placed on it (Gameplay/PearlOrbit.cs). This token is
+       the one definition of the radius. */
+    --yin-yang-size:     166px;
+    --orbit-radius:      95px;
+}
+
+/* ---------------------------------------------------------------------------
+   Full-screen, app-like behavior (phones; emulated on desktop browsers)
+   - The page itself never scrolls or zooms.
+   - No pull-to-refresh / rubber-band overscroll.
+   - No double-tap zoom, no long-press selection menus.
+   --------------------------------------------------------------------------- */
+html,
+body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;                 /* the page (document) never scrolls */
+    overscroll-behavior: none;        /* no pull-to-refresh / rubber-band */
+    touch-action: manipulation;       /* no double-tap-to-zoom */
+    -webkit-user-select: none;
+    user-select: none;                /* no long-press text selection menus */
+    -webkit-touch-callout: none;      /* no iOS long-press Copy/Share/Save popup */
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Block image drag / drag-to-save. */
+img {
+    -webkit-user-drag: none;
+    user-drag: none;
+}
+
+/* Lock the body in place so mobile Safari can't drag the whole page around. */
+body {
+    position: fixed;
+    inset: 0;
+}
+
+/* Keep real controls selectable/usable even though selection is disabled globally. */
+button,
+input,
+textarea,
+select {
+    -webkit-user-select: auto;
+    user-select: auto;
+}
+
+/* ---------------------------------------------------------------------------
+   Portrait phone-width column
+   Constrain the UI to a phone-width column so it feels native on phones and is emulated as a centered
+   column on desktop, narrower than the base layout's .container.
+   --------------------------------------------------------------------------- */
+header > .container,
+main.container {
+    max-width: 26rem;
+}
+
+/* The shared top bar (WebClientBase/MainLayout.razor) is debug info, and its chips blur whatever is under
+   them. Over a run that is a canvas changing every frame, so the compositor would redo the blur on every
+   composite; it fades out while the game view is up and back in when it goes. The view swaps behind the
+   covered curtain, so the fade runs while the curtain holds and the bar never pops. */
+header:has(~ main .time-trial-view) {
+    opacity: 0;
+    visibility: hidden;
+}
+
+header {
+    transition: opacity 200ms linear, visibility 200ms linear;
+}
+
+/* ---------------------------------------------------------------------------
+   TimeTrial stage
+   The canvas the JS renderer draws into (`wwwroot/js/timeTrialRenderer.js`). The renderer sizes its
+   backing store from the canvas' CSS box and watches it with a ResizeObserver, so the stage must have
+   a real height: it fills its parent, which therefore needs one too (a flex child with `flex: 1`, or
+   a fixed / dvh height). The stage is also the touch target for the jump button: it swallows scrolling
+   and text selection so a held press charges the jump instead of selecting or panning. CSS cannot stop
+   the platform's long-press gesture (and the haptic buzz it gives on Android); the input host
+   (`wwwroot/js/timeTrialHost.js`) suppresses that by cancelling `touchstart` on the canvas.
+   --------------------------------------------------------------------------- */
+.time-trial-stage {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    background: #1a5374;                 /* the renderer's foothills sky, so resizes never flash white */
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.time-trial-stage > canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;          /* no browser smoothing on top of the renderer's own scaling */
+}
+
+/* The main content region is the ONLY scroll surface, and only when a view is taller than the screen.
+   Everything else stays put. The transparent top bar floats over the top of this area. */
+main {
+    height: 100dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    /* Respect the home-indicator / bottom safe area. */
+    padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
+}
+
+/* ---------------------------------------------------------------------------
+   Portrait game area
+   The menu, race canvas, HUD and result all replace one another inside this stable clipped area. Shared
+   shell UI, desktop margins and the fixed top bar remain outside it when the foreground transition passes.
+   This area owns the rounding and the clip; the views inside it are edge-to-edge, so nothing draws a frame
+   around the composition.
+   --------------------------------------------------------------------------- */
+.portrait-game-area {
+    position: relative;
+    isolation: isolate;
+    height: calc(100dvh - 3.5rem - env(safe-area-inset-bottom));
+    overflow: hidden;
+    border-radius: 1rem;
+}

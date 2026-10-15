@@ -1,0 +1,6 @@
+# Options overrides for all development environments.
+
+Environment:
+  # Development features (developer tools, development-only actions) are for players
+  # marked as developers on the dashboard, not everyone on the server.
+  EnableDevelopmentFeatures: false

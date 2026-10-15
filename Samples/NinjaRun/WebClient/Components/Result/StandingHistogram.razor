@@ -1,0 +1,60 @@
+@using System.Globalization
+@using Game.Logic
+@using WebClient.Gameplay
+
+@{
+    IReadOnlyList<CourseTimeHistogramBar> bars = CourseTimeHistogram.Bars(Standing.PlayerBestCounts);
+    int maxCount  = CourseTimeHistogram.MaxCount(bars);
+    int playerBar = CourseTimeHistogram.BarFor(Standing.FinishTimeMs, Standing.ParTimeMs);
+    int marker    = CourseTimeHistogram.MarkerPermille(Standing.FinishTimeMs, Standing.ParTimeMs);
+}
+
+@* The score screen's standing panel: everyone's best on this course, one bar per percent of par, with the
+   run's own bar lit and a marker under the axis at its time. The two ends gather everything faster and slower
+   than the window and are drawn dimmer, since they have no scale. *@
+<div class="result-panel result-standing @PanelCssClass"
+     data-testid="standing-panel"
+     aria-hidden="@(Shown ? "false" : "true")">
+    <div class="standing-histogram" data-testid="standing-histogram"
+         role="img" aria-label="How everyone's best on this course compares with par, with this run marked">
+        <div class="standing-bars">
+            @for (int ndx = 0; ndx < bars.Count; ndx++)
+            {
+                CourseTimeHistogramBar bar = bars[ndx];
+                <span class="standing-bar @(bar.IsOpenEnd ? "standing-bar-open" : "") @(ndx == playerBar ? "standing-bar-player" : "")"
+                      data-testid="standing-bar"
+                      data-count="@bar.Count"
+                      data-open-end="@(bar.IsOpenEnd ? "true" : null)"
+                      data-player="@(ndx == playerBar ? "true" : null)"
+                      style="--bar-height: @RunResultView.BarHeight(bar.Count, maxCount)"></span>
+            }
+        </div>
+        <div class="standing-axis"></div>
+        <div class="standing-scale">
+            @if (RunResultView.AxisOffset(bars, RunResultView.ParPermille) is { } parOffset)
+            {
+                <span class="standing-tick" style="left: @parOffset">par</span>
+            }
+            @if (RunResultView.AxisOffset(bars, RunResultView.ParPermille + 100) is { } tenOffset)
+            {
+                <span class="standing-tick" style="left: @tenOffset">+10%</span>
+            }
+            @if (marker >= 0)
+            {
+                <span class="standing-marker" data-testid="standing-marker"
+                      style="left: @((marker / 10.0).ToString("0.#", CultureInfo.InvariantCulture))%"></span>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    /// <summary>Where the run stands among everyone's bests on the course.</summary>
+    [Parameter, EditorRequired] public TimeTrialStanding Standing { get; set; } = default!;
+
+    /// <summary>The panel's motion: held out of sight, sliding in, or in place (<c>result-panel-*</c> in css/score.css).</summary>
+    [Parameter] public string PanelCssClass { get; set; } = "";
+
+    /// <summary>Whether the score screen is on this panel.</summary>
+    [Parameter] public bool Shown { get; set; }
+}

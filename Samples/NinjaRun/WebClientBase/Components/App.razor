@@ -1,0 +1,32 @@
+@using System.Reflection
+@using WebClientBase.Configuration
+@inject WebClientConfig Config
+
+@* Dynamic head content rendered through HeadOutlet (registered in the host builder): the document title and the
+   theme CSS variables, which come from the game-supplied WebClientConfig. The static head lives in index.html. *@
+<HeadContent>
+    <title>@Config.AppTitle</title>
+    <style>
+        * {
+            font-family: 'Inter', system-ui, sans-serif;
+        }
+
+        @Config.Theme.ToCssVariables()
+    </style>
+</HeadContent>
+
+<Router AppAssembly="Assembly.GetEntryAssembly()"
+        AdditionalAssemblies="new[] { typeof(App).Assembly }">
+    <Found Context="routeData">
+        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <LayoutView Layout="typeof(Layout.MainLayout)">
+            <div class="not-found">
+                <h1>Page Not Found</h1>
+                <p>The page you're looking for doesn't exist.</p>
+            </div>
+        </LayoutView>
+    </NotFound>
+</Router>

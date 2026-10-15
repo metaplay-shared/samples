@@ -1,0 +1,370 @@
+/* The body face (Inter, a variable font covering weights 400 to 800) and the display face (Lilita One), served
+   from ../fonts/ with their SIL Open Font License texts. Each file is one script subset; the browser fetches only
+   the subsets whose ranges the page's text uses. */
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400 800;
+    font-display: swap;
+    src: url("../fonts/inter-cyrillic-ext.woff2") format("woff2");
+    unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400 800;
+    font-display: swap;
+    src: url("../fonts/inter-cyrillic.woff2") format("woff2");
+    unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400 800;
+    font-display: swap;
+    src: url("../fonts/inter-greek-ext.woff2") format("woff2");
+    unicode-range: U+1F00-1FFF;
+}
+
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400 800;
+    font-display: swap;
+    src: url("../fonts/inter-greek.woff2") format("woff2");
+    unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF;
+}
+
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400 800;
+    font-display: swap;
+    src: url("../fonts/inter-vietnamese.woff2") format("woff2");
+    unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400 800;
+    font-display: swap;
+    src: url("../fonts/inter-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 400 800;
+    font-display: swap;
+    src: url("../fonts/inter-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+    font-family: 'Lilita One';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("../fonts/lilita-one-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+    font-family: 'Lilita One';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("../fonts/lilita-one-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Smooth, springy transitions */
+button {
+    transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1),
+                filter 0.12s ease,
+                box-shadow 0.15s ease,
+                background 0.15s ease,
+                opacity 0.15s ease;
+}
+
+button:active:not(:disabled) {
+    transform: scale(0.96);
+}
+
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Selection */
+::selection {
+    background: rgba(59, 130, 246, 0.3);
+}
+
+/* Blazor error UI */
+#blazor-error-ui {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: var(--accent-red, #ef4444);
+    color: white;
+    z-index: 1000;
+    font-size: 0.875rem;
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+#blazor-error-ui .reload {
+    color: white;
+    text-decoration: underline;
+    margin-left: 0.5rem;
+}
+
+/* ===========================================================================
+   Motion toolkit: entrance animations. The pop-in's spring easing overshoots
+   slightly so things "land" with weight. Used by the base components (Modal)
+   and the game UI via the .animate-* utility classes.
+   =========================================================================== */
+:root {
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Chunky rounded display face for hero numbers, titles and primary CTAs.
+   Body copy stays Inter (set globally in App.razor). */
+.font-display {
+    font-family: 'Lilita One', 'Inter', system-ui, sans-serif;
+    letter-spacing: 0.01em;
+}
+
+@keyframes mp-pop-in {
+    0%   { opacity: 0; transform: scale(0.85); }
+    60%  { opacity: 1; transform: scale(1.03); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+.animate-pop-in { animation: mp-pop-in 0.30s var(--ease-spring) both; }
+
+/* Accessibility: honour reduced-motion. The entrance animation resolves instantly
+   (`both` keeps the final state). */
+@media (prefers-reduced-motion: reduce) {
+    .animate-pop-in {
+        animation-duration: 0.001s;
+    }
+}
+
+/* ===========================================================================
+   Page defaults and the base components (App, MainLayout, ConnectionStateContainer). Layered, as declared in
+   preflight.css, so any unlayered rule of the game's wins over them.
+   =========================================================================== */
+@layer base {
+    :root {
+        color-scheme: light;
+        background-color: #fff;
+        color: oklch(21% 0.006 285.885);
+        scrollbar-color: color-mix(in oklch, currentColor 35%, #0000) #0000;
+    }
+
+    body {
+        min-height: 100vh;
+    }
+}
+
+@layer components {
+    .container {
+        width: 100%;
+        max-width: 42rem;
+        margin-inline: auto;
+        padding-inline: 1rem;
+    }
+
+    .app-main {
+        padding-block: 1.25rem;
+    }
+
+    /* The top bar: debug info floating over the game. */
+    .app-bar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 50;
+        pointer-events: none;
+    }
+
+    .app-bar-row {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        height: 3rem;
+        padding-top: env(safe-area-inset-top);
+    }
+
+    .app-bar-cluster {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+        font-size: 11px;
+        pointer-events: auto;
+    }
+
+    .app-bar-chip {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        background: rgba(0, 0, 0, 0.35);
+        backdrop-filter: blur(4px);
+    }
+
+    .app-bar-dot {
+        width: 0.375rem;
+        height: 0.375rem;
+        border-radius: 9999px;
+        background: oklch(55.2% 0.016 285.938);
+    }
+
+    .app-bar-dot.is-connected { background: oklch(72.3% 0.219 149.579); }
+    .app-bar-dot.is-connecting { background: oklch(76.9% 0.188 70.08); animation: app-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+    .app-bar-dot.is-error { background: oklch(63.7% 0.237 25.331); }
+
+    .app-bar-button {
+        padding: 0.25rem 0.625rem;
+        border-radius: 0.25rem;
+        font-weight: 500;
+    }
+
+    /* The connection states that stand in for the page: connecting, failed, loading. */
+    .connection-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 60vh;
+        text-align: center;
+    }
+
+    .connection-state-text {
+        margin-top: 1rem;
+        max-width: 20rem;
+        font-size: 0.875rem;
+        line-height: 1.43;
+        color: var(--text-secondary);
+    }
+
+    .spinner:not(.spinner-large) + .connection-state-text {
+        margin-top: 0.75rem;
+    }
+
+    .connection-state-badge {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 3rem;
+        height: 3rem;
+        margin-bottom: 1rem;
+        border-radius: 9999px;
+        font-size: 1.25rem;
+        line-height: 1.4;
+        background: rgba(239, 68, 68, 0.15);
+    }
+
+    .connection-state-title {
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .connection-state-title + .connection-state-text {
+        margin-top: 0;
+        margin-bottom: 1rem;
+    }
+
+    .connection-state-button {
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+        font-size: 0.875rem;
+        line-height: 1.43;
+        font-weight: 500;
+        color: white;
+        background: var(--accent-blue);
+    }
+
+    /* A ring that draws and spins in the current colour. */
+    .spinner {
+        display: inline-block;
+        flex-shrink: 0;
+        width: 1.5rem;
+        aspect-ratio: 1;
+        vertical-align: middle;
+        pointer-events: none;
+        color: var(--accent-blue);
+        background-color: currentColor;
+        mask-image: url("data:image/svg+xml,%3Csvg width='24' height='24' stroke='black' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cg transform-origin='center'%3E%3Ccircle cx='12' cy='12' r='9.5' fill='none' stroke-width='3' stroke-linecap='round'%3E%3CanimateTransform attributeName='transform' type='rotate' from='0 12 12' to='360 12 12' dur='2s' repeatCount='indefinite'/%3E%3Canimate attributeName='stroke-dasharray' values='0,150;42,150;42,150' keyTimes='0;0.475;1' dur='1.5s' repeatCount='indefinite'/%3E%3Canimate attributeName='stroke-dashoffset' values='0;-16;-59' keyTimes='0;0.475;1' dur='1.5s' repeatCount='indefinite'/%3E%3C/circle%3E%3C/g%3E%3C/svg%3E");
+        mask-position: 50%;
+        mask-size: 100%;
+        mask-repeat: no-repeat;
+    }
+
+    .spinner-large {
+        width: 1.75rem;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .spinner {
+            mask-image: url("data:image/svg+xml,%3Csvg width='24' height='24' stroke='black' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cg transform-origin='center'%3E%3Ccircle cx='12' cy='12' r='9.5' fill='none' stroke-width='3' stroke-linecap='round'%3E%3CanimateTransform attributeName='transform' type='rotate' from='0 12 12' to='360 12 12' dur='8s' repeatCount='indefinite'/%3E%3Canimate attributeName='stroke-dasharray' values='0,150;42,150;42,150' keyTimes='0;0.475;1' dur='6s' repeatCount='indefinite'/%3E%3Canimate attributeName='stroke-dashoffset' values='0;-16;-59' keyTimes='0;0.475;1' dur='6s' repeatCount='indefinite'/%3E%3C/circle%3E%3C/g%3E%3C/svg%3E");
+        }
+    }
+
+    .not-found {
+        padding: 1.5rem;
+        text-align: center;
+    }
+
+    .not-found h1 {
+        margin-bottom: 0.5rem;
+        font-size: 1.25rem;
+        line-height: 1.4;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .not-found p {
+        color: var(--text-secondary);
+    }
+}
+
+@keyframes app-pulse {
+    50% { opacity: 0.5; }
+}

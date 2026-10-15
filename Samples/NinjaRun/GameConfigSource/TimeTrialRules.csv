@@ -1,0 +1,18 @@
+Member,Value
+"// Movement values for the time trial simulation. Meters and seconds; the simulation converts per-second values to per-step values itself."
+RunSpeed,8
+Gravity,30
+LaunchAngleDegrees,50
+MinLaunchSpeed,6
+MaxLaunchSpeed,16
+MaxChargeSteps,45
+RunAcceleration,12
+StumbleSteps,30
+"// A press this many steps before touching down, held through the landing, starts the charge on the landing step (9 steps = 0.15 s)."
+JumpBufferSteps,9
+"// The automatic mantle: the hang and the top transition are fixed step counts, the rise up the face is a speed, so a deeper catch costs more."
+LedgeGrabHangSteps,10
+LedgeGrabRiseSpeed,4
+LedgeGrabTopTransitionSteps,10
+LedgeGrabClearanceHeight,0.3
+LedgeGrabResumeSpeed,4

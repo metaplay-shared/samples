@@ -1,0 +1,114 @@
+@using WebClient.Gameplay
+@implements IDisposable
+
+@* Where the run came in on the segment that just closed, and the run time it closed at, called out over the
+   stage between the exit arrow and the switches. It appears at a climb's bottom torii, or at the finish line
+   for the last segment. The climb and the run-out past the line both hold the button, so it covers nothing
+   the player needs. *@
+<div class="segment-rank-callout" aria-live="polite"
+     style="--segment-rank-duration: @(ShowMs)ms;">
+    @if (_rank is { } rank)
+    {
+        <div @key="rank.Segment" class="segment-rank-stack">
+            <span class="segment-rank font-display @RunResultView.PlacementCssClass(rank.Placement)"
+                  data-testid="segment-rank"
+                  data-segment="@rank.Segment"
+                  data-placement="@rank.Placement">@RunResultView.PlacementLabel(rank.Placement).ToUpperInvariant()</span>
+            <span class="segment-time font-display" data-testid="segment-time">@CourseToolsText.FormatMs(rank.TimeMs)</span>
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>
+    /// How long a closed segment's rank and time stay up over the stage. It is shorter than the run-out past
+    /// the finish line, so the finish rank has faded before the curtain starts.
+    /// </summary>
+    private const int ShowMs = 1500;
+
+    /// <summary>The run being played.</summary>
+    [Parameter, EditorRequired] public TimeTrial Trial { get; set; } = default!;
+
+    /// <summary>The run this callout is listening to, so a new one starts over.</summary>
+    private TimeTrial? _listening;
+
+    /// <summary>
+    /// The segment whose rank is on the stage, the place it came in and the run time it closed at, or null
+    /// for none.
+    /// </summary>
+    private (int Segment, int Placement, int TimeMs)? _rank;
+
+    /// <summary>How many of the run's segment placements have already been seen, so each is called out once.</summary>
+    private int _placementsSeen;
+
+    /// <summary>Moves on with every callout and every clear, so a stale timer never hides a newer rank.</summary>
+    private int _token;
+
+    protected override void OnParametersSet()
+    {
+        if (ReferenceEquals(Trial, _listening))
+            return;
+
+        if (_listening != null)
+            _listening.SegmentPlaced -= OnSegmentPlaced;
+
+        _listening      = Trial;
+        _rank           = null;
+        _placementsSeen = 0;
+        _token++;
+
+        if (_listening != null)
+            _listening.SegmentPlaced += OnSegmentPlaced;
+    }
+
+    /// <summary>The run placed a segment as its frame loop stepped it: call it out.</summary>
+    private void OnSegmentPlaced() => InvokeAsync(() =>
+    {
+        if (Update())
+            StateHasChanged();
+    });
+
+    /// <summary>
+    /// Call out the segment the run has just closed, at most once per segment. Returns whether a rank was put
+    /// up.
+    /// </summary>
+    private bool Update()
+    {
+        TimeTrial? trial = _listening;
+        if (trial == null)
+            return false;
+
+        IReadOnlyList<int> placements = trial.ProvisionalSegmentPlacements;
+        if (placements.Count <= _placementsSeen)
+            return false;
+
+        _placementsSeen = placements.Count;
+        int segment   = placements.Count - 1;
+        int placement = placements[segment];
+        if (placement <= 0)
+            return false;
+
+        _rank = (segment, placement, trial.SegmentCloseTimeMs(segment));
+        int token = ++_token;
+        _ = HideAfterAsync(token);
+        return true;
+    }
+
+    private async Task HideAfterAsync(int token)
+    {
+        await Task.Delay(ShowMs);
+        if (token != _token)
+            return;
+
+        _rank = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        _token++;
+        if (_listening != null)
+            _listening.SegmentPlaced -= OnSegmentPlaced;
+        _listening = null;
+    }
+}

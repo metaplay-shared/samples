@@ -1,0 +1,462 @@
+/* The score screen: its ground, the segment placements, the gates and the panels under them. */
+
+/* ---------------------------------------------------------------------------
+   Score-screen ground
+   Rows of the run button's ≫ on a solid navy, the sheet tilted, every other row pointing and drifting the
+   other way, and a band of the ground colour across the sheet behind the score so it is read off a calm
+   surface. The band and the rows share the sheet's frame, and the row grid is anchored to the band rather
+   than to the sheet: the rows above it hang from its top edge and the rows below stand on its bottom edge,
+   so a whole row meets each edge whatever the screen's height, with the glyph's own margin between it and
+   the lit edge. Each half is four lanes: a lane is one half-sized layer masked to every fourth row, the
+   masks staggered half a tile so the lanes interleave as brickwork, and each slides one tile width per
+   loop: two lanes rightward, two leftward, at slightly different speeds, so adjacent rows drift against
+   each other rather than march. Eight composited layers covering the sheet once, not one per row. Passive,
+   so it stays far below the gates: the motif is a lift of the ground, not a colour of its own.
+   --------------------------------------------------------------------------- */
+.result-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    overflow: hidden;
+    pointer-events: none;
+    --backdrop-tilt: -13deg;
+    --backdrop-tile: 44px;
+    --backdrop-row: 34px;
+    --backdrop-motif: rgb(132 160 206 / 0.15);
+    --backdrop-edge: rgb(132 160 206 / 0.33);
+}
+
+/* Oversized and tilted, so its corners never reach the view. */
+.result-backdrop-sheet {
+    position: absolute;
+    inset: -45%;
+    transform: rotate(var(--backdrop-tilt));
+}
+
+/* The band takes the middle of the sheet; the rows take the rest, each half reaching from the band's edge
+   to the sheet's. The glyph rows are anchored at the band: the tile grid of the half above ends at its
+   bottom edge, the grid of the half below starts at its top edge. */
+.result-backdrop-band {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 34%;
+    height: 32%;
+    box-sizing: border-box;              /* the lit edges are inside the 32%, so the rows meet them exactly */
+    background: rgb(5 12 28 / 0.94);
+    border-top: 2px solid var(--backdrop-edge);
+    border-bottom: 2px solid var(--backdrop-edge);
+}
+
+.result-backdrop-rows {
+    position: absolute;
+    left: 0;
+    right: 0;
+}
+
+.result-backdrop-rows-above {
+    top: 0;
+    height: 34%;
+    --lane-y: 100%;
+}
+
+.result-backdrop-rows-below {
+    top: 66%;
+    bottom: 0;
+    --lane-y: 0;
+}
+
+/* A lane overhangs its half by a tile each side, so sliding it one tile width leaves nothing uncovered. */
+.result-backdrop-lane {
+    position: absolute;
+    inset: 0 calc(-1 * var(--backdrop-tile));
+    background: var(--backdrop-motif);
+    -webkit-mask-repeat: repeat;
+    mask-repeat: repeat;
+    -webkit-mask-size: var(--backdrop-tile) calc(var(--backdrop-row) * 4);
+    mask-size: var(--backdrop-tile) calc(var(--backdrop-row) * 4);
+    -webkit-mask-position: var(--lane-x, 0) var(--lane-y);
+    mask-position: var(--lane-x, 0) var(--lane-y);
+    animation: result-backdrop-drift var(--lane-period) linear infinite;
+    will-change: transform;
+}
+
+/* The tile is four rows tall and each lane's mask carries the glyph in its own row: ≫ in the first and
+   third, its mirror in the second and fourth. 16 px/s, give or take a twelfth, is the drift. */
+.result-backdrop-lane:nth-child(1) {
+    --lane-period: 2.55s;
+    -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='136' viewBox='0 0 44 136'><path fill='none' stroke='white' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round' d='M8 8l9 9-9 9M19 8l9 9-9 9'/></svg>");
+    mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='136' viewBox='0 0 44 136'><path fill='none' stroke='white' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round' d='M8 8l9 9-9 9M19 8l9 9-9 9'/></svg>");
+}
+
+.result-backdrop-lane:nth-child(2) {
+    --lane-period: 2.95s;
+    --lane-x: calc(var(--backdrop-tile) / 2);
+    animation-direction: reverse;
+    -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='136' viewBox='0 0 44 136'><path fill='none' stroke='white' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round' d='M36 42l-9 9 9 9M25 42l-9 9 9 9'/></svg>");
+    mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='136' viewBox='0 0 44 136'><path fill='none' stroke='white' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round' d='M36 42l-9 9 9 9M25 42l-9 9 9 9'/></svg>");
+}
+
+.result-backdrop-lane:nth-child(3) {
+    --lane-period: 2.95s;
+    -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='136' viewBox='0 0 44 136'><path fill='none' stroke='white' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round' d='M8 76l9 9-9 9M19 76l9 9-9 9'/></svg>");
+    mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='136' viewBox='0 0 44 136'><path fill='none' stroke='white' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round' d='M8 76l9 9-9 9M19 76l9 9-9 9'/></svg>");
+}
+
+.result-backdrop-lane:nth-child(4) {
+    --lane-period: 2.55s;
+    --lane-x: calc(var(--backdrop-tile) / 2);
+    animation-direction: reverse;
+    -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='136' viewBox='0 0 44 136'><path fill='none' stroke='white' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round' d='M36 110l-9 9 9 9M25 110l-9 9 9 9'/></svg>");
+    mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='44' height='136' viewBox='0 0 44 136'><path fill='none' stroke='white' stroke-width='4.5' stroke-linecap='round' stroke-linejoin='round' d='M36 110l-9 9 9 9M25 110l-9 9 9 9'/></svg>");
+}
+
+@keyframes result-backdrop-drift {
+    from { transform: translateX(0); }
+    to   { transform: translateX(var(--backdrop-tile)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .result-backdrop-lane {
+        animation: none;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Gates, placement and the field
+   A run is raced in segments and each one is placed in the field of four. The torii on the course carry no
+   placement at all: it is read here, called out in the upper part of the stage as each segment closes (the
+   last one at the finish line) and on the score screen's gates afterwards.
+   --------------------------------------------------------------------------- */
+
+/* The rank the segment that just closed came in at, and under it the run time it closed at, over the stage
+   while the climb has the runner, or over the run-out past the finish line. It sits in the upper part of the
+   stage, level with the exit arrow on the left and the switches on the right and held clear of both by its
+   side padding, so it covers neither them nor the runner. Sized to be read at a glance. Rank and time pop
+   in, hold and fade together; the page takes them out of the document when the time is up. */
+.segment-rank-callout {
+    position: absolute;
+    top: calc(3.5rem + env(safe-area-inset-top));
+    left: 0;
+    right: 0;
+    z-index: 2;
+    display: flex;
+    justify-content: center;
+    padding: 0 4rem;
+    pointer-events: none;
+}
+
+.segment-rank-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    animation: segment-rank-show var(--segment-rank-duration, 1500ms) ease-out forwards;
+}
+
+.segment-rank {
+    font-size: 3rem;
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: 0.06em;
+    -webkit-text-stroke: 1.5px #0b1020;
+    text-shadow: 0 3px 0 rgba(0, 0, 0, 0.55), 0 0 16px currentColor;
+}
+
+.segment-time {
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+    text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6), 0 0 10px rgba(0, 0, 0, 0.8);
+}
+
+@keyframes segment-rank-show {
+    0%   { opacity: 0; transform: scale(0.35); }
+    12%  { opacity: 1; transform: scale(1.18); }
+    20%  { opacity: 1; transform: scale(1); }
+    72%  { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(1.06); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .segment-rank-stack {
+        animation: none;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Score-screen gates
+   One torii per segment, drawn as flat shapes (two posts, a crossbar and a lintel in the placement's own
+   colour) until the art exists. The winner's gate is the largest and the rest step down from it, so the
+   three read as a result from across the room; a segment that was placed last, or never placed, is a small
+   unlit one. Under each is what that place paid.
+   --------------------------------------------------------------------------- */
+.gate-symbols {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 1.25rem;
+    padding: 0.25rem 0;
+}
+
+/* Until the server has placed the run, what is on screen is the browser's own comparison. */
+.gate-symbols-provisional {
+    opacity: 0.45;
+}
+
+.gate-symbols-marker {
+    font-size: 0.625rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.run-status {
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    color: var(--text-secondary);
+}
+
+.gate-symbol-slot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.375rem;
+}
+
+.gate-symbol {
+    position: relative;
+    display: block;
+    width: var(--gate-symbol-width);
+    height: calc(var(--gate-symbol-width) * 0.92);
+}
+
+.gate-symbol-first  { --gate-symbol-width: 4.5rem; }
+.gate-symbol-second { --gate-symbol-width: 3.5rem; }
+.gate-symbol-third  { --gate-symbol-width: 2.75rem; }
+.gate-symbol-unlit  { --gate-symbol-width: 2.25rem; }
+
+/* The bars all take the placement colour the slot carries, so one class lights the whole gate. */
+.gate-symbol-post,
+.gate-symbol-beam,
+.gate-symbol-lintel {
+    position: absolute;
+    background: currentColor;
+}
+
+.gate-symbol-post {
+    top: 10%;
+    bottom: 0;
+    width: 9%;
+}
+
+.gate-symbol-post-left  { left: 16%; }
+.gate-symbol-post-right { right: 16%; }
+
+.gate-symbol-beam {
+    left: 11%;
+    right: 11%;
+    top: 26%;
+    height: 9%;
+}
+
+.gate-symbol-lintel {
+    left: 0;
+    right: 0;
+    top: 6%;
+    height: 11%;
+    border-radius: 0.0625rem;
+}
+
+.gate-symbol-reward {
+    font-size: 0.9375rem;
+    line-height: 1;
+    color: var(--accent-gold);
+    font-variant-numeric: tabular-nums;
+}
+
+.gate-symbol-reward-empty {
+    visibility: hidden;
+}
+
+.placement-first  { color: var(--placement-first); }
+.placement-second { color: var(--placement-second); }
+.placement-third  { color: var(--placement-third); }
+.placement-fourth { color: var(--placement-fourth); }
+.placement-open   { color: var(--placement-open); }
+
+/* ---------------------------------------------------------------------------
+   Score-screen panels
+   Under the gates the score screen shows one panel at a time: the field, then the standing when the run has
+   one. Both panels sit in the same grid cell, so the area is as tall as the taller of them from the first
+   frame and trading them never moves the gates above; the one not showing is held out of sight rather than
+   taken out of the document. The area is the field's width and clips its panels, so the field slides out
+   past its left edge while the standing slides in past its right one. The slide lasts ResultPanelSlideMs
+   in Components/Result/ScoreScreen.razor, which holds presses off until it is over.
+   --------------------------------------------------------------------------- */
+.result-panels {
+    display: grid;
+    width: 100%;
+    max-width: 18rem;
+    overflow: hidden;
+}
+
+.result-panel {
+    grid-area: 1 / 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 0;
+}
+
+.result-panel-away {
+    visibility: hidden;
+}
+
+.result-panel-leaving {
+    animation: result-panel-out-left 320ms ease-in both;
+    pointer-events: none;
+}
+
+.result-panel-entering {
+    animation: result-panel-in-right 320ms ease-out both;
+}
+
+@keyframes result-panel-out-left {
+    from { opacity: 1; transform: translateX(0); }
+    to   { opacity: 0; transform: translateX(-100%); visibility: hidden; }
+}
+
+@keyframes result-panel-in-right {
+    from { opacity: 0; transform: translateX(100%); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .result-panel-leaving,
+    .result-panel-entering {
+        animation: none;
+    }
+
+    .result-panel-leaving {
+        visibility: hidden;
+    }
+}
+
+/* The standing: where the run sits among everyone's best on this course, said by the chart alone. The
+   field of players, one equal-width bar per percent of par with an open end at each side, the run's own
+   bar lit and a marker under the axis at its time. Heights are shares of the tallest bar, written by
+   Components/Result/StandingHistogram.razor as --bar-height; an empty bar keeps a stub so the axis reads across. */
+.result-standing {
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+}
+
+.standing-histogram {
+    width: 100%;
+    padding: 0 0.5rem;
+    box-sizing: border-box;
+}
+
+.standing-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 4.5rem;
+}
+
+.standing-bar {
+    flex: 1 1 0;
+    height: max(2px, calc(var(--bar-height, 0) * 100%));
+    border-radius: 1px 1px 0 0;
+    background: rgb(132 160 206 / 0.5);
+}
+
+.standing-bar-open {
+    opacity: 0.5;
+}
+
+.standing-bar-player {
+    background: var(--accent-blue);
+    opacity: 1;
+}
+
+.standing-axis {
+    height: 1px;
+    background: rgb(132 160 206 / 0.6);
+}
+
+/* The marker and the tick labels share one frame with the bars, so a left offset in percent is a place on
+   the axis. */
+.standing-scale {
+    position: relative;
+    height: 1.25rem;
+}
+
+/* Points up at the bar the run is in from just under the axis. */
+.standing-marker {
+    position: absolute;
+    top: 2px;
+    width: 0;
+    height: 0;
+    transform: translateX(-50%);
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-bottom: 6px solid var(--accent-blue);
+}
+
+.standing-tick {
+    position: absolute;
+    top: 0.5rem;
+    transform: translateX(-50%);
+    font-size: 0.625rem;
+    line-height: 1;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+/* Who was in the field, in the order it came home. Names are read here and never drawn over a ghost. */
+.result-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    width: 100%;
+    max-width: 18rem;
+    margin-top: 0.25rem;
+    font-size: 0.8125rem;
+}
+
+.result-field-row {
+    display: grid;
+    grid-template-columns: 1.25rem 1fr auto;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: 0.25rem;
+    text-align: left;
+    color: var(--text-secondary);
+}
+
+.result-field-row-player {
+    background: rgba(198, 212, 233, 0.12);
+    color: var(--text-primary);
+}
+
+.result-field-place {
+    font-weight: 700;
+    text-align: right;
+}
+
+.result-field-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.result-field-time {
+    font-variant-numeric: tabular-nums;
+}

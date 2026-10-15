@@ -1,0 +1,29 @@
+@* The Name Tag tutorial's pointing hand: a drawn index finger that bobs towards the one control the player
+   has to press next. It carries no text, takes no input and is hidden from assistive technology; the
+   control it points at keeps its own accessible name. Its fingertip sits on the point the placement class
+   anchors it to, and the placement class turns the hand to aim along the direction it comes from
+   (css/customize.css "Name Tag tutorial"). The drawing is the portrait area's #control-icon-point symbol. *@
+<span class="tutorial-pointer tutorial-pointer-@Placement"
+      style="@Style"
+      data-testid="tutorial-pointer"
+      data-tutorial-step="@Step"
+      aria-hidden="true">
+    <svg class="icon"><use href="#control-icon-point"/></svg>
+</span>
+
+@code {
+    /// <summary>
+    /// The tutorial step the hand belongs to: <c>open-medallion</c>, <c>select-name-tag</c>,
+    /// <c>unlock-name-tag</c> or <c>name-ninja</c>.
+    /// </summary>
+    [Parameter, EditorRequired] public string Step { get; set; } = "";
+
+    /// <summary>
+    /// Where the hand sits relative to the element it is rendered in, and which way it aims: <c>medallion</c>,
+    /// <c>tree-node</c>, <c>action</c> or <c>name</c>. Each is a class in css/customize.css.
+    /// </summary>
+    [Parameter, EditorRequired] public string Placement { get; set; } = "";
+
+    /// <summary>An inline anchor for a placement whose point is only known at render time, such as a tree node's.</summary>
+    [Parameter] public string? Style { get; set; }
+}

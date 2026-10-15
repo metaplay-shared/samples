@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>Latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="nunit" Version="4.4.0" />
+    <PackageReference Include="NUnit.Analyzers" Version="4.10.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="NUnit3TestAdapter" Version="5.1.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Server\Server.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The Metaplay test set-up and the committed game config and test courses, shared with SharedCode.Tests
+         rather than copied, so both test projects run against the same archive and the same maps. -->
+    <Compile Include="..\SharedCode.Tests\SetupFixture.cs" Link="Shared\SetupFixture.cs" />
+    <Compile Include="..\SharedCode.Tests\TestGameConfig.cs" Link="Shared\TestGameConfig.cs" />
+    <Compile Include="..\SharedCode.Tests\TestCourses.cs" Link="Shared\TestCourses.cs" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,841 @@
+@using System.Globalization
+@using Game.Logic
+@using WebClient.Gameplay
+@inject MetaplayClientService MetaplayService
+@implements IDisposable
+
+@* The ninja's name, the one slot and the Skill tree. Home.razor puts it in the portrait area in the menu's
+   place, behind the curtain, and takes it
+   out the same way when Back is pressed. The drawings come from the portrait area's own symbol set. *@
+<div class="customize-view" data-testid="customize-view">
+
+    <div class="customize-head">
+        @* Shut while the Name Tag tutorial runs: the view is left named or not at all. The browser's own
+           back still leaves it, onto the menu, where the hand points at the medallion again. *@
+        <button type="button" class="customize-back" data-testid="customize-back"
+                aria-label="Back to main screen"
+                disabled="@IsTutorialActive"
+                @onclick="OnBackPressed">
+            <svg class="icon" aria-hidden="true"><use href="#control-icon-chevron-left"/></svg>
+        </button>
+        <h2 class="customize-title">Ninja</h2>
+        <div class="customize-orbs" data-testid="customize-orb-balance" role="img" aria-label="@OrbsLabel">
+            <span class="customize-orbs-mark" aria-hidden="true"></span><span aria-hidden="true">@DisplayedOrbs</span>
+        </div>
+    </div>
+
+    @* ---- Identity ----
+       The name every other player sees this runner as, and what is in the one slot. The name is the Name
+       Tag's: without it the field only shows the anonymous name. *@
+    <div class="customize-identity">
+        <div class="customize-name-cell @(TutorialUiStep == NameNinjaStep ? "tutorial-host" : "")">
+            @if (TutorialUiStep == NameNinjaStep)
+            {
+                <TutorialPointer Step="@NameNinjaStep" Placement="name" />
+            }
+            <label class="customize-name @NameFieldCssClass">
+                @* No maxlength: the browser counts code units, so an emoji counts several times.
+                   DescribeInvalidName checks the length with the model's count instead. *@
+                <input @ref="_nameInput"
+                       type="text"
+                       data-testid="ninja-name"
+                       aria-label="Ninja name"
+                       aria-invalid="@(_nameError != null ? "true" : "false")"
+                       autocomplete="off"
+                       spellcheck="false"
+                       placeholder="@(HasNameTag ? "Name your ninja" : "")"
+                       readonly="@(!HasNameTag)"
+                       value="@NameFieldValue"
+                       @oninput="OnNameInput"
+                       @onkeydown="OnNameKeyDown"
+                       @onblur="CommitName" />
+                <svg class="icon" aria-hidden="true"><use href="#skill-icon-edit"/></svg>
+            </label>
+
+            @if (!HasNameTag)
+            {
+                <p class="customize-name-note" data-testid="name-locked">The Name Tag unlocks a name of your own</p>
+            }
+            else if (_nameError != null)
+            {
+                <p class="customize-name-note customize-name-note-error" data-testid="name-error" role="alert">@_nameError</p>
+            }
+        </div>
+
+        @* The one slot, empty when nothing is equipped. A change to it plays a flash that swaps the icons at
+           its brightest, so the change is never a cut. *@
+        <div class="customize-equipped @(_slotFlashing ? "customize-equipped-flashing" : "")"
+             data-testid="customize-equipped" data-skill-id="@(EquippedSkill?.Id.ToString() ?? "")"
+             data-flashing="@(_slotFlashing ? "true" : "false")"
+             style="--slot-flash-duration: @(SlotFlashMs)ms;"
+             role="img" aria-label="@($"Equipped: {EquippedSkill?.DisplayName ?? "none"}")">
+            <span class="customize-equipped-swap" @key="_slotGeneration" aria-hidden="true">
+                @if (_slotFlashing && SlotSkill(_slotOutgoingId) is { } outgoing)
+                {
+                    <svg class="icon customize-equipped-outgoing"><use href="@SkillIcons.Symbol(outgoing.Icon)"/></svg>
+                }
+                @if (SlotSkill(_slotShownId) is { } shown)
+                {
+                    <svg class="icon @(_slotFlashing ? "customize-equipped-incoming" : "")"><use href="@SkillIcons.Symbol(shown.Icon)"/></svg>
+                }
+                @if (_slotFlashing)
+                {
+                    <span class="customize-equipped-flash" data-testid="customize-equipped-flash"></span>
+                }
+            </span>
+        </div>
+    </div>
+
+    @* ---- The tree ----
+       One row per tier, with the wires drawn behind the nodes. A tap selects a node for the card below. *@
+    @if (Layout.Nodes.Count > 0)
+    {
+        <div class="skill-tree" role="group" aria-label="Skill tree">
+            <div class="skill-tree-plane">
+                <svg class="skill-wires" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                    <path class="skill-wire" d="@WirePath(future: false)" vector-effect="non-scaling-stroke"/>
+                    <path class="skill-wire skill-wire-future" d="@WirePath(future: true)" vector-effect="non-scaling-stroke"/>
+                </svg>
+
+                @foreach (TreeNode node in Layout.Nodes)
+                {
+                    SkillInfo skill = node.Skill;
+                    SkillNodeState state = StateOf(skill);
+                    bool selected = skill.Id == SelectedSkill?.Id;
+                    <button type="button" @key="skill.Id"
+                            class="skill-node @StateName(state) @(selected ? "selected" : "")"
+                            style="left: @Percent(node.X)%; top: @Percent(node.Y)%;"
+                            data-testid="skill-node"
+                            data-skill-id="@skill.Id"
+                            data-skill-state="@StateName(state)"
+                            aria-pressed="@(selected ? "true" : "false")"
+                            aria-label="@NodeLabel(skill, state)"
+                            disabled="@IsNodeShutByTutorial(skill)"
+                            @onclick="() => OnSelect(skill.Id)">
+                        <span class="skill-badge" aria-hidden="true"><svg class="icon"><use href="@SkillIcons.Symbol(skill.Icon)"/></svg></span>
+                        <span class="skill-cost" aria-hidden="true">
+                            @switch (state)
+                            {
+                                case SkillNodeState.Owned:
+                                    <svg class="icon skill-cost-mark"><use href="#control-icon-owned"/></svg>
+                                    break;
+                                case SkillNodeState.Equipped:
+                                    <svg class="icon skill-cost-mark"><use href="#control-icon-equipped"/></svg>
+                                    break;
+                                default:
+                                    @CostLine(skill)
+                                    break;
+                            }
+                        </span>
+                    </button>
+                }
+
+                @if (TutorialUiStep == SelectNameTagStep && NameTagNode is { } nameTagNode)
+                {
+                    <TutorialPointer Step="@SelectNameTagStep" Placement="tree-node"
+                                     Style="@($"left: {Percent(nameTagNode.X)}%; top: {Percent(nameTagNode.Y)}%;")" />
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <p class="skill-tree-empty">No Skills in this build's game config.</p>
+    }
+
+    @* ---- The detail card ----
+       The selected Skill's effect and the one thing that can be done with it now. *@
+    <div class="skill-detail" data-testid="skill-detail" aria-live="polite">
+        @if (SelectedSkill is { } detail)
+        {
+            SkillNodeState detailState = StateOf(detail);
+            bool isNameTag = !detail.IsEquippable;
+            List<SkillEffect> detailEffects = detail.GetAllEffects();
+            <div class="skill-detail-copy">
+                <svg class="icon" aria-hidden="true"><use href="@SkillIcons.Symbol(detail.Icon)"/></svg>
+                <div class="skill-detail-text">
+                    @if (isNameTag || detailEffects.Count <= MaxEffectLinesWithName)
+                    {
+                        <span class="skill-detail-name">@detail.DisplayName</span>
+                    }
+                    @if (isNameTag)
+                    {
+                        <strong data-testid="skill-detail-effect">@EffectSummary(detail)</strong>
+                    }
+                    else
+                    {
+                        <ul class="skill-effects" data-testid="skill-detail-effects">
+                            @foreach (SkillEffect effect in detailEffects)
+                            {
+                                <li class="skill-effect @(effect.IsBenefit ? "skill-effect-benefit" : "skill-effect-penalty")"
+                                    data-testid="skill-effect" data-stat="@effect.Stat" data-direction="@(effect.IsBenefit ? "benefit" : "penalty")">
+                                    <svg class="icon" aria-hidden="true"><use href="@SkillIcons.StatSymbol(effect.Stat)"/></svg><span class="skill-effect-value">@FormatPermilleChange(effect.Permille)</span> <span>@StatWord(effect.Stat)</span>
+                                </li>
+                            }
+                        </ul>
+                    }
+                    @if (isNameTag && IsOwned(detailState))
+                    {
+                        <span class="skill-detail-note" data-testid="skill-detail-note">Your name is set in the field above</span>
+                    }
+                </div>
+            </div>
+
+            @switch (detailState)
+            {
+                case SkillNodeState.Available:
+                    bool pointedAt = TutorialUiStep == UnlockNameTagStep;
+                    <button type="button" class="skill-action @(pointedAt ? "tutorial-host" : "")" data-testid="skill-action"
+                            aria-label="@($"Unlock {detail.DisplayName} for {detail.OrbCost} {OrbWord(detail.OrbCost)}")"
+                            @onclick="() => OnUnlock(detail.Id)"><svg class="icon orb-price-mark" aria-hidden="true"><use href="#control-icon-orb"/></svg>@detail.OrbCost
+                            @if (pointedAt)
+                            {
+                                <TutorialPointer Step="@UnlockNameTagStep" Placement="action" />
+                            }</button>
+                    break;
+                case SkillNodeState.Unaffordable:
+                    <button type="button" class="skill-action" data-testid="skill-action" disabled
+                            aria-label="@($"{detail.DisplayName} costs {detail.OrbCost} {OrbWord(detail.OrbCost)}")"><svg class="icon orb-price-mark" aria-hidden="true"><use href="#control-icon-orb"/></svg>@detail.OrbCost</button>
+                    break;
+                case SkillNodeState.Locked:
+                    <button type="button" class="skill-action" data-testid="skill-action" disabled
+                            aria-label="@($"{detail.DisplayName} is locked")"><svg class="icon skill-action-locked" data-testid="skill-action-locked" aria-hidden="true"><use href="#control-icon-locked"/></svg></button>
+                    break;
+                case SkillNodeState.Owned when !isNameTag:
+                    <button type="button" class="skill-action" data-testid="skill-action"
+                            aria-label="@($"Equip {detail.DisplayName}")"
+                            @onclick="() => OnEquip(detail.Id)"><svg class="icon skill-action-equip" aria-hidden="true"><use href="#control-icon-equip"/></svg></button>
+                    break;
+                case SkillNodeState.Equipped:
+                    <button type="button" class="skill-action" data-testid="skill-action"
+                            aria-label="@($"Unequip {detail.DisplayName}")"
+                            @onclick="OnUnequip"><svg class="icon skill-action-equipped" aria-hidden="true"><use href="#control-icon-equipped"/></svg></button>
+                    break;
+            }
+        }
+    </div>
+</div>
+
+@code {
+    /// <summary>The balance as the menu shows it, which is what the header's count reads.</summary>
+    [Parameter] public int DisplayedOrbs { get; set; }
+
+    /// <summary>The Back button. Home.razor carries the player to the menu through the curtain.</summary>
+    [Parameter] public EventCallback OnBack { get; set; }
+
+    /// <summary>Where a node stands for this player, which is what the detail card offers to do about it.</summary>
+    private enum SkillNodeState
+    {
+        /// <summary>The Skill it is bought behind is not owned, so nothing on this node is offered yet.</summary>
+        Locked,
+
+        /// <summary>Open to buy, and the balance does not cover it.</summary>
+        Unaffordable,
+
+        /// <summary>Open to buy, and the balance covers it.</summary>
+        Available,
+
+        /// <summary>Bought. Equippable ones can be put in the slot.</summary>
+        Owned,
+
+        /// <summary>Bought, and in the player's one slot.</summary>
+        Equipped,
+    }
+
+    /// <summary>One node placed on the tree: its centre as percentages of the tree's plane.</summary>
+    private sealed record TreeNode(SkillInfo Skill, double X, double Y);
+
+    /// <summary>One wire, from a prerequisite's centre to its child's, in the same percentages.</summary>
+    private sealed record TreeWire(SkillId Child, double FromX, double FromY, double ToX, double ToY);
+
+    private sealed record TreeLayout(List<TreeNode> Nodes, List<TreeWire> Wires);
+
+    /// <summary>
+    /// The player the view is about. Home.razor passes the model on every render, which is what draws the view
+    /// again whenever the model changes.
+    /// </summary>
+    [Parameter] public PlayerModel? Player { get; set; }
+
+    private bool HasNameTag => PlayerLoadout.HasNameTag(Player);
+
+    private bool HasName => Player?.HasName == true;
+
+    private string OrbsLabel => $"{DisplayedOrbs} {OrbWord(DisplayedOrbs)}";
+
+    private static string OrbWord(int count) => count == 1 ? "orb" : "orbs";
+
+    /// <summary>What is in the one slot (<see cref="PlayerLoadout.EquippedSkill"/>).</summary>
+    private SkillInfo? EquippedSkill => PlayerLoadout.EquippedSkill(Player);
+
+    // ---------------- Layout ----------------
+
+    /// <summary>The published config the layout was worked out from, so it is redone when that changes.</summary>
+    private SharedGameConfig? _layoutGameConfig;
+
+    private TreeLayout _layout = new TreeLayout(new List<TreeNode>(), new List<TreeWire>());
+
+    /// <summary>
+    /// The tree laid out from the published config, worked out again only when that config changes.
+    /// </summary>
+    private TreeLayout Layout
+    {
+        get
+        {
+            SharedGameConfig? gameConfig = MetaplayService.GameConfig;
+            if (!ReferenceEquals(gameConfig, _layoutGameConfig))
+            {
+                _layoutGameConfig = gameConfig;
+                _layout           = BuildLayout(gameConfig);
+            }
+
+            return _layout;
+        }
+    }
+
+    /// <summary>
+    /// Lays the tree out one row per tier, each row's children in their parents' order so a branch reads
+    /// downwards.
+    /// </summary>
+    private static TreeLayout BuildLayout(SharedGameConfig? gameConfig)
+    {
+        List<TreeNode> nodes = new List<TreeNode>();
+        List<TreeWire> wires = new List<TreeWire>();
+        if (gameConfig == null)
+            return new TreeLayout(nodes, wires);
+
+        List<SkillInfo> all         = new List<SkillInfo>();
+        int             highestTier = 0;
+        foreach ((SkillId id, SkillInfo skill) in gameConfig.Skills)
+        {
+            all.Add(skill);
+            if (skill.Tier > highestTier)
+                highestTier = skill.Tier;
+        }
+
+        List<List<SkillInfo>> rows        = new List<List<SkillInfo>>();
+        List<SkillInfo>       previousRow = new List<SkillInfo>();
+        for (int tier = 1; tier <= highestTier; tier++)
+        {
+            List<SkillInfo> row = new List<SkillInfo>();
+            foreach (SkillInfo parent in previousRow)
+            {
+                foreach (SkillInfo skill in all)
+                {
+                    if (skill.Tier == tier && skill.Prerequisite == parent.Id)
+                        row.Add(skill);
+                }
+            }
+
+            // Anything this tier holds that no node above claims is still shown, at the end of its row,
+            // rather than dropped out of a tree the player is spending Orbs in.
+            foreach (SkillInfo skill in all)
+            {
+                if (skill.Tier == tier && !row.Contains(skill))
+                    row.Add(skill);
+            }
+
+            if (row.Count > 0)
+            {
+                rows.Add(row);
+                previousRow = row;
+            }
+        }
+
+        Dictionary<SkillId, TreeNode> placed = new Dictionary<SkillId, TreeNode>();
+        for (int rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+        {
+            List<SkillInfo> row = rows[rowIndex];
+            double y = rows.Count == 1 ? 50.0 : rowIndex * 100.0 / (rows.Count - 1);
+            for (int column = 0; column < row.Count; column++)
+            {
+                double   x    = (column + 0.5) * 100.0 / row.Count;
+                TreeNode node = new TreeNode(row[column], x, y);
+                nodes.Add(node);
+                placed[row[column].Id] = node;
+            }
+        }
+
+        foreach (TreeNode node in nodes)
+        {
+            SkillId? prerequisite = node.Skill.Prerequisite;
+            if (prerequisite != null && placed.TryGetValue(prerequisite, out TreeNode? parent))
+                wires.Add(new TreeWire(node.Skill.Id, parent.X, parent.Y, node.X, node.Y));
+        }
+
+        return new TreeLayout(nodes, wires);
+    }
+
+    /// <summary>
+    /// The wires as one SVG path: with <paramref name="future"/> the wires into locked children, which are
+    /// drawn dashed, and otherwise the rest.
+    /// </summary>
+    private string WirePath(bool future)
+    {
+        System.Text.StringBuilder path = new System.Text.StringBuilder();
+        foreach (TreeWire wire in Layout.Wires)
+        {
+            SkillInfo? child = TimeTrialSkills.TryGetSkill(MetaplayService.GameConfig, wire.Child);
+            bool isFuture = child == null || StateOf(child) == SkillNodeState.Locked;
+            if (isFuture != future)
+                continue;
+
+            double middle = (wire.FromY + wire.ToY) * 0.5;
+            path.Append($"M{Percent(wire.FromX)} {Percent(wire.FromY)}V{Percent(middle)}H{Percent(wire.ToX)}V{Percent(wire.ToY)}");
+        }
+
+        return path.ToString();
+    }
+
+    private static string Percent(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
+
+    // ---------------- Node state ----------------
+
+    /// <summary>
+    /// Where a node stands for this player. The same facts the actions check, read off the model, so what the
+    /// view offers is what the server will agree to.
+    /// </summary>
+    private SkillNodeState StateOf(SkillInfo skill)
+    {
+        PlayerModel? player = Player;
+        if (player == null)
+            return SkillNodeState.Locked;
+
+        if (player.HasSkill(skill.Id))
+            return player.ActiveSkillId == skill.Id ? SkillNodeState.Equipped : SkillNodeState.Owned;
+
+        if (skill.Prerequisite != null && !player.HasSkill(skill.Prerequisite))
+            return SkillNodeState.Locked;
+
+        return player.Orbs >= skill.OrbCost ? SkillNodeState.Available : SkillNodeState.Unaffordable;
+    }
+
+    private static bool IsOwned(SkillNodeState state) => state == SkillNodeState.Owned || state == SkillNodeState.Equipped;
+
+    private static string StateName(SkillNodeState state) => state switch
+    {
+        SkillNodeState.Unaffordable => "unaffordable",
+        SkillNodeState.Available    => "available",
+        SkillNodeState.Owned        => "owned",
+        SkillNodeState.Equipped     => "equipped",
+        _                           => "locked",
+    };
+
+    /// <summary>
+    /// The line under a badge that is not owned: its price, after the drawn Orb dot.
+    /// </summary>
+    private static RenderFragment CostLine(SkillInfo skill) => __builder =>
+    {
+        <svg class="icon orb-price-mark"><use href="#control-icon-orb"/></svg>@skill.OrbCost
+    };
+
+    private string NodeLabel(SkillInfo skill, SkillNodeState state)
+    {
+        string where = state switch
+        {
+            SkillNodeState.Available    => $"available for {skill.OrbCost} {OrbWord(skill.OrbCost)}",
+            SkillNodeState.Unaffordable => $"costs {skill.OrbCost} {OrbWord(skill.OrbCost)}",
+            SkillNodeState.Owned        => "owned",
+            SkillNodeState.Equipped     => "equipped",
+            _                           => "locked",
+        };
+        return $"{skill.DisplayName}, {EffectSummary(skill)}, {where}";
+    }
+
+    // ---------------- Selection ----------------
+
+    private SkillId? _selectedSkillId;
+
+    /// <summary>
+    /// The node the detail card describes, or null while the Name Tag tutorial waits for its node to be tapped.
+    /// </summary>
+    private SkillInfo? SelectedSkill
+    {
+        get
+        {
+            string? tutorialStep = TutorialUiStep;
+            if (tutorialStep == SelectNameTagStep)
+                return null;
+            if (tutorialStep != null)
+                return TimeTrialSkills.TryGetSkill(MetaplayService.GameConfig, TimeTrialSkills.NameTag);
+
+            if (_selectedSkillId != null && TimeTrialSkills.TryGetSkill(MetaplayService.GameConfig, _selectedSkillId) is { } selected)
+                return selected;
+
+            return DefaultSelection();
+        }
+    }
+
+    private SkillInfo? DefaultSelection()
+    {
+        SkillInfo? cheapest = null;
+        SkillInfo? root     = null;
+        foreach (TreeNode node in Layout.Nodes)
+        {
+            SkillInfo skill = node.Skill;
+            if (root == null && skill.Prerequisite == null)
+                root = skill;
+            if (StateOf(skill) == SkillNodeState.Available && (cheapest == null || skill.OrbCost < cheapest.OrbCost))
+                cheapest = skill;
+        }
+
+        return cheapest ?? EquippedSkill ?? root ?? (Layout.Nodes.Count > 0 ? Layout.Nodes[0].Skill : null);
+    }
+
+    private void OnSelect(SkillId skillId)
+    {
+        if (skillId == TimeTrialSkills.NameTag)
+            _nameTagTapped = true;
+        _selectedSkillId = skillId;
+    }
+
+    // ---------------- Name Tag tutorial ----------------
+
+    private const string SelectNameTagStep = "select-name-tag";
+    private const string UnlockNameTagStep = "unlock-name-tag";
+    private const string NameNinjaStep     = "name-ninja";
+
+    /// <summary>Whether the Name Tag's node has been tapped since the view opened.</summary>
+    private bool _nameTagTapped;
+
+    /// <summary>
+    /// The step of the Name Tag tutorial this view is showing, or null when there is none. The view splits the
+    /// model's buying step in two: tapping the Name Tag's node, then pressing Unlock on its card.
+    /// </summary>
+    private string? TutorialUiStep => (Player?.NameTagTutorialStep ?? NameTagTutorialStep.None) switch
+    {
+        NameTagTutorialStep.BuyNameTag => _nameTagTapped ? UnlockNameTagStep : SelectNameTagStep,
+        NameTagTutorialStep.SetName    => NameNinjaStep,
+        _                              => null,
+    };
+
+    /// <summary>Whether the Name Tag tutorial holds this view, which shuts Back and every node it does not point at.</summary>
+    private bool IsTutorialActive => TutorialUiStep != null;
+
+    /// <summary>
+    /// Whether the tutorial shuts <paramref name="skill"/>'s node.
+    /// </summary>
+    private bool IsNodeShutByTutorial(SkillInfo skill)
+    {
+        string? step = TutorialUiStep;
+        if (step == null)
+            return false;
+        return step == NameNinjaStep || skill.Id != TimeTrialSkills.NameTag;
+    }
+
+    /// <summary>The Name Tag's place on the tree, where the hand points while its node is still to be tapped.</summary>
+    private TreeNode? NameTagNode
+    {
+        get
+        {
+            foreach (TreeNode node in Layout.Nodes)
+            {
+                if (node.Skill.Id == TimeTrialSkills.NameTag)
+                    return node;
+            }
+            return null;
+        }
+    }
+
+    /// <summary>The Back button, which does nothing while the tutorial holds the view.</summary>
+    private Task OnBackPressed() => IsTutorialActive ? Task.CompletedTask : OnBack.InvokeAsync();
+
+    // ---------------- Actions ----------------
+
+    /// <summary>
+    /// Buy the Skill and select it. <see cref="PlayerUnlockSkill"/> also equips one that can be equipped.
+    /// </summary>
+    private void OnUnlock(SkillId skillId)
+    {
+        _selectedSkillId = skillId;
+        MetaplayService.UnlockSkill(skillId);
+    }
+
+    private void OnEquip(SkillId skillId)
+    {
+        _selectedSkillId = skillId;
+        MetaplayService.EquipSkill(skillId);
+    }
+
+    private void OnUnequip() => MetaplayService.EquipSkill(null);
+
+    // ---------------- Effect text ----------------
+
+    /// <summary>
+    /// The most effect lines the detail card shows the Skill's name above. The card is a fixed three lines
+    /// tall (<c>.skill-detail</c> in <c>css/customize.css</c>), so a third effect takes the name's line.
+    /// </summary>
+    private const int MaxEffectLinesWithName = 2;
+
+    /// <summary>
+    /// What a node does to the runner, as plain text for <c>aria-label</c>s. Every modifier is more-is-better,
+    /// so the sign alone says benefit or penalty.
+    /// </summary>
+    private static string EffectSummary(SkillInfo skill)
+    {
+        if (!skill.IsEquippable)
+            return "Name your ninja";
+
+        List<string> parts = new List<string>();
+        foreach (SkillEffect effect in skill.GetAllEffects())
+            parts.Add($"{FormatPermilleChange(effect.Permille)} {StatWord(effect.Stat)}");
+
+        return string.Join(", ", parts);
+    }
+
+    /// <summary>
+    /// The word the card names a stat with. Footing is shown as Recovery: what the player sees is getting up
+    /// from a trip and out of a pit sooner, which is the word for it; the sheet and the code keep Footing.
+    /// </summary>
+    private static string StatWord(SkillStat stat) => stat switch
+    {
+        SkillStat.Speed        => "Speed",
+        SkillStat.Acceleration => "Accel",
+        SkillStat.Jump         => "Jump",
+        SkillStat.Footing      => "Recovery",
+        _                      => stat.ToString(),
+    };
+
+    /// <summary>
+    /// A permille as the change it makes to its stat, in percent: a sign, whole percent, and tenths only when
+    /// the permille needs them.
+    /// </summary>
+    private static string FormatPermilleChange(int permille)
+    {
+        int    change    = permille - SkillInfo.UnchangedPermille;
+        string sign      = change > 0 ? "+" : "−";
+        int    magnitude = change > 0 ? change : -change;
+
+        return magnitude % 10 == 0
+            ? $"{sign}{magnitude / 10}%"
+            : $"{sign}{magnitude / 10}.{magnitude % 10}%";
+    }
+
+    // ---------------- The name ----------------
+
+    private ElementReference _nameInput;
+
+    /// <summary>What is being typed into the field, or null while it shows the name as the model has it.</summary>
+    private string? _nameDraft;
+
+    /// <summary>Why the last name committed was not sent, or null.</summary>
+    private string? _nameError;
+
+    /// <summary>Whether the field takes focus after the next render: the view opened, or the Name Tag was just bought, with no name set.</summary>
+    private bool _focusNamePending;
+
+    /// <summary>Whether the Name Tag was owned at the last render, so buying it is noticed.</summary>
+    private bool _hadNameTag;
+
+    private string NameFieldValue
+    {
+        get
+        {
+            if (!HasNameTag)
+                return TimeTrialSkills.MaskedNinjaName;
+            return _nameDraft ?? ChosenName;
+        }
+    }
+
+    /// <summary>
+    /// The name the player has set, or empty while they are still the Masked Ninja every player starts as, so
+    /// the field asks for a name instead of offering the house one.
+    /// </summary>
+    private string ChosenName => HasName ? Player!.PlayerName : "";
+
+    private string NameFieldCssClass
+    {
+        get
+        {
+            if (!HasNameTag)
+                return "customize-name-locked";
+            if (_nameError != null)
+                return "customize-name-invalid";
+            return HasName ? "" : "customize-name-needed";
+        }
+    }
+
+    private void OnNameInput(ChangeEventArgs args)
+    {
+        _nameDraft = args.Value?.ToString() ?? "";
+        _nameError = null;
+    }
+
+    private void OnNameKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+            CommitName();
+    }
+
+    /// <summary>
+    /// Send the typed name, trimmed, if it may be a player name and differs from the one already set. A name
+    /// that may not is kept in the field with the reason under it, and nothing is sent.
+    /// </summary>
+    private void CommitName()
+    {
+        if (!HasNameTag || _nameDraft == null)
+            return;
+
+        string name = _nameDraft.Trim();
+        if (name == ChosenName && HasName)
+        {
+            _nameDraft = null;
+            _nameError = null;
+            return;
+        }
+
+        if (name.Length == 0 && !HasName)
+        {
+            // Nothing typed yet: the field stays marked as needed rather than scolding an empty box.
+            _nameDraft = null;
+            _nameError = null;
+            return;
+        }
+
+        string? reason = DescribeInvalidName(name);
+        if (reason != null)
+        {
+            _nameError = reason;
+            return;
+        }
+
+        _nameError = null;
+        _nameDraft = null;
+        MetaplayService.SetPlayerName(name);
+    }
+
+    /// <summary>
+    /// Commit whatever is still being typed in the name field, under the same rules as Enter or leaving the
+    /// field. Call it as the view closes, since a close that never blurs the field, such as browser back,
+    /// would otherwise drop the name.
+    /// </summary>
+    public void CommitPendingName() => CommitName();
+
+    /// <summary>
+    /// Why <paramref name="name"/> cannot be a player name, in a few words, or null when it can.
+    /// </summary>
+    private static string? DescribeInvalidName(string name)
+    {
+        if (PlayerModel.IsValidPlayerName(name))
+            return null;
+        if (name.Length == 0)
+            return "Type a name";
+        if (PlayerModel.PlayerNameLength(name) > PlayerModel.MaxPlayerNameLength)
+            return $"At most {PlayerModel.MaxPlayerNameLength} characters";
+        if (string.Equals(name, TimeTrialSkills.MaskedNinjaName, StringComparison.OrdinalIgnoreCase))
+            return "That name belongs to every masked ninja";
+        return "Letters, digits, emoji, spaces and - _ ' . only";
+    }
+
+    // ---------------- The slot's flash ----------------
+
+    /// <summary>
+    /// How long the flash over the slot lasts, handed to css/customize.css as <c>--slot-flash-duration</c>.
+    /// </summary>
+    private const int SlotFlashMs = 420;
+
+    /// <summary>When in the flash the icons are swapped, which is where css/customize.css puts the glow's brightest.</summary>
+    private const int SlotSwapMs = 130;
+
+    /// <summary>The Skill the slot is showing, which follows the model's slot through the flash.</summary>
+    private SkillId? _slotShownId;
+
+    /// <summary>The Skill the slot showed before the change being flashed, drawn until the swap.</summary>
+    private SkillId? _slotOutgoingId;
+
+    /// <summary>Whether the flash is playing over the slot.</summary>
+    private bool _slotFlashing;
+
+    /// <summary>Moves on with every change of the slot: it keys the swap group, so the flash restarts.</summary>
+    private int _slotGeneration;
+
+    /// <summary>When the last change started, so a second one before its swap keeps the icon still on show.</summary>
+    private long _slotChangedAtMs;
+
+    private SkillInfo? SlotSkill(SkillId? skillId) => TimeTrialSkills.TryGetSkill(MetaplayService.GameConfig, skillId);
+
+    /// <summary>
+    /// Starts the flash when the model's slot differs from the one shown. The model is the trigger, so every
+    /// route into the slot flashes the same way.
+    /// </summary>
+    private void NoticeSlot()
+    {
+        SkillId? active = Player?.ActiveSkillId;
+        if (active == _slotShownId)
+            return;
+
+        long now = Environment.TickCount64;
+        if (!_slotFlashing || now - _slotChangedAtMs >= SlotSwapMs)
+            _slotOutgoingId = _slotShownId;
+
+        _slotShownId     = active;
+        _slotChangedAtMs = now;
+        _slotFlashing    = true;
+        int generation   = ++_slotGeneration;
+        _ = EndSlotFlashAfterAsync(generation);
+    }
+
+    private async Task EndSlotFlashAfterAsync(int generation)
+    {
+        await Task.Delay(SlotFlashMs);
+        if (generation != _slotGeneration || _disposed)
+            return;
+
+        _slotFlashing   = false;
+        _slotOutgoingId = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // ---------------- Lifecycle ----------------
+
+    private bool _disposed;
+
+    protected override void OnInitialized()
+    {
+        _hadNameTag       = HasNameTag;
+        _focusNamePending = HasNameTag && !HasName;
+        _selectedSkillId  = DefaultSelection()?.Id;
+        _slotShownId      = Player?.ActiveSkillId;
+    }
+
+    /// <summary>
+    /// Notices the model's changes, which arrive as <see cref="Player"/> on each of Home.razor's renders.
+    /// </summary>
+    protected override void OnParametersSet()
+    {
+        NoticeNameTag();
+        NoticeSlot();
+    }
+
+    /// <summary>The Name Tag has just been bought: the field it opens takes focus, ready for a name.</summary>
+    private void NoticeNameTag()
+    {
+        bool hasNameTag = HasNameTag;
+        if (hasNameTag && !_hadNameTag && !HasName)
+            _focusNamePending = true;
+        _hadNameTag = hasNameTag;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_focusNamePending)
+            return;
+
+        _focusNamePending = false;
+        try
+        {
+            await _nameInput.FocusAsync();
+        }
+        catch (JSException)
+        {
+            // The field is gone again; there is nothing to focus.
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+    }
+}

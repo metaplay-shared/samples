@@ -1,0 +1,58 @@
+@using WebClient.Gameplay
+
+@* ---------------- Game view ----------------
+   The canvas fills the column and is the jump button: presses and releases are read from it in
+   wwwroot/js/timeTrialHost.js, which also runs the frame loop that steps the run. There is no running clock on
+   screen: each segment's rank and the time it closed at are called out over the stage as plain DOM, and the
+   score screen carries the finish time. It sits on a history entry of its own, so the browser's back button
+   and the Android back gesture leave it the way the exit button does. Home.razor hands the canvas to the frame
+   loop and puts the score screen in the run's place behind the curtain. *@
+<div class="time-trial-view">
+    <div class="time-trial-stage">
+        <canvas data-testid="time-trial-canvas"
+                data-opponent-count="@Trial.GhostCount"
+                data-practice="@(Trial.IsPractice ? "true" : "false")"
+                data-course-id="@Trial.Ticket.CourseId"
+                @ref="Canvas"></canvas>
+    </div>
+
+    @if (Result == null)
+    {
+        @* Over the stage rather than in it, so a tap on a switch is not also a jump. The switches and the exit
+           belong to the run: the score screen is a single target and carries none of them. *@
+        @Toggles
+
+        @* The way out of the run, kept on screen because an installed app on iOS has no back control of its
+           own. It goes the same way as the browser's back button. *@
+        <button type="button" class="exit-run-button" data-testid="exit-run"
+                aria-label="Exit run" title="Exit run"
+                disabled="@ExitDisabled"
+                @onclick="OnExit">
+            <svg class="icon" aria-hidden="true"><use href="#control-icon-exit-run"/></svg>
+        </button>
+
+        <SegmentRankCallout Trial="Trial" />
+    }
+    else
+    {
+        @Result
+    }
+</div>
+
+@code {
+    /// <summary>The run on screen.</summary>
+    [Parameter, EditorRequired] public TimeTrial Trial { get; set; } = default!;
+
+    /// <summary>The mute and fullscreen switches (<see cref="ViewToggles"/>), over the stage while the run is played.</summary>
+    [Parameter] public RenderFragment? Toggles { get; set; }
+
+    /// <summary>The score screen once it has taken the run's place, or null while the run is played.</summary>
+    [Parameter] public RenderFragment? Result { get; set; }
+
+    [Parameter] public bool ExitDisabled { get; set; }
+
+    [Parameter] public EventCallback OnExit { get; set; }
+
+    /// <summary>The canvas the frame loop draws the run on.</summary>
+    public ElementReference Canvas { get; private set; }
+}

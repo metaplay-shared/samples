@@ -1,0 +1,42 @@
+@* The mute and fullscreen switches, pinned to the same corner in the menu and over the run, so they do not
+   move when the run opens. Over the stage rather than in it, so a tap on a switch is not also a jump. Each
+   button is named for what pressing it does, which is the opposite of the current state. Home.razor owns
+   both states: the run's host module remembers the mute switch, and the controls module does fullscreen. *@
+<button type="button" class="mute-toggle" data-testid="mute-toggle"
+        aria-label="@MuteLabel" title="@MuteLabel"
+        @onclick="OnToggleMute">
+    <svg class="icon" aria-hidden="true"><use href="@MuteIcon"/></svg>
+</button>
+@* Left out entirely where the browser cannot go fullscreen, as on iPhone Safari. Its drawing is four corners
+   pointing out to enter fullscreen and pointing in to leave it. *@
+@if (FullscreenAvailable)
+{
+    <button type="button" class="fullscreen-toggle" data-testid="fullscreen-toggle"
+            aria-label="@FullscreenLabel" title="@FullscreenLabel"
+            aria-pressed="@(Fullscreen ? "true" : "false")"
+            @onclick="OnToggleFullscreen">
+        <svg class="icon" aria-hidden="true"><use href="@(Fullscreen ? "#control-icon-fullscreen-exit" : "#control-icon-fullscreen-enter")"/></svg>
+    </button>
+}
+
+@code {
+    /// <summary>Whether sound is off. It is off until the player asks for it.</summary>
+    [Parameter] public bool Muted { get; set; }
+
+    [Parameter] public EventCallback OnToggleMute { get; set; }
+
+    /// <summary>Whether the browser lets the page go fullscreen at all.</summary>
+    [Parameter] public bool FullscreenAvailable { get; set; }
+
+    /// <summary>Whether the document is fullscreen.</summary>
+    [Parameter] public bool Fullscreen { get; set; }
+
+    [Parameter] public EventCallback OnToggleFullscreen { get; set; }
+
+    private string MuteLabel => Muted ? "Unmute" : "Mute";
+
+    /// <summary>The switch's drawing: the speaker struck through while muted, the speaker sounding otherwise.</summary>
+    private string MuteIcon => Muted ? "#control-icon-sound-off" : "#control-icon-sound-on";
+
+    private string FullscreenLabel => Fullscreen ? "Exit fullscreen" : "Fullscreen";
+}

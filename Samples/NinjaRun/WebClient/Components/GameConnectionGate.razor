@@ -1,0 +1,19 @@
+@inject MetaplayClientService MetaplayService
+
+@* A game page's content, shown once the session is up and the player model is in; until then the
+   connection's spinner, or its error with a way to try again. It adds no element of its own. *@
+<ConnectionStateContainer ConnectionState="MetaplayService.ConnectionState"
+                          ErrorMessage="@MetaplayService.ErrorMessage"
+                          IsLoading="MetaplayService.PlayerModel == null"
+                          OnRetry="OnReconnect">
+    @ChildContent
+</ConnectionStateContainer>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private async Task OnReconnect()
+    {
+        await MetaplayService.ConnectAsync();
+    }
+}

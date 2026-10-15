@@ -1,0 +1,154 @@
+[
+  {
+    "id": "rr-lowland",
+    "positions": ["First", "Middle"],
+    "isSetPiece": true,
+    "ground": [
+      { "startX": 0, "endX": 37, "topY": 0 },
+      { "startX": 40, "endX": 44, "topY": 0 },
+      { "startX": 44, "endX": 49, "topY": -0.9, "pit": true },
+      { "startX": 49, "endX": 52, "topY": 0 },
+      { "startX": 52, "endX": 69, "topY": -0.79999 },
+      { "startX": 69, "endX": 93, "topY": 0 }
+    ],
+    "hazards": [
+      { "startX": 58, "endX": 60 },
+      { "startX": 72, "endX": 73 },
+      { "startX": 76, "endX": 79 }
+    ],
+    "bridges": [
+      { "startX": 10, "endX": 23 }
+    ],
+    "decorations": [
+      { "kind": "stone-lantern", "x": 24.2, "layer": "Front" },
+      { "kind": "stone-lantern", "x": 8.79999, "layer": "Front" },
+      { "kind": "stone-lantern", "x": 50.4, "layer": "Behind" },
+      { "kind": "reed-flowers", "x": 32.79999, "layer": "Front" },
+      { "kind": "reed-flowers", "x": 34.09999, "layer": "Front" }
+    ]
+  },
+  {
+    "id": "rr-smallclimb",
+    "positions": ["Middle", "Last"],
+    "isSetPiece": false,
+    "ground": [
+      { "startX": 0, "endX": 24, "topY": 0 },
+      { "startX": 24, "endX": 30, "topY": -0.79999, "pit": true },
+      { "startX": 30, "endX": 34, "topY": 0 },
+      { "startX": 34, "endX": 40, "topY": -0.9 },
+      { "startX": 40, "endX": 50, "topY": 0 },
+      { "startX": 50, "endX": 60, "topY": 1 },
+      { "startX": 60, "endX": 67, "topY": 2.2 },
+      { "startX": 67, "endX": 100, "topY": 0 }
+    ],
+    "hazards": [
+      { "startX": 13, "endX": 16 },
+      { "startX": 24, "endX": 30 },
+      { "startX": 34, "endX": 40 },
+      { "startX": 67, "endX": 71 },
+      { "startX": 82, "endX": 85 }
+    ],
+    "bridges": [],
+    "decorations": [
+      { "kind": "stone-lantern", "x": 65.2, "layer": "Behind" },
+      { "kind": "reed-flowers", "x": 53.29999, "layer": "Front" }
+    ]
+  },
+  {
+    "id": "rr-spikesteps",
+    "positions": ["First", "Middle", "Last"],
+    "isSetPiece": false,
+    "ground": [
+      { "startX": 0, "endX": 15, "topY": 0 },
+      { "startX": 15, "endX": 27, "topY": 1.79999 },
+      { "startX": 27, "endX": 37, "topY": 3.7 },
+      { "startX": 37, "endX": 65, "topY": 0 },
+      { "startX": 65, "endX": 77, "topY": 1.2 },
+      { "startX": 77, "endX": 83, "topY": 3 },
+      { "startX": 83, "endX": 101, "topY": 1.7 },
+      { "startX": 101, "endX": 114, "topY": 0 }
+    ],
+    "hazards": [
+      { "startX": 13, "endX": 15 },
+      { "startX": 25, "endX": 27 },
+      { "startX": 63, "endX": 65 },
+      { "startX": 75, "endX": 77 },
+      { "startX": 89, "endX": 91 },
+      { "startX": 101, "endX": 104 }
+    ],
+    "bridges": [],
+    "decorations": [
+      { "kind": "stone-lantern", "x": 19.9, "layer": "Front" },
+      { "kind": "stone-lantern", "x": 32.4, "layer": "Behind" },
+      { "kind": "reed-flowers", "x": 49.7, "layer": "Front" },
+      { "kind": "reed-flowers", "x": 51.5, "layer": "Behind" },
+      { "kind": "reed-flowers", "x": 52.79999, "layer": "Front" },
+      { "kind": "stone-lantern", "x": 81.9, "layer": "Behind" }
+    ]
+  },
+  {
+    "id": "rr-crossriver",
+    "positions": ["First", "Last"],
+    "isSetPiece": true,
+    "ground": [
+      { "startX": 0, "endX": 13, "topY": 0 },
+      { "startX": 13, "endX": 29, "topY": 1.29999 },
+      { "startX": 29, "endX": 59, "topY": 2.59999 },
+      { "startX": 59, "endX": 69, "topY": 1.5 },
+      { "startX": 69, "endX": 89, "topY": 0 },
+      { "startX": 89, "endX": 96, "topY": 1.5 },
+      { "startX": 96, "endX": 108, "topY": 2.7 },
+      { "startX": 108, "endX": 123, "topY": 0 }
+    ],
+    "hazards": [
+      { "startX": 21, "endX": 24 },
+      { "startX": 59, "endX": 63 },
+      { "startX": 69, "endX": 73 },
+      { "startX": 87, "endX": 89 },
+      { "startX": 99, "endX": 102 },
+      { "startX": 108, "endX": 110 }
+    ],
+    "bridges": [
+      { "startX": 38, "endX": 52 }
+    ],
+    "decorations": [
+      { "kind": "stone-lantern", "x": 35.79999, "layer": "Front" },
+      { "kind": "stone-lantern", "x": 54.5, "layer": "Behind" },
+      { "kind": "stone-lantern", "x": 34.5, "layer": "Behind" },
+      { "kind": "stone-lantern", "x": 55.9, "layer": "Front" },
+      { "kind": "reed-flowers", "x": 104.79999, "layer": "Front" },
+      { "kind": "reed-flowers", "x": 106, "layer": "Behind" }
+    ]
+  },
+  {
+    "id": "rr-swing",
+    "positions": ["Middle"],
+    "isSetPiece": true,
+    "ground": [
+      { "startX": 0, "endX": 11, "topY": 0 },
+      { "startX": 11, "endX": 22, "topY": 2 },
+      { "startX": 22, "endX": 36, "topY": 0.59999 },
+      { "startX": 39, "endX": 43, "topY": 0 },
+      { "startX": 47, "endX": 58, "topY": 0 },
+      { "startX": 60, "endX": 76, "topY": 0 }
+    ],
+    "hazards": [
+      { "startX": 9, "endX": 11 },
+      { "startX": 22, "endX": 26 },
+      { "startX": 31, "endX": 33 },
+      { "startX": 51, "endX": 53 },
+      { "startX": 60, "endX": 62 }
+    ],
+    "bridges": [],
+    "decorations": [
+      { "kind": "reed-flowers", "x": 14.7, "layer": "Behind" },
+      { "kind": "reed-flowers", "x": 15.5, "layer": "Behind" },
+      { "kind": "reed-flowers", "x": 65.59999, "layer": "Front" },
+      { "kind": "reed-flowers", "x": 66.59999, "layer": "Behind" },
+      { "kind": "reed-flowers", "x": 67.59999, "layer": "Front" }
+    ],
+    "vines": [
+      { "anchorX": 30, "anchorY": 10, "platformStartX": 33, "platformEndX": 48, "platformTopY": 5 }
+    ]
+  }
+]

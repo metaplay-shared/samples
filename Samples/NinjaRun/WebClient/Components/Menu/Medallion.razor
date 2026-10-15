@@ -1,0 +1,128 @@
+@using Game.Logic
+@using WebClient.Gameplay
+
+@* The medallion is the way into the Skill tree, what is in the one slot, and the Orb balance: the yin-yang
+   turns, one pearl orbits per Orb, the equipped Skill sits upright in the centre and the charm carries the
+   exact count. The name plaque, there once the Name Tag is owned, is what every other player sees the runner
+   as. Orbs still flying in from the score screen are not counted yet, in the charm or the ring.
+
+   Until the player has completed a run it opens nothing and carries no charm: the first run is the tutorial,
+   and before it there are no Orbs for the medallion to be about. The yin-yang turns all the same.
+
+   While the Name Tag tutorial holds the menu, the medallion is the only way forward: the run button is shut,
+   and once the Orbs have landed a pointing hand at its lower right aims at the yin-yang. *@
+<button type="button" class="loadout-shrine @(IsTutorialActive ? "tutorial-target" : "")" data-testid="open-skills"
+        aria-label="@Label"
+        disabled="@Disabled"
+        @onclick="OnOpen">
+    <svg class="yin-yang" viewBox="0 0 100 100" aria-hidden="true">
+        <circle cx="50" cy="50" r="49" fill="#101e31" stroke="#e4d5ae" stroke-width="1"/>
+        <path d="M50 1a49 49 0 0 1 0 98 24.5 24.5 0 0 1 0-49 24.5 24.5 0 0 0 0-49" fill="#cfc8ad"/>
+        <circle cx="50" cy="25.5" r="7" fill="#101e31"/>
+        <circle cx="50" cy="74.5" r="7" fill="#cfc8ad"/>
+    </svg>
+    @{
+        int pearlCount  = Math.Min(DisplayedOrbs, PearlOrbit.MaxPearls);
+        int landedShown = Math.Min(LandedPearlAngles.Count, pearlCount);
+        int goldenCount = pearlCount - landedShown;
+    }
+    <span class="pearls @(DisplayedOrbs >= PearlOrbit.MaxPearls ? "full" : "")"
+          data-testid="orbit-ring" aria-hidden="true">
+        @for (int index = 0; index < goldenCount; index++)
+        {
+            <span @key="@($"golden-{index}")" class="pearl" data-testid="orbit-pearl"
+                  style="@PearlOrbit.Style(PearlOrbit.GoldenAngle(index), index, index)"></span>
+        }
+        @for (int landed = 0; landed < landedShown; landed++)
+        {
+            <span @key="@($"landed-{landed}")" class="pearl" data-testid="orbit-pearl"
+                  style="@PearlOrbit.Style(LandedPearlAngles[landed], goldenCount + landed, PearlOrbit.LandedSpeedSlot + landed)"></span>
+        }
+    </span>
+    @* The slot is always there and simply shows nothing while it is empty. It never plays the customize
+       view's equip flash: the slot only changes in the customize view, and the menu comes back behind the
+       curtain, so the medallion is never on screen while its Skill changes. *@
+    <span class="loadout-icon" data-testid="equipped-skill" data-skill-id="@(EquippedSkill?.Id.ToString() ?? "")" aria-hidden="true">
+        @if (EquippedSkill is { } equipped)
+        {
+            <svg class="icon"><use href="@SkillIcons.Symbol(equipped.Icon)"/></svg>
+        }
+    </span>
+    @if (HasCompletedARun)
+    {
+        <span class="orb-charm" data-testid="orb-balance" data-orbs-in-flight="@OrbsInFlight" aria-hidden="true">@DisplayedOrbs</span>
+    }
+    @if (HasNameTag)
+    {
+        <span class="name-plaque" data-testid="name-plaque">
+            <span data-testid="player-name">@PlaqueName</span>
+            <svg class="icon chev" aria-hidden="true"><use href="#control-icon-chevron-right"/></svg>
+        </span>
+    }
+    @if (ShowTutorialPointer)
+    {
+        <TutorialPointer Step="open-medallion" Placement="medallion" />
+    }
+</button>
+
+@code {
+    /// <summary>The player the medallion is about.</summary>
+    [Parameter] public PlayerModel? Player { get; set; }
+
+    /// <summary>
+    /// The balance as the medallion shows it: the Orbs still flying in from the score screen are counted only
+    /// once they have landed in the orbit, so the charm and the ring fill one Orb at a time.
+    /// </summary>
+    [Parameter] public int DisplayedOrbs { get; set; }
+
+    /// <summary>How many of the player's Orbs have not reached the orbit yet.</summary>
+    [Parameter] public int OrbsInFlight { get; set; }
+
+    /// <summary>
+    /// The screen angles the Orbs that have flown in since the page loaded landed at, oldest first. Each of
+    /// these pearls starts its orbit where its Orb reached the ring; the rest of the balance keeps the
+    /// golden-angle layout.
+    /// </summary>
+    [Parameter] public IReadOnlyList<double> LandedPearlAngles { get; set; } = Array.Empty<double>();
+
+    /// <summary>Whether the player has completed a run, which is what opens the medallion and puts the Orb charm on it.</summary>
+    [Parameter] public bool HasCompletedARun { get; set; }
+
+    /// <summary>Whether the Name Tag tutorial holds the menu, which makes the medallion its target.</summary>
+    [Parameter] public bool IsTutorialActive { get; set; }
+
+    /// <summary>Whether the pointing hand is at the medallion.</summary>
+    [Parameter] public bool ShowTutorialPointer { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public EventCallback OnOpen { get; set; }
+
+    private SkillInfo? EquippedSkill => PlayerLoadout.EquippedSkill(Player);
+
+    private bool HasNameTag => PlayerLoadout.HasNameTag(Player);
+
+    /// <summary>
+    /// What the name plaque reads once the Name Tag is owned: the player's name, or the anonymous name
+    /// every other player sees them as until one is typed.
+    /// </summary>
+    private string PlaqueName => Player?.GhostDisplayName ?? TimeTrialSkills.MaskedNinjaName;
+
+    /// <summary>
+    /// The medallion's accessible name: what it opens, the name on the plaque while there is one, what is
+    /// equipped and the settled balance. Before the first run it says only when it opens.
+    /// </summary>
+    private string Label
+    {
+        get
+        {
+            if (!HasCompletedARun)
+                return "Customize ninja, after your first run.";
+
+            int orbs = DisplayedOrbs;
+            string equipped = EquippedSkill?.DisplayName ?? "none";
+            string name = HasNameTag ? $" Name: {PlaqueName}." : "";
+            return $"Customize ninja.{name} Equipped: {equipped}. {orbs} {(orbs == 1 ? "orb" : "orbs")}.";
+        }
+    }
+}

@@ -1,0 +1,14 @@
+Member,Value
+TimeTrialTicketLifetimeSeconds,600
+"// How long a map stays in the registry's active set before the oldest of them is replaced, and the one map offline practice plays, named as the three part ids joined by '+'."
+MapRotationPeriodSeconds,14400
+OfflinePracticeMapId,rr-crossriver+rr-smallclimb+rr-spikesteps
+"// Orbs paid for a segment by placement in the field of four. The pay descends: only the front of the field pays well, and third is the floor a run at the player's own pace always earns."
+OrbsForFirst,3
+OrbsForSecond,2
+OrbsForThird,1
+OrbsForFourth,0
+"// The connective climbs a map's parts are joined by, in meters. The rise is what is drawn; the slope and the run-out are what a climb costs, and it costs every runner the same."
+CourseClimbRise,5
+CourseClimbSlopeLength,24
+CourseClimbRunOutLength,8

@@ -1,0 +1,40 @@
+@* The line drawings the portrait area's views reference by id: the Skill icons, drawn by the medallion and
+   the customize view (the config only names an icon), the mute and fullscreen switches' icons, drawn by the
+   menu and the run, the run's exit arrow, and the chevrons, diamonds, ticks, crosses and Orb dots the menu and
+   the customize view mark their buttons with. Drawn rather than typed (no text glyph or emoji stands in for
+   an icon), so they look the same on every platform. Home.razor puts the set outside every view so each can
+   draw from it. *@
+<svg class="skill-icon-set" aria-hidden="true" width="0" height="0">
+    <symbol id="skill-icon-sandal" viewBox="0 0 24 24"><path d="M3 16c5 1 7-5 10-9l5 3c-2 4-2 6 3 8v2H4c-2 0-2-2-1-4zM8 12l6 4M13 8l5 8"/></symbol>
+    <symbol id="skill-icon-shield" viewBox="0 0 24 24"><path d="M12 2 21 6v6c0 5-4 8-9 10-5-2-9-5-9-10V6zM8 12l3 3 5-6"/></symbol>
+    <symbol id="skill-icon-bolt" viewBox="0 0 24 24"><path d="M13 2 5 13h6l-1 9 9-12h-6z"/></symbol>
+    <symbol id="skill-icon-dash" viewBox="0 0 24 24"><path d="M3 7h11M1 12h8M4 17h11M15 6l6 6-6 6"/></symbol>
+    <symbol id="skill-icon-jump" viewBox="0 0 24 24"><path d="M4 20c6 0 7-14 13-14M12 7l5-2 3 4M3 21h18"/></symbol>
+    <symbol id="skill-icon-mountain" viewBox="0 0 24 24"><path d="m2 20 7-12 4 6 3-4 6 10zM9 8l2 3 2-2"/></symbol>
+    <symbol id="skill-icon-tag" viewBox="0 0 24 24"><path d="M3 4h11l7 8-7 8H3zM8 12h.01"/></symbol>
+    <symbol id="skill-icon-edit" viewBox="0 0 24 24"><path d="m4 16-1 5 5-1L20 8l-4-4zM14 6l4 4"/></symbol>
+    <symbol id="control-icon-sound-on" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4zM16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></symbol>
+    <symbol id="control-icon-sound-off" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4zM16 9l5 6M21 9l-5 6"/></symbol>
+    <symbol id="control-icon-fullscreen-enter" viewBox="0 0 24 24"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></symbol>
+    <symbol id="control-icon-fullscreen-exit" viewBox="0 0 24 24"><path d="M9 4v5H4M15 4v5h5M20 15h-5v5M4 15h5v5"/></symbol>
+    @* The Start run button's double chevron: the same path, in the same units, as the ≫ the score
+       screen's backdrop masks draw (css/score.css .result-backdrop-lane), so the button and the backdrop
+       match. The view box is cropped to the chevrons. *@
+    <symbol id="control-icon-run" viewBox="5 5 26 24"><path d="M8 8l9 9-9 9M19 8l9 9-9 9"/></symbol>
+    <symbol id="control-icon-chevron-right" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+    <symbol id="control-icon-chevron-left" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+    @* The run's way out: an arrow pointing back, the direction the browser's own back button goes. *@
+    <symbol id="control-icon-exit-run" viewBox="0 0 24 24"><path d="M20 12H5M11 6l-6 6 6 6"/></symbol>
+    @* The slot's marks: an outlined diamond and an arrow for "put this in the slot", a filled diamond
+       for what is in it, and a tick for owned. *@
+    <symbol id="control-icon-equip" viewBox="0 0 36 24"><path d="M8 5l6 7-6 7-6-7zM19 12h14M28 7l5 5-5 5"/></symbol>
+    <symbol id="control-icon-equipped" viewBox="0 0 24 24"><path d="M12 4l7 8-7 8-7-8z" fill="currentColor"/></symbol>
+    <symbol id="control-icon-owned" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></symbol>
+    @* A node that cannot be bought yet is crossed out, and a price is marked with a filled dot: the
+       Orb the count is in. *@
+    <symbol id="control-icon-locked" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7 7 17"/></symbol>
+    <symbol id="control-icon-orb" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="currentColor"/></symbol>
+    @* The Name Tag tutorial's pointing hand (Components/TutorialPointer.razor): the index finger
+       straight up with its tip at (12, 3), so css/customize.css turns it about that tip to aim it. *@
+    <symbol id="control-icon-point" viewBox="0 0 24 24"><path d="M10.5 16V4.5a1.5 1.5 0 0 1 3 0V11M13.5 10.5a1.5 1.5 0 0 1 3 0V12M16.5 12a1.5 1.5 0 0 1 3 0v4a6 6 0 0 1-6 6H12a6 6 0 0 1-4.9-2.5l-3-4.3a1.5 1.5 0 0 1 2.4-1.8L10.5 16"/></symbol>
+</svg>

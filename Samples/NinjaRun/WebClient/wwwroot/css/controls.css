@@ -1,0 +1,139 @@
+/* The round buttons over the portrait area: the mute and fullscreen switches, the developer links and the run's exit. */
+
+/* ---------------------------------------------------------------------------
+   Mute switch
+   The same small speaker button in the same corner of the portrait area on the menu and over the stage,
+   so opening a run never moves it. Both views are full-height positioned boxes inside that area, so one
+   set of offsets puts the button in the same place in each. It floats clear of the top bar, beside the
+   segment callout, and takes its own taps so pressing it is never also a jump.
+   --------------------------------------------------------------------------- */
+.mute-toggle,
+.fullscreen-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 9999px;
+    font-size: 1.125rem;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.06);
+    border: 0;
+    box-shadow: inset 0 0 0 1px var(--border-color);
+    transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.mute-toggle:hover,
+.fullscreen-toggle:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.mute-toggle:active,
+.fullscreen-toggle:active {
+    transform: scale(0.94);
+}
+
+/* The mute switch in the top right corner and the fullscreen switch under it, clear of the segment callout
+   in the middle and of the exit arrow on the left. */
+.menu-view > .mute-toggle,
+.time-trial-view > .mute-toggle,
+.menu-view > .fullscreen-toggle,
+.time-trial-view > .fullscreen-toggle {
+    position: absolute;
+    z-index: 2;
+    top: calc(2.75rem + env(safe-area-inset-top));
+    right: 0.75rem;
+    touch-action: manipulation;
+    background: rgba(2, 6, 10, 0.55);
+}
+
+.menu-view > .fullscreen-toggle,
+.time-trial-view > .fullscreen-toggle {
+    top: calc(5.75rem + env(safe-area-inset-top));
+}
+
+/* The switches' drawings, from the portrait area's symbol set, in the Skill icons' line style. */
+.mute-toggle .icon,
+.fullscreen-toggle .icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vertical-align: 0;
+}
+
+/* The developer course tools' and part editor's ways in: small text stacked under the mute and fullscreen
+   switches, only in a session that may run developer-only actions. */
+.menu-dev-links {
+    position: absolute;
+    z-index: 2;
+    top: calc(8.75rem + env(safe-area-inset-top));
+    right: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
+}
+
+.menu-dev-link {
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    background: rgba(2, 6, 10, 0.55);
+    text-decoration: none;
+}
+
+.menu-dev-link:hover {
+    color: var(--text-primary);
+}
+
+/* The run's exit arrow in the top left corner, level with the mute switch and drawn the same way: a round
+   button over the stage rather than in it, so a tap on it is never also a jump. */
+.exit-run-button {
+    position: absolute;
+    z-index: 3;
+    top: calc(2.75rem + env(safe-area-inset-top));
+    left: 0.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0;
+    border: 0;
+    border-radius: 9999px;
+    box-shadow: inset 0 0 0 1px var(--border-color);
+    color: var(--text-secondary);
+    background: rgba(2, 6, 10, 0.55);
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.exit-run-button:hover {
+    color: var(--text-primary);
+    background: rgba(2, 6, 10, 0.82);
+}
+
+.exit-run-button:active {
+    transform: scale(0.94);
+}
+
+.exit-run-button .icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}

@@ -1,0 +1,2 @@
+# The self-hosted web fonts go to LFS like the sample's other binaries. Samples/.gitattributes covers the rest.
+*.woff2         filter=lfs diff=lfs merge=lfs -text

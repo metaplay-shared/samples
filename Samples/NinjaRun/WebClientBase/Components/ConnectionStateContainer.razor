@@ -1,0 +1,65 @@
+@using WebClientBase.Services
+
+@if (ConnectionState == ConnectionState.Disconnected || ConnectionState == ConnectionState.Connecting)
+{
+    <div class="connection-state">
+        <div class="spinner spinner-large"></div>
+        <p class="connection-state-text">Connecting to game server...</p>
+    </div>
+}
+else if (ConnectionState == ConnectionState.Error)
+{
+    <div class="connection-state">
+        <div class="connection-state-badge">
+            <span>@("⚠️")</span>
+        </div>
+        <h2 class="connection-state-title">Connection Error</h2>
+        <p class="connection-state-text">@ErrorMessage</p>
+        <button class="connection-state-button" @onclick="OnRetry">
+            Try Again
+        </button>
+    </div>
+}
+else if (IsLoading)
+{
+    <div class="connection-state">
+        <div class="spinner"></div>
+        <p class="connection-state-text">Loading...</p>
+    </div>
+}
+else
+{
+    @ChildContent
+}
+
+@code {
+    /// <summary>
+    /// The current connection state.
+    /// </summary>
+    [Parameter]
+    public ConnectionState ConnectionState { get; set; }
+
+    /// <summary>
+    /// Error message to display when in error state.
+    /// </summary>
+    [Parameter]
+    public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// Whether additional loading is in progress (e.g., waiting for player model).
+    /// </summary>
+    [Parameter]
+    public bool IsLoading { get; set; }
+
+    /// <summary>
+    /// Content to display when connected and not loading.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// Callback when retry button is clicked.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnRetry { get; set; }
+}
