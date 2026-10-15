@@ -6,9 +6,17 @@ on the client at 60 Hz with no server round trips; after the finish, the backend
 playing the recorded inputs through the same deterministic simulation, and only the time *it* computes is
 recorded and rewarded.
 
+> [!NOTE]
+> **Built with AI.** The code, tests, docs and art were produced with AI tools (Claude Code, ChatGPT image generation),
+> directed and reviewed by a Metaplay engineer, with the review focused on the shared game logic and the Metaplay SDK
+> integration.
+
 <p align="center">
   <img src=".github/screenshot.png" alt="The ninja running a course, with an opponent's ghost ahead" width="288">
 </p>
+
+**Play it in your browser:** a deployment of this sample runs at
+<https://whole-impalas-strive-quickly-public.p2-eu.metaplay.dev/>. No install or account setup is needed.
 
 ## The game
 

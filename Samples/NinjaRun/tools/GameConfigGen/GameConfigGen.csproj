@@ -38,7 +38,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Shared with the file-based apps in tools/, which take it with #:include. -->
+    <!-- The file-based apps in tools/ carry their own copy. -->
     <Compile Include="..\Shared\RepoRoot.cs" Link="Shared\RepoRoot.cs" />
   </ItemGroup>
 
