@@ -47,21 +47,23 @@ course parts.
   Values travel in the archive rather than in a binary, so a running game can be retuned by publishing a new
   one from the LiveOps Dashboard.
 - **A Blazor WebAssembly web client** — the menu, the canvas game view, and the connection handling.
-  `?env=offline` plays the whole loop with no server, as practice. The client installs as a home-screen app.
+  `?offline` plays the whole loop with no server, as practice. The client installs as a home-screen app.
 - **Tests on both layers** — the simulation, the actions, the server logic and the config build in NUnit;
   the played run and its accepted result in Playwright, through the real client.
 
 ## Layout
 
+The sample is built on the [Blazor starter project](https://github.com/metaplay-shared/blazor-starter-project).
+Its project structure, the web client's base (`WebClientBase/`), the browser test harness and the tools are the
+starter project's ([project structure](https://github.com/metaplay-shared/blazor-starter-project/blob/main/docs/project-structure.md)). What is NinjaRun's own:
+
 | Path | What it holds |
 |---|---|
-| `SharedCode/` | Game logic both sides run: the player model and actions, the game configs, the time trial simulation. |
-| `Backend/Server/` | The game server: the player actor that validates runs, the course ghost pools, the map registry, web client hosting. |
-| `Backend/SharedCode.Tests/`, `Backend/Server.Tests/` | Unit tests. |
-| `WebClient/`, `WebClientBase/` | The Blazor WebAssembly client: the game UI, and the game-agnostic connection framework under it. |
-| `WebClient.Tests/` | End-to-end tests (Playwright). |
+| `SharedCode/` | The player model and actions, the game configs, the time trial simulation. |
+| `Backend/Server/` | The player actor that validates runs, the course ghost pools, the map registry, and a redirect from the server's public web host to the client on the CDN. |
+| `WebClient/` | The game UI: the menu, the canvas game view, the customize and score screens. |
+| `WebClient.Tests/` | The browser tests of the game. |
 | `GameConfigSource/` | The config sheets and course parts. |
-| `tools/` | The game config build, the WebAssembly serializer generator, the dev launcher and the server image build. |
 
 ## How a run is validated
 
@@ -138,36 +140,37 @@ result integrity rather than trying to detect automated play.
 
 ### Connectivity
 
-A run keeps going through a brief disconnect, because it is simulated locally, and submits when the
-connection returns while its ticket is still valid. A run that cannot be validated before its ticket expires
-still shows its local time but affects no rewards or rankings. How long a ticket stays open is the published
+A run keeps going through a brief disconnect that the SDK resumes, because it is simulated locally, and submits
+when the connection is back while its ticket is still valid. When the session is lost, the run stops where it is, and
+the next session leaves it, because that session did not issue the run's ticket. A run that cannot be validated
+before its ticket expires still shows its local time but affects no rewards or rankings. How long a ticket stays open is the published
 `TimeTrialTicketLifetimeSeconds` in `GameConfigSource/Global.csv`. The client distinguishes provisional,
 validating, accepted and rejected results; offline play submits nothing and says so on the result.
 
 ## Run locally
 
-From the repository root, start the watched Metaplay server and watched WebClient together:
+From this directory, each in its own terminal:
 
 ```bash
-dotnet run tools/DevStack.cs
+metaplay dev server
+dotnet watch --project WebClient/WebClient.csproj   # rebuilds the client on changes
 ```
 
-Both log streams stay in that terminal. Server and client source changes rebuild automatically, and if
-either watcher exits the launcher stops the other one. Ctrl+C stops both complete process trees; on Windows
-the launcher also uses a kill-on-close Job Object so closing the launcher cannot orphan either watcher or
-its descendants. Open `http://localhost:5290` once the client is ready. If the client gets built from
-outside the watcher — an IDE, a second shell — the launcher restarts the web dev server, which would
-otherwise keep handing out a client it can no longer serve; reload the page when it says the server is back.
+Open `http://localhost:5290`, or `http://localhost:5290/?offline` for practice with no server. In Rider, the **Server +
+Client** configuration under `.run/` starts both. To measure performance, run the published client:
+`python3 run_e2e.py --trimmed --no-test` serves it and prints its URL.
 
-To run the build players get — the Release publish, served by the game server itself on port 5560 and
-reachable from a phone on the same network — use `dotnet run tools/DevStack.cs -- --release` instead. It
-publishes the client, then runs the server alone with nothing watched, which is the build to measure
-performance on; the watched Debug build is not.
-
-The separate commands and complete build/test instructions remain in [`AGENTS.md`](AGENTS.md).
+The build and test commands are in [`AGENTS.md`](AGENTS.md), and running on a phone is in the starter project's
+[publishing guide](https://github.com/metaplay-shared/blazor-starter-project/blob/main/docs/publishing.md#running-over-the-lan).
 
 ## More
 
 - [`AGENTS.md`](AGENTS.md) — how to build, run, test and develop in this repo.
 - [`WebClient/README.md`](WebClient/README.md) — the Blazor WebAssembly client.
 - [`GameConfigSource/README.md`](GameConfigSource/README.md) — how a config sheet is written.
+
+## License
+
+Copyright Metaplay. Ninja Time Trial is licensed under the [Apache License 2.0](LICENSE). The Metaplay SDK it builds
+on is licensed separately, under the Metaplay SDK License. Third-party fonts and code keep their own licenses, which
+are stated next to them.

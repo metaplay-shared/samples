@@ -56,11 +56,8 @@ namespace Game.Logic.Tests
     /// </summary>
     public static class SelfPlayStreams
     {
-        public const int StateSanity           = 1;
-        public const int Conservation          = 2;
-        public const int Legality              = 3;
+        public const int Invariants            = 1;
         public const int DecisionDeterminism   = 9;
-        public const int Termination           = 4;
         public const int Indistinguishability  = 5;
         public const int NegativeControls      = 6;
         public const int Profiles              = 7;

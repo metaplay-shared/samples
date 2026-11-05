@@ -1,0 +1,15 @@
+[
+  {
+    "Name": "Server + Client",
+    "Projects": [
+      {
+        "Path": "Backend\\Server\\Server.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "WebClient\\WebClient.csproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]

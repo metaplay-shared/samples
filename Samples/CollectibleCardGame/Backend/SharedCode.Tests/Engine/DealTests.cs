@@ -19,79 +19,40 @@ namespace Game.Logic.Tests
             return MatchEngine.Create(setup);
         }
 
+        /// <summary>
+        /// The whole registry at the deal is the two authored decks, none of it public: anything else would be
+        /// a card the mulligan is asked about and can never put back, which is why the Acorn is granted when the
+        /// mulligan resolves rather than dealt. The first seat holds three, the second four, and each deck holds
+        /// the rest.
+        /// </summary>
         [Test]
-        public void DealsExactlyTwentyFiveInstancesPerSeat()
+        public void TheDealShape()
         {
             MatchEngine engine = Deal(seed: 12345);
+            GlobalConfig global = Config.Global;
+            CardId       acorn  = global.SecondPlayerBonusCard.Ref.CardId;
 
-            for (int seat = 0; seat < 2; seat++)
-            {
-                int owned = 0;
-                foreach (CardInstance instance in engine.Rules.Instances)
-                {
-                    if (instance.Owner == seat && instance.FromStartingDeck)
-                        owned++;
-                }
-
-                Assert.That(owned, Is.EqualTo(Config.Global.DeckSize), $"seat {seat}");
-            }
-        }
-
-        [Test]
-        public void FirstSeatDrawsThreeSecondSeatDrawsFour()
-        {
-            MatchEngine engine = Deal(seed: 12345);
-            int         first  = engine.Rules.FirstSeat;
-            int         second = MatchSeats.Other(first);
-
-            Assert.That(engine.SecretHand(first).Count, Is.EqualTo(Config.Global.OpeningHandFirstPlayer));
-            // Four, and only four: the compensation card is granted when the mulligan resolves rather than
-            // dealt, so both opening hands hold nothing but starting-deck cards.
-            Assert.That(engine.SecretHand(second).Count, Is.EqualTo(Config.Global.OpeningHandSecondPlayer));
-        }
-
-        [Test]
-        public void NeitherOpeningHandHoldsTheAcorn()
-        {
-            MatchEngine engine = Deal(seed: 12345);
-            CardId      acorn  = Config.Global.SecondPlayerBonusCard.Ref.CardId;
-
-            Assert.That(HandCards(engine, 0), Does.Not.Contain(acorn));
-            Assert.That(HandCards(engine, 1), Does.Not.Contain(acorn));
-        }
-
-        [Test]
-        public void TheDealMintsNothingButStartingDeckInstances()
-        {
-            // The whole registry at the deal is the two authored decks. Anything else would be a card the
-            // mulligan is asked about and can never put back, which is why the Acorn is granted after the mulligan.
-            MatchEngine engine = Deal(seed: 12345);
-
-            Assert.That(engine.Rules.Instances.Count, Is.EqualTo(Config.Global.DeckSize * MatchSeats.Count));
+            Assert.That(engine.Rules.Instances.Count, Is.EqualTo(global.DeckSize * MatchSeats.Count));
             foreach (CardInstance instance in engine.Rules.Instances)
             {
                 Assert.That(instance.FromStartingDeck, Is.True, $"instance {instance.Id.Value}");
                 Assert.That(instance.IsPublic, Is.False, $"instance {instance.Id.Value}");
             }
-        }
 
-        [Test]
-        public void BothDensStartAtStartingHp()
-        {
-            MatchEngine engine = Deal(seed: 7);
-
-            Assert.That(engine.Rules.Seat(0).DenHp, Is.EqualTo(Config.Global.DenStartingHp));
-            Assert.That(engine.Rules.Seat(1).DenHp, Is.EqualTo(Config.Global.DenStartingHp));
-        }
-
-        [Test]
-        public void ExactlyOneWeatherIsInForce()
-        {
-            for (ulong seed = 1; seed <= 20; seed++)
+            int first = engine.Rules.FirstSeat;
+            foreach ((int seat, int hand) in new[] { (first, global.OpeningHandFirstPlayer), (MatchSeats.Other(first), global.OpeningHandSecondPlayer) })
             {
-                MatchEngine engine = Deal(seed);
-                Assert.That(engine.Weather, Is.Not.Null, $"seed {seed}");
-                Assert.That(Config.Weathers.ContainsKey(engine.Weather.WeatherId), Is.True);
+                int owned = 0;
+                foreach (CardInstance instance in engine.Rules.Instances)
+                {
+                    if (instance.Owner == seat)
+                        owned++;
+                }
+
+                Assert.That(owned, Is.EqualTo(global.DeckSize), $"seat {seat} owns one deck");
+                Assert.That(engine.SecretHand(seat).Count, Is.EqualTo(hand), $"seat {seat}'s opening hand");
+                Assert.That(engine.SecretDeck(seat).Count, Is.EqualTo(global.DeckSize - hand), $"seat {seat}'s deck");
+                Assert.That(HandCards(engine, seat), Does.Not.Contain(acorn), $"seat {seat} was dealt the Acorn");
             }
         }
 
@@ -166,17 +127,6 @@ namespace Game.Logic.Tests
             }
 
             Assert.That(handIsAPrefix, Is.False, "the dealt hand must not be the lowest identities of the deck");
-        }
-
-        [Test]
-        public void DeckCountsAfterDealAreTwentyTwoAndTwentyOne()
-        {
-            MatchEngine engine = Deal(seed: 12345);
-            int         first  = engine.Rules.FirstSeat;
-            int         second = MatchSeats.Other(first);
-
-            Assert.That(engine.SecretDeck(first).Count, Is.EqualTo(Config.Global.DeckSize - Config.Global.OpeningHandFirstPlayer));
-            Assert.That(engine.SecretDeck(second).Count, Is.EqualTo(Config.Global.DeckSize - Config.Global.OpeningHandSecondPlayer));
         }
 
         [Test]

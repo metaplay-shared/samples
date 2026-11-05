@@ -19,7 +19,7 @@ public class DragScrollPageTests : PlaywrightPageTest
 {
     private static readonly string HomeUrl  = ClientUrl();
     // Offline, because the odds sheet is client-only and no test here depends on the game server.
-    private static readonly string WheelUrl = ClientUrl("/events/spin", "env=offline");
+    private static readonly string WheelUrl = ClientUrl("/events/spin", "offline");
 
     /// <summary>The shell's scroll container, which every meta screen is drawn inside.</summary>
     private const string MainSelector = ".m-shell__main";

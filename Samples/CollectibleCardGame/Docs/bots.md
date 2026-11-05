@@ -203,7 +203,7 @@ set, so a new action cannot join the registry without a mirrored path.
 "Nothing leaked" is also what a check that walked nothing would report, so every check is paired with deliberately
 broken variants that must fail, and a control that passes is a build failure:
 
-- **Five wire-mask plants:** the opponent's hand in the projection, an identity minted in draw order, the opponent's
+- **Five wire-mask plants:** the opponent's hand in the seat's payload, an identity minted in draw order, the opponent's
   deck published as its own list, a count computed over hidden state, and a leftover RNG position.
 - **Five follower plants**, each a broken *action*: one reads a hand to compute a public number, one draws from the
   seeded stream, one emits an extra event, one stops maintaining a stored count, and one carries a duration it never
@@ -233,8 +233,7 @@ The balance harness is not an arena: it holds **one fixed profile on both seats*
 win-rate deltas, the clan matchup table, match length against the five-to-ten-minute target. The per-game record
 self-play produces already carries which cards each side played, which clans each deck drew from, how the game ended
 and how many turns it took, and a suite can name the seats' decks instead of taking the rotation (the starter-deck
-matrix is the first consumer). Aggregating those records into per-card win rates and a matchup table is
-[follow-up work](../README.md#follow-up-work).
+matrix is the first consumer). Nothing aggregates those records into per-card win rates or a matchup table yet.
 
 ## See also
 

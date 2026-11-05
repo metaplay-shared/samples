@@ -57,9 +57,9 @@ internal static class LiveServerLocks
     /// <summary>
     /// Write each lock's wait and hold totals. Called once from the assembly's one-time teardown.
     /// <para>
-    /// Always writes to the test output, and also to the file named by <c>TABLESTAKES_E2E_GATE_REPORT</c> when
-    /// that variable is set. The file exists because <c>dotnet test</c> does not show a passing run's console
-    /// output at its usual verbosity. <c>tools/run-e2e.py</c> prints the file after the test process exits.
+    /// Always writes to the test output, and also to <c>summary.txt</c> in the harness's output directory
+    /// (<c>E2E_OUTPUT_DIR</c>) when that variable is set. The file exists because <c>dotnet test</c> does not
+    /// show a passing run's console output at its usual verbosity. The harness prints it after the test process exits.
     /// </para>
     /// </summary>
     public static void WriteLockTotals()
@@ -69,9 +69,10 @@ internal static class LiveServerLocks
         foreach (string line in lines)
             TestContext.Progress.WriteLine(line);
 
-        string? path = Environment.GetEnvironmentVariable("TABLESTAKES_E2E_GATE_REPORT");
-        if (string.IsNullOrEmpty(path))
+        string? outputDir = Environment.GetEnvironmentVariable("E2E_OUTPUT_DIR");
+        if (string.IsNullOrEmpty(outputDir))
             return;
+        string path = Path.Combine(outputDir, "summary.txt");
 
         try
         {

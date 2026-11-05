@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <!-- Full-screen, app-like behavior while preserving browser zoom for accessibility. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Minimal browser chrome when launched/added to home screen. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Sticky Paws" />
+    <meta name="theme-color" content="#0d0a12" />
+    <!-- PWA manifest: enables standalone (chrome-free) launch from the home screen. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- Home-screen icon on iOS. Absolute paths so they resolve to the site root regardless of the
+         current route (a relative path can resolve against a sub-route and 404, which makes iOS fall
+         back to the generated "M" tile). -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+    <base href="/" />
+    <!-- Starts the fetch of the endpoints file, which the SDK waits for before .NET starts. The empty one in wwwroot/
+         connects a local page to the local game server, and 'metaplay deploy webclient' replaces it. -->
+    <link rel="preload" href="metaplay-endpoints.json" as="fetch" crossorigin />
+    <!-- Inter (fonts.css) and Lilita One (WebClientBase's app-base.css) are served with the client, not from
+         fonts.googleapis.com: the two faces decide the width of every line the board measures, and a client that
+         fetches them over the public internet draws in whatever substitute the platform has whenever that fetch
+         fails, silently. See wwwroot/fonts/README.md. -->
+    <link rel="stylesheet" href="fonts.css" />
+    <link rel="stylesheet" href="_content/WebClientBase/css/app-base.css" />
+    <link rel="stylesheet" href="app.css" />
+    <!-- The board and the card faces own their own stylesheets: one screen each, sized in the board
+         frame's own units, and loaded after app.css so they win where they overlap. -->
+    <link rel="stylesheet" href="board.css" />
+    <link rel="stylesheet" href="cards.css" />
+    <link rel="stylesheet" href="metagame.css" />
+    <link rel="stylesheet" href="card-portraits.css" />
+    <link rel="stylesheet" href="board-chrome.css" />
+    <link rel="stylesheet" href="board-targeting.css" />
+    <link rel="stylesheet" href="board-deltas.css" />
+    <link rel="stylesheet" href="board-effects.css" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <title>Sticky Paws</title>
+</head>
+
+<body style="background: var(--bg-primary, #0d0a12);">
+    <div id="app">
+        <div style="position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: #a1a1aa; font-family: system-ui, sans-serif;">
+            Loading…
+        </div>
+    </div>
+
+    <div id="blazor-error-ui" data-nosnippet>
+        An unhandled error has occurred.
+        <a href="." class="reload" onclick="location.assign(startPageUrl); return false;">Reload</a>
+        <span class="dismiss">🗙</span>
+    </div>
+
+    <script>
+        // Where the error bar's Reload goes: the app root, with the query the page was loaded with, as
+        // WebClientBase's StartPage.Reload does. This one works after Blazor has failed.
+        var startPageUrl = new URL(location.search, document.baseURI).href;
+    </script>
+    <!-- Suppress the browser's context menu, from a right-click or a long-press (CSS can't block this). -->
+    <script>
+        window.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    </script>
+    <script src="board-motion.js"></script>
+    <script src="board-targeting.js"></script>
+    <script src="board-effects.js"></script>
+    <script src="_framework/blazor.webassembly.js"></script>
+</body>
+
+</html>

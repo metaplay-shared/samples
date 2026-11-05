@@ -16,7 +16,7 @@ WebLogin:
       AllowedRedirectUrls: "https://lovely-wombats-build-presently-assets.p2-eu.metaplay.dev/"
 
 ClientConnection:
-  CommitIdCheckRule: OnlyIfDefined
+  CommitIdCheckRule: Disabled
 
 AppleStore:
   # io.metaplay.idler-demo is the bundle ID of our internal "Metaplay Idler" in Testflight, which connects to the 'nimbly' environment.

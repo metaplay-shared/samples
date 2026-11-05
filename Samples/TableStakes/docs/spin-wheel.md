@@ -24,7 +24,7 @@ spin is refused and the token is kept.
 The actor answers requests that arrive too quickly with a refusal rather than dropping them, because the client
 unlocks its Spin control only on a result or a refusal.
 
-The offline host has no handler for the spin request, so a spin needs a live server.
+The offline host answers the spin request with the same policy and draws the sector itself, without the throttle.
 
 ## Interrupted-spin recovery
 

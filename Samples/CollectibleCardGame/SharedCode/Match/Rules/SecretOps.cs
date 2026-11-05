@@ -185,7 +185,7 @@ namespace Game.Logic
         // ---------------------------------------------------------------- reads, server-side by construction
 
         /// <summary> What a hidden instance is, or null when this side does not know. </summary>
-        public static HiddenCard? HiddenCardOf(MatchModel match, CardInstanceId id)
+        internal static HiddenCard? HiddenCardOf(MatchModel match, CardInstanceId id)
         {
             SeatSecrets secret = SecretOf(match, id);
             if (secret == null)

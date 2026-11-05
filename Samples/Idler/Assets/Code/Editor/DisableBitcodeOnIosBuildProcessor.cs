@@ -1,5 +1,3 @@
-// This file is part of Metaplay SDK which is released under the Metaplay SDK License.
-
 // Disabled on non-iOS targets to avoid needlessly requiring UnityEditor.iOS.Xcode to be installed.
 #if UNITY_IOS
 

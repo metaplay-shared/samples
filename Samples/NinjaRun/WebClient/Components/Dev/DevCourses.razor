@@ -9,8 +9,9 @@
 @inject IJSRuntime JS
 
 @* The developer course tools: every part and legal map in the session's own config,
-   drawn by the run renderer and timed by the scripted runners in the browser, a composer for maps, and a way
-   to practise or race any course a run can be opened on. Every part links to the part editor
+   drawn by the run renderer and timed by the scripted runners in the browser, a composer for maps, a way
+   to practise or race any course a run can be opened on, and an Orb grant for reaching the Skill tree
+   without racing for it. Every part links to the part editor
    (DevPartEditor.razor, /dev/parts), its own full-screen page, started from that part. A routed page rather
    than a view behind the curtain, because it is for developers only and no player ever sees it. Hiding it is
    presentation: the server's refusal of a developer-only request is what gates it. *@
@@ -20,7 +21,7 @@
 @* The developer tools' own styles, loaded with the page rather than with the game, which never uses them. *@
 <link rel="stylesheet" href="css/dev-tools.css" />
 
-<GameConnectionGate>
+<StartupSplash IsReady="MetaplayService.PlayerModel != null">
     <div class="dev-courses" data-testid="dev-courses">
         <div class="dev-courses-header">
             <a class="dev-back" href="" data-testid="dev-back">‹ Menu</a>
@@ -236,9 +237,20 @@
                     }
                 </ul>
             </section>
+
+            <section class="dev-section">
+                <div class="dev-section-title">
+                    <h2>Player</h2>
+                    <button type="button" class="dev-button" data-testid="dev-grant-orbs" @onclick="OnGrantOrbs">Grant @GrantedOrbs Orbs</button>
+                </div>
+                <p class="dev-note">
+                    <span data-testid="dev-orb-balance">@(MetaplayService.PlayerModel?.Orbs ?? 0)</span> Orbs to buy Skills with.
+                    A grant is not a run's payout: nothing flies into the medallion for it.
+                </p>
+            </section>
         }
     </div>
-</GameConnectionGate>
+</StartupSplash>
 
 @code {
     /// <summary>What a selection names: a part looked at on its own, or a map.</summary>
@@ -331,9 +343,23 @@
         _previewDirty = false;
         try
         {
-            _hostModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/timeTrialHost.js");
-            await _hostModule.InvokeVoidAsync("startPreview", _previewCanvas, TimeTrialCourseView.FromCourse(_selectedCourse), AssetBaseUrl);
-            await _hostModule.InvokeVoidAsync("previewAt", _previewX);
+            IJSObjectReference module = _hostModule ?? await JS.InvokeAsync<IJSObjectReference>("import", "./js/timeTrialHost.js");
+
+            // The page can be left while a call is under way, as when a run is opened from it, and leaving it
+            // disposes the module. A module imported after that is this call's to dispose.
+            if (_disposed)
+            {
+                if (module != _hostModule)
+                    await module.DisposeAsync();
+                return;
+            }
+
+            _hostModule = module;
+            await module.InvokeVoidAsync("startPreview", _previewCanvas, TimeTrialCourseView.FromCourse(_selectedCourse), AssetPaths.Art);
+            if (_disposed)
+                return;
+
+            await module.InvokeVoidAsync("previewAt", _previewX);
         }
         catch (JSDisconnectedException)
         {
@@ -430,6 +456,11 @@
         {
         }
     }
+
+    /// <summary>How many Orbs one press of the grant adds: enough for both tier-2 Skills.</summary>
+    private const int GrantedOrbs = 10;
+
+    private void OnGrantOrbs() => MetaplayService.GrantDeveloperOrbs(GrantedOrbs);
 
     private void OnPractice() => OpenRun(race: false);
 

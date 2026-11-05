@@ -1,7 +1,6 @@
 @inherits LayoutComponentBase
 @using WebClient.Meta
 @using WebClient.Services
-@using WebClientBase.Configuration
 @inject MetaStateService Meta
 @inject MetaplayClientService MetaplayService
 @inject WalletBurstService WalletBurst
@@ -57,10 +56,6 @@
    reward may be gone before the animation ends (docs/meta-shell.md, "The shared reward flow"). *@
 <WalletBurstLayer />
 
-@* The connection shell is drawn last so it covers everything else, including reward animations
-   (docs/web-client.md). *@
-<ConnectionOverlay />
-
 @* A hidden marker for browser tests. Meta screens render fixture data while the session connects, and a
    control tapped then sends no request, so a live test must wait until the session has arrived.
 
@@ -101,6 +96,10 @@
         _                        => "arrive",
     };
 
+    /// <summary>
+    /// Also starts the client service. The layout starts it, not each screen, so every meta route gets a session.
+    /// Later calls of <c>Start</c> do nothing, so starting it again after a navigation does nothing.
+    /// </summary>
     protected override void OnInitialized()
     {
         Navigation.LocationChanged += OnLocationChanged;
@@ -108,13 +107,8 @@
         MetaplayService.OnStateChanged += OnStateChanged;
         ReportScreen();
         TakeASeatedPlayerToTheTable();
+        MetaplayService.Start();
     }
-
-    /// <summary>
-    /// Connects the session. The layout connects, not each screen, so every meta route gets a session.
-    /// ConnectAsync is idempotent, so calling it again after a navigation does nothing.
-    /// </summary>
-    protected override async Task OnInitializedAsync() => await MetaplayService.ConnectAsync();
 
     /// <summary>
     /// On navigation, settles any running wallet animation, so the HUD shows the real balances. It also sends
@@ -146,14 +140,14 @@
         // would make the meta screens unreachable offline, and offline mode exists so they can be used
         // without a server. So offline, only Home redirects to the table.
         string route = Navigation.CurrentRoute();
-        if (StaticEnvironmentConfigProvider.IsOffline &&
+        if (MetaplayService.IsOfflineMode &&
             MetaRoutes.Normalise(route) != MetaRoutes.Normalise(MetaRoutes.Home))
         {
             return;
         }
 
         if (!MetaRoutes.IsGameRoute(route))
-            EnvironmentLink.NavigateTo(Navigation, MetaRoutes.Table);
+            Navigation.NavigateTo(MetaRoutes.Table);
     }
 
     private void OnStateChanged()
@@ -179,8 +173,8 @@
 
         ScreenTransition transition = ScreenTransitions.Between(_screenRoute, route);
 
-        // A navigation to the route already shown, such as adding a ?meta= scenario, keeps the element, so
-        // there is no animation and the scroll position is kept.
+        // A navigation to the route already shown, such as one that changes only the query, keeps the element,
+        // so there is no animation and the scroll position is kept.
         if (transition == ScreenTransition.None)
             return;
 

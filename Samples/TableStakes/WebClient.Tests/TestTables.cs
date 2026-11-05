@@ -219,7 +219,7 @@ public static class TestTables
     private static void RunTableUntil(MatchModel model, Func<MatchModel, bool> until, int maxSteps = 8)
     {
         MatchPendingBotMove pendingBotMove = new MatchPendingBotMove();
-        TestMatchHost       host           = new TestMatchHost(model, HostSeed);
+        TestMatchHost       host           = new TestMatchHost(model, HostSeed, followOnAClientCopy: false);
 
         for (int step = 0; step < maxSteps && !until(model); step++)
             MatchHost.RunTable(model, pendingBotMove, MetaTime.Now, host);
@@ -238,7 +238,7 @@ public static class TestTables
     private static void PlayForViewer(MatchModel model)
     {
         BotDecision decision = MatchHost.DecideBotMove(model, ViewerSeat, TableSeed);
-        MatchHost.TryPlayForSeat(model, ViewerSeat, decision.Card, MetaTime.Now, new TestMatchHost(model, HostSeed));
+        MatchHost.TryPlayForSeat(model, ViewerSeat, decision.Card, MetaTime.Now, new TestMatchHost(model, HostSeed, followOnAClientCopy: false));
     }
 
     /// <summary>
@@ -247,10 +247,7 @@ public static class TestTables
     /// </summary>
     private static MatchModel DeliverViewerHand(MatchModel model)
     {
-        // TryDeliverOwnHand refuses a delivery stamped with a play index the board has not reached. Fail loudly
-        // instead of returning a table with an empty viewer hand.
-        ThrowUnlessTableReached(model.TryDeliverOwnHand(MatchHost.BuildHandDelivery(model, ViewerSeat).ToOwnHand()),
-               "the viewer's own hand was delivered");
+        model.DeliverOwnHand(new MatchOwnHand(ViewerSeat, model.Engine.GetHand(ViewerSeat)));
         return model;
     }
 

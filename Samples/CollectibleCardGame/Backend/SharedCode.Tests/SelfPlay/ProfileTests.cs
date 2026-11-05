@@ -215,8 +215,8 @@ namespace Game.Logic.Tests
                     Seat0  = SelfPlaySeats.Profile(AlwaysDeviates),
                     Seat1  = SelfPlaySeats.Profile(AlwaysDeviates),
                     Checks = SelfPlayChecks.All,
-                    // Every action of this game also runs against a follower, and the two models are
-                    // compared after each one. This is the refactor's proof, and it is on for every batch.
+                    // Every action of this game also runs against a follower, and the two models are compared
+                    // after each one.
                     MirrorOnFollower = true,
                 });
         }
@@ -269,8 +269,8 @@ namespace Game.Logic.Tests
                 Seat0             = strongSeat == 0 ? strong : weak,
                 Seat1             = strongSeat == 0 ? weak : strong,
                 Checks            = SelfPlayChecks.None,
-                    // Every action of this game also runs against a follower, and the two models are
-                    // compared after each one. This is the refactor's proof, and it is on for every batch.
+                    // Every action of this game also runs against a follower, and the two models are compared
+                    // after each one.
                     MirrorOnFollower = true,
                 DeterminismStride = 0,
             });

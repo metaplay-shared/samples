@@ -79,23 +79,4 @@ public class SpinWheelRenderTests : BunitPageTest
         Assert.That(page.FindAll("[data-testid=\"prize-details\"]"), Is.Empty);
         Assert.That(page.FindAll("[data-testid=\"odds-sheet\"]"), Is.Empty);
     }
-
-    /// <summary>
-    /// Blazor keeps the page when a navigation changes only the query, so the <c>spinMs</c> knob must be read again
-    /// when the parameters are set, not once when the page is created.
-    /// </summary>
-    [Test]
-    public void ASpinDurationKnobChangedByAQueryOnlyNavigationTakesEffect()
-    {
-        Setup("/events/spin", "spin");
-        NavigationManager nav = Services.GetRequiredService<NavigationManager>();
-
-        nav.NavigateTo("http://localhost/events/spin?meta=spin&spinMs=0");
-        IRenderedComponent<SpinWheelPage> page = RenderComponent<SpinWheelPage>();
-        Assert.That(page.FindComponent<PrizeWheel>().Instance.SpinMs, Is.EqualTo(0));
-
-        nav.NavigateTo("http://localhost/events/spin?meta=spin&spinMs=5000");
-        page.SetParametersAndRender();
-        Assert.That(page.FindComponent<PrizeWheel>().Instance.SpinMs, Is.EqualTo(5000));
-    }
 }

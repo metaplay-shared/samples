@@ -34,6 +34,7 @@ namespace Game.Logic
         public const int PlayerSetDisplayName = 5001;
         public const int PlayerClaimCardGift = 5030;
         public const int PlayerDismissCardGift = 5031;
+        public const int PlayerDevSetCardGiftProgress = 5032;
         public const int MatchDebugWin = 5140;
 
         public const int PlayerSaveDeck       = 5010;
@@ -43,6 +44,7 @@ namespace Game.Logic
         public const int PlayerSetLockSlot    = 5020;
         public const int PlayerDevSetCardRank = 5021;
         public const int PlayerSetNewcomerShieldWaived = 5022;
+        public const int PlayerDevSetAllCardRanks = 5023;
 
         // 5100-5149: the match block. The 51xx actions on the match timeline are leader-synchronized and
         // server-issued; the 511x ones are player actions. Both live in this one flat registry, which is
@@ -100,6 +102,7 @@ namespace Game.Logic
     public static class ActionResults
     {
         public static readonly MetaActionResult CardGiftNotReady = new MetaActionResult(nameof(CardGiftNotReady));
+        public static readonly MetaActionResult InvalidCardGiftProgress = new MetaActionResult(nameof(InvalidCardGiftProgress));
         public static readonly MetaActionResult InvalidDisplayName  = new MetaActionResult(nameof(InvalidDisplayName));
 
         public static readonly MetaActionResult InvalidDeckName     = new MetaActionResult(nameof(InvalidDeckName));

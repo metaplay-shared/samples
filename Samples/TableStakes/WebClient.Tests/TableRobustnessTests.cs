@@ -17,6 +17,10 @@ namespace WebClient.Tests;
 [TestFixture]
 public class TableRobustnessTests : PlaywrightPageTest
 {
+    /// <summary>Every test here runs in offline mode, so none may connect to the game server.</summary>
+    [SetUp]
+    public void ExpectOffline() => ExpectNoGameServerConnections();
+
     #region The deadline
 
     [Test]
@@ -27,8 +31,7 @@ public class TableRobustnessTests : PlaywrightPageTest
         await OpenTableAsync($"{OfflineTableUrl}&botThinkMs=0&resolvePauseMs=0&moveDeadlineMs=800");
 
         // The test does not read the viewer's hand after Playing to check the deal. The viewer's seat is the one
-        // being auto-played, and MatchHost.TryAutoPlayLapsedSeat calls OnSeatHandChanged on the first lapse, so
-        // own-hand-count and own-hand-index can change before the read. The final play count and the empty hand
+        // being auto-played, so own-hand-count can change before the read. The final play count and the empty hand
         // prove the deal size instead: four seats of five cards each reach Ended only after twenty plays.
         await Expect(Page.GetByTestId("match-phase")).ToHaveTextAsync("Ended", new() { Timeout = TurnTimeoutMs });
         await Expect(Page.GetByTestId("plays-count")).ToHaveTextAsync("20");
@@ -62,10 +65,10 @@ public class TableRobustnessTests : PlaywrightPageTest
     #region Leaving
 
     /// <summary>
-    /// The Home URL: the root of the client origin, with or without a query string. The query string is there
-    /// because <c>EnvironmentLink</c> keeps the page's <c>?env=</c> override on the link home.
+    /// The Home URL: the root of the client origin, with no query string, because in-app navigation goes to plain
+    /// paths.
     /// </summary>
-    static Regex HomeUrlPattern { get; } = new Regex(@"^https?://[^/]+/(\?.*)?$");
+    static Regex HomeUrlPattern { get; } = new Regex(@"^https?://[^/]+/$");
 
     /// <summary>
     /// The Leave button is placed inside the table's phone-width column, not against the browser window, so on a

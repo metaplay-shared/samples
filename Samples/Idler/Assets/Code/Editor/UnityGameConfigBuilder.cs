@@ -1,5 +1,3 @@
-// This file is part of Metaplay SDK which is released under the Metaplay SDK License.
-
 using System;
 using System.Collections.Generic;
 using Metaplay.Core;
@@ -146,7 +144,7 @@ namespace Metaplay.Sample
         [MenuItem("Idler/Publish Localizations/To lovely-wombats-build-nimbly.p2-eu", isValidateFunction: false, priority = 211)]
         public static async Task PublishLocalizationsToDevelopP1()
         {
-            EnvironmentConfig environmentConfig = DefaultEnvironmentConfigProvider.Instance.GetEnvironmentConfig("nimbly");
+            MetaplayUnityEditorEnvironmentConfig environmentConfig = MetaplayUnityEditorEnvironmentConfigStore.Instance.Get("nimbly");
             ConfigArchive localizationsArchive = await ConfigArchive.FromFileAsync(ServerLocalizationsPath);
             string authorizationToken = await environmentConfig.FetchAuthorizationTokenAsync();
             await BackendAdminApi.UploadLocalizationArchiveToServerAsync(environmentConfig.ClientGameConfigBuildApiConfig.AdminApiBaseUrl, localizationsArchive, authorizationToken);

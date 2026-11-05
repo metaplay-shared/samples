@@ -1,0 +1,409 @@
+/* The base styles: the display font, a short element reset, the page frame, the motion toolkit and the styles of
+   WebClientBase's components, whose classes are prefixed mp-. Plain CSS; the game's styles go in the
+   WebClient's app.css, which loads after this file.
+
+   Colours read the theme variables (--bg-primary, --text-secondary, --accent-blue, ...) that App.razor renders
+   into the head from the game's ThemeColors. */
+
+/* Text uses the system's UI font. The display face, Lilita One, is served from ../fonts/ with its SIL Open Font
+   License text: the original font, only WOFF2-compressed, as the license allows under its reserved name. */
+@font-face {
+    font-family: 'Lilita One';
+    font-display: swap;
+    src: url("../fonts/lilita-one.woff2") format("woff2");
+}
+
+/* Reset: sizes include padding and border, elements have no default spacing, headings and controls take the
+   surrounding text style, and media lay out as blocks. */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+}
+
+h1, h2, h3, button, input, select, textarea {
+    font: inherit;
+    color: inherit;
+}
+
+button {
+    border: 0;
+    background: none;
+}
+
+img, svg, video, canvas {
+    display: block;
+    max-width: 100%;
+}
+
+/* Page frame: the window never scrolls; the screen inside it does, when it has to. */
+html, body, #app {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+body {
+    font-family: system-ui, sans-serif;
+    color: var(--text-primary);
+}
+
+/* A page's root element fills this with height: 100%, so it must be a direct child of main. */
+.mp-screen {
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    /* Screens are laid out to fit; this scrolls only when the window is too small for one. */
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+/* Smooth, springy transitions */
+button {
+    transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1),
+                filter 0.12s ease,
+                box-shadow 0.15s ease,
+                background 0.15s ease,
+                opacity 0.15s ease;
+}
+
+button:active:not(:disabled) {
+    transform: scale(0.96);
+}
+
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Selection */
+::selection {
+    background: rgba(59, 130, 246, 0.3);
+}
+
+/* Blazor error UI */
+#blazor-error-ui {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: var(--accent-red, #ef4444);
+    color: white;
+    z-index: 1000;
+    font-size: 0.875rem;
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+#blazor-error-ui .reload {
+    color: white;
+    text-decoration: underline;
+    margin-left: 0.5rem;
+}
+
+/* ===========================================================================
+   Motion toolkit — reusable entrance + idle animations (Supercell-style juice)
+   Spring easing gives a slight overshoot so things "land" with weight. Keep
+   durations snappy; UIs should feel alive, never sluggish. The game UI uses them
+   via the .animate-* classes.
+   =========================================================================== */
+:root {
+    /* The theme is dark, so the browser draws focus rings, scrollbars and form controls in dark-scheme colours. */
+    color-scheme: dark;
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Chunky rounded display face for hero numbers, titles and primary CTAs.
+   Body copy stays in the system font (set on body above). */
+.font-display {
+    font-family: 'Lilita One', system-ui, sans-serif;
+    letter-spacing: 0.01em;
+}
+
+@keyframes mp-pop-in {
+    0%   { opacity: 0; transform: scale(0.85); }
+    60%  { opacity: 1; transform: scale(1.03); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes mp-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes mp-float {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-6px); }
+}
+
+@keyframes mp-pulse-glow {
+    0%, 100% { box-shadow: 0 8px 24px -6px var(--glow-color, rgba(245,197,66,0.6)),
+                           inset 0 1px 0 rgba(255,255,255,0.35); }
+    50%      { box-shadow: 0 12px 34px -4px var(--glow-color, rgba(245,197,66,0.95)),
+                           inset 0 1px 0 rgba(255,255,255,0.35); }
+}
+
+@keyframes mp-count-pop {
+    0%   { transform: scale(1.18); }
+    100% { transform: scale(1); }
+}
+
+.animate-pop-in    { animation: mp-pop-in 0.30s var(--ease-spring) both; }
+.animate-fade-in   { animation: mp-fade-in 0.20s ease both; }
+.animate-float     { animation: mp-float 4.5s ease-in-out infinite; }
+.animate-count-pop { animation: mp-count-pop 0.22s var(--ease-spring); }
+
+/* Glossy, tactile button: top highlight, solid bottom "lip" for depth, springy
+   press that sinks into the lip. Apply alongside your colour/background. */
+.btn-glossy {
+    position: relative;
+    box-shadow: 0 4px 0 rgba(0, 0, 0, 0.35),
+                0 8px 18px -6px rgba(0, 0, 0, 0.55),
+                inset 0 1px 0 rgba(255, 255, 255, 0.30);
+}
+.btn-glossy:active:not(:disabled) {
+    transform: translateY(3px) scale(0.99);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35),
+                0 3px 10px -6px rgba(0, 0, 0, 0.55),
+                inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+/* Accessibility: honour reduced-motion. Entrance animations resolve instantly
+   (both/forwards keeps the final state); idle loops are silenced. */
+@media (prefers-reduced-motion: reduce) {
+    .animate-pop-in,
+    .animate-fade-in,
+    .animate-count-pop {
+        animation-duration: 0.001s;
+    }
+    .animate-float {
+        animation: none;
+    }
+}
+
+/* ===========================================================================
+   WebClientBase's components
+   =========================================================================== */
+
+/* Buttons of the debug bar and the connection overlay. */
+.mp-button {
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    background: var(--accent-blue);
+    color: white;
+    font-weight: 500;
+}
+
+.mp-button--danger {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--accent-red);
+}
+
+/* A spinning ring in the accent colour. Reduced motion slows it down but keeps it turning, because it shows that
+   something is in progress. */
+.mp-spinner {
+    width: 1.75rem;
+    height: 1.75rem;
+    border: 3px solid var(--accent-blue);
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: mp-spin 0.75s linear infinite;
+}
+
+@keyframes mp-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mp-spinner {
+        animation-duration: 3s;
+    }
+}
+
+/* Debug bar (Layout/MainLayout.razor): floats over the game without changing its layout. pointer-events: none
+   lets clicks pass through to the game; its items re-enable them. */
+.mp-debugbar {
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.375rem;
+    height: 3rem;
+    padding: 0 1.5rem;
+    font-size: 11px;
+    pointer-events: none;
+}
+
+.mp-debugbar > * {
+    pointer-events: auto;
+}
+
+.mp-debugbar .mp-button {
+    padding: 0.25rem 0.625rem;
+    border-radius: 0.25rem;
+}
+
+.mp-debugbar__chip {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(4px);
+    color: var(--text-secondary);
+}
+
+.mp-debugbar__dot {
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+
+.mp-debugbar__dot--connected  { background: var(--accent-green); }
+.mp-debugbar__dot--connecting { background: var(--accent-amber); animation: mp-blink 2s ease-in-out infinite; }
+.mp-debugbar__dot--error      { background: var(--accent-red); }
+
+@keyframes mp-blink {
+    50% { opacity: 0.5; }
+}
+
+/* Startup splash (StartupSplash.razor): what stands in for the page until the first session has a player. */
+.mp-startup {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    width: 100%;
+    height: 100%;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+/* Connection overlay (ConnectionOverlay.razor): a modal dialog while the session is lost. */
+.mp-conn-dialog {
+    width: min(24rem, calc(100% - 2rem));
+    margin: auto;
+    padding: 1.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 1rem;
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+.mp-conn-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.6);
+}
+
+.mp-conn-dialog > * + * {
+    margin-top: 0.75rem;
+}
+
+.mp-conn-dialog .mp-spinner {
+    margin-inline: auto;
+}
+
+.mp-conn-dialog h2 {
+    color: var(--text-primary);
+    font-size: 1.375rem;
+}
+
+.mp-conn-dialog__actions {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    padding-top: 0.5rem;
+}
+
+/* The not-found and error pages. The top padding clears the debug bar. */
+.mp-page {
+    padding: 4rem 1.5rem 1.5rem;
+    color: var(--text-secondary);
+}
+
+.mp-page--centered {
+    text-align: center;
+}
+
+.mp-page h1 {
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.mp-error {
+    padding: 1.5rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    background: var(--bg-card);
+}
+
+.mp-error h1 {
+    color: var(--accent-red);
+}
+
+.mp-error__small {
+    margin-top: 1rem;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+}
+
+.mp-error code {
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    background: var(--bg-hover);
+}
+
+.mp-error section {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.mp-error h3 {
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.mp-error section .mp-error__small {
+    margin-top: 0.5rem;
+}

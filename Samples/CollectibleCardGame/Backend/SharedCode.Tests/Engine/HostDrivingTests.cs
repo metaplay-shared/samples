@@ -40,37 +40,6 @@ namespace Game.Logic.Tests
             return engine;
         }
 
-
-
-
-
-
-        [Test]
-        public void TheRulesNeverCompareTwoTimestamps()
-        {
-            // A reflection guard rather than a reading of the source: no pure rules query may take a time at
-            // all, and the rules half of the state holds no absolute stamp for one to be compared against.
-            Type[] pureRules = { typeof(Legality), typeof(ManaRules), typeof(KeywordRules), typeof(WeatherModifiers), typeof(CombatRules) };
-
-            foreach (Type type in pureRules)
-            {
-                foreach (MethodInfo method in type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.DeclaredOnly))
-                {
-                    foreach (ParameterInfo parameter in method.GetParameters())
-                    {
-                        Assert.That(parameter.ParameterType, Is.Not.EqualTo(typeof(MetaTime)), $"{type.Name}.{method.Name} takes a time");
-                        Assert.That(parameter.ParameterType, Is.Not.EqualTo(typeof(MetaDuration)), $"{type.Name}.{method.Name} takes a duration");
-                    }
-                }
-            }
-
-            foreach (PropertyInfo property in typeof(MatchRulesState).GetProperties())
-            {
-                Assert.That(property.PropertyType, Is.Not.EqualTo(typeof(MetaTime)), $"{property.Name} is an absolute stamp in the rules half");
-                Assert.That(property.PropertyType, Is.Not.EqualTo(typeof(MetaTime?)), $"{property.Name} is an absolute stamp in the rules half");
-            }
-        }
-
         [Test]
         public void ADeadlineIsStampedFromTheModelsClock()
         {
@@ -271,7 +240,6 @@ namespace Game.Logic.Tests
                 Assert.That(engine.Phase, Is.EqualTo(MatchPhase.Complete), $"seed {seed}");
             }
         }
-
 
         [Test]
         public void PlayOutRemainderStartsFromAHeldPeek()

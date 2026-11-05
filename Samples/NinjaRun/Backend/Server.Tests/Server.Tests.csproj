@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    Unit tests of the logic only the server runs, in Backend/Server, such as MapRegistryTests. It starts no server.
+  -->
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>Latest</LangVersion>

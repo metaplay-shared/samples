@@ -34,4 +34,5 @@ PushNotification:
   FirebaseCredentialsPath: "kube-secret://user-push-credentials#firebase-credentials"
 
 ClientConnection:
-  CommitIdCheckRule: OnlyIfDefined
+  CommitIdCheckRule: Disabled
+  ForwardedClientInfoSource: ProxyProtocolV2

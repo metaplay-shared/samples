@@ -25,7 +25,7 @@ The sample shows how to:
 - Author game config as CSV sheets, validate it at build time, and publish it over the air.
 - Add game-specific player data and cards to the LiveOps Dashboard through its Integration API.
 - Test the game at several layers, from unit tests to browser tests against a real server.
-- Build a server image that contains the web client, and deploy it to a cloud environment.
+- Deploy the game server and the web client to a cloud environment, with the web client on the environment's CDN.
 
 ## Browser-only client
 
@@ -37,12 +37,10 @@ stores, so it has no iOS or Android builds.
 
 ### Prerequisites
 
-- The .NET SDK version in [`Backend/global.json`](Backend/global.json), or a later feature band of the same major
+- The .NET SDK version in [`global.json`](global.json), or a later feature band of the same major
   version.
 - The [Metaplay CLI](https://github.com/metaplay/cli), for `metaplay dev server`, `metaplay dev botclient`, image
   builds and deploys.
-- The `wasm-tools` workload, only to publish the web client (`dotnet workload install wasm-tools`). A normal build
-  and `dotnet run` do not need it.
 
 The test suites have further requirements. See [`docs/testing.md`](docs/testing.md).
 
@@ -61,7 +59,7 @@ third terminal and open <http://localhost:5551>. It needs Node and pnpm at the v
 
 ### Offline mode
 
-Open <http://localhost:5290/?env=offline> with only the web client running. The browser runs the match entity
+Open <http://localhost:5290/?offline> with only the web client running. The browser runs the match entity
 in-process through the SDK's offline server, with the same game logic, bots and serializer. It is a development
 and test tool. See [`docs/web-client.md`](docs/web-client.md#offline-mode).
 
@@ -110,7 +108,7 @@ To work on the code, read [`AGENTS.md`](AGENTS.md) and [`docs/testing.md`](docs/
 
 | Doc | Covers | Metaplay features shown |
 |---|---|---|
-| [`web-client.md`](docs/web-client.md) | The Blazor WebAssembly client: environments, connection handling, serializer, offline mode, trimming, hosting and updates after a deploy | `Metaplay.Client` on `net10.0-browser`, WebSocket transport, pre-built serializer, the SDK's offline server |
+| [`web-client.md`](docs/web-client.md) | The Blazor WebAssembly client: the client service, offline mode, the table's clocks, trimming and the home-screen app | `Metaplay.Client` on `net10.0-browser`, sub-clients, the SDK's offline server |
 | [`meta-shell.md`](docs/meta-shell.md) | The screens around the card table and how they get their state | Reading `PlayerModel` and running player actions from UI code |
 
 ### Live-service features
@@ -146,19 +144,14 @@ beyond the ones listed here. Read these before copying a part of the sample into
 
 The server has not been load tested beyond small bot client runs, and it is not built for a large player count:
 
-- **The matchmaker is one entity that forms one table at a time**, so it limits how many tables the game can start.
+- **The matchmaker is one entity on one node.** Every tap of Play and every cancel in the cluster goes through its
+  queue, and it runs a fixed number of formations at once, so it limits how many tables the game can start
+  ([`matchmaking.md`](docs/matchmaking.md#the-matchmaker-entity)).
 - **Match rows are kept for good.** Nothing deletes the `Matches` table, so it grows with every game played
   ([`match.md`](docs/match.md#waking-and-retention)).
-- **The game server hosts the web client.** A real game serves its client from a CDN, so the client can be updated
-  separately from the server and a deploy does not have every player download it from the game server at once
-  ([`web-client.md`](docs/web-client.md#serving-the-client)).
 
 ### Other limits
 
-- **A changed hand is sent as a separate message to its player, tagged with a play index.** SDK 38 cannot order a
-  per-player payload against the replicated timeline, so the client holds a delivered hand until its board reaches
-  that play index. A later SDK
-  release replaces this with a per-member timeline action ([`match.md`](docs/match.md#delivering-a-hand)).
 - **There are no real payments.** Purchases use the SDK's Development platform: the client writes its own receipt,
   and the server accepts it only with development features enabled. No store or web payment provider is wired
   ([`offers.md`](docs/offers.md)).
@@ -167,28 +160,30 @@ The server has not been load tested beyond small bot client runs, and it is not 
   ([`web-client.md`](docs/web-client.md#connection-service)).
 - **The published client formats dates and numbers in the invariant culture.** It ships no ICU data. A game that
   formats per locale keeps ICU
-  ([`web-client.md`](docs/web-client.md#the-published-client)).
+  ([the published client](https://github.com/metaplay-shared/blazor-starter-project/blob/main/docs/publishing.md#the-published-client)).
 - **Offline mode is a development tool.** It cannot exercise connection loss, reconnects, disconnect grace, the
   association handshake or server restarts ([`web-client.md`](docs/web-client.md#offline-mode)).
 
 ## Project layout
 
+The project is built on the [Blazor starter project](https://github.com/metaplay-shared/blazor-starter-project): its project structure, the web client's
+base (`WebClientBase/`), the browser test harness (`run_e2e.py`) and the tools are the starter project's
+([project structure](https://github.com/metaplay-shared/blazor-starter-project/blob/main/docs/project-structure.md)). What is Table Stakes' own:
+
 | Path | Contents |
 |---|---|
 | `SharedCode/` | Game logic shared by the server and the client (namespace `Game.Logic`) |
-| `Backend/SharedCode/` | Compiles `SharedCode/` for the server against `Metaplay.Cloud` |
 | `Backend/Server/` | The game server |
 | `Backend/BotClient/` | The load-test bot client |
-| `Backend/SharedCode.Tests/`, `Backend/Server.Tests/` | NUnit unit tests |
 | `Backend/Dashboard/` | The custom LiveOps Dashboard (Vue, built on the SDK's dashboard packages) |
 | `Backend/Deployments/` | Helm values for cloud deployments |
-| `SharedCode/SharedCode.Client.csproj` | Compiles `SharedCode/` for the web client against `Metaplay.Client` |
-| `WebClientBase/` | The game-independent Blazor host, connection service and shared components |
 | `WebClient/` | The game's Blazor WebAssembly app |
 | `WebClient.Tests/` | Pure, render and browser tests for the web client |
 | `GameConfigSource/` | CSV sheets the game config is built from |
-| `tools/GameConfigGen/` | The game config build tool |
-| `tools/SerializerGen/` | Generates the pre-built serializer the web client loads |
-| `tools/ServerImageBuild.cs` | Builds the server image with the web client in it |
-| `tools/run-e2e.sh`, `tools/run-e2e.py` | The E2E test harness |
 | `docs/` | Documentation |
+
+## License
+
+Copyright Metaplay. Table Stakes is licensed under the [Apache License 2.0](LICENSE). The Metaplay SDK it builds on,
+including its dashboard packages, is licensed separately, under the Metaplay SDK License. Third-party fonts keep their
+own licenses, which are next to them.

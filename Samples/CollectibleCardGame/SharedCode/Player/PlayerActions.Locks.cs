@@ -1,6 +1,7 @@
 using Metaplay.Core;
 using Metaplay.Core.Model;
 using Metaplay.Core.Player;
+using System.Collections.Generic;
 
 namespace Game.Logic
 {
@@ -129,6 +130,54 @@ namespace Game.Logic
             if (commit)
             {
                 player.Collection[CardId] = Rank;
+                player.ClientListener.Collection?.GenericPropertyChanged(nameof(PlayerModel.Collection));
+            }
+
+            return MetaActionResult.Success;
+        }
+    }
+
+    /// <summary>
+    /// Set every unlocked card this account owns to one rank.
+    /// <para>
+    /// <b>Development-only</b>, and the batch form of <see cref="PlayerDevSetCardRank"/>: a fixture or a
+    /// playtest that needs a whole deck above the rank floor — the Heist, where only a grown card has a rank
+    /// to lose — reaches it in one action rather than a card at a time. A locked card keeps its rank, for the
+    /// single-card action's reason, and is skipped rather than refusing the batch: a lock is a choice the
+    /// account made, not a mistake in the request.
+    /// </para>
+    /// </summary>
+    [ModelAction(ActionCodes.PlayerDevSetAllCardRanks)]
+    [DevelopmentOnlyAction]
+    public class PlayerDevSetAllCardRanks : PlayerAction
+    {
+        public int Rank { get; private set; }
+
+        public PlayerDevSetAllCardRanks() { }
+
+        public PlayerDevSetAllCardRanks(int rank)
+        {
+            Rank = rank;
+        }
+
+        public override MetaActionResult Execute(PlayerModel player, bool commit)
+        {
+            GlobalConfig global = player.GameConfig.Global;
+            if (Rank < global.RankMin || Rank > global.RankMax)
+                return ActionResults.InvalidCardRank;
+
+            if (commit)
+            {
+                List<CardId> unlocked = new List<CardId>();
+                foreach (CardId cardId in player.Collection.Keys)
+                {
+                    if (!player.IsLocked(cardId))
+                        unlocked.Add(cardId);
+                }
+
+                foreach (CardId cardId in unlocked)
+                    player.Collection[cardId] = Rank;
+
                 player.ClientListener.Collection?.GenericPropertyChanged(nameof(PlayerModel.Collection));
             }
 

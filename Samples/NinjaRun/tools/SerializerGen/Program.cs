@@ -11,8 +11,8 @@ namespace Game.WebAssemblySerializerGen
     /// runtime (mono-wasm cannot generate it on the fly). Mirrors what <c>Unity/Editor/SerializerBuilder.cs</c> does
     /// for Unity player builds, but as a standalone console tool.
     ///
-    /// The WebClient build runs this automatically. To run it by hand:
-    ///   dotnet run --project tools/SerializerGen -- WebClient/Serializer
+    /// The WebClient build runs this automatically, writing under WebClient/obj/. To run it by hand:
+    ///   dotnet run --project tools/SerializerGen -- &lt;output directory&gt;
     /// </summary>
     public static class Program
     {
@@ -27,35 +27,26 @@ namespace Game.WebAssemblySerializerGen
             const string dllFileName = "Metaplay.Generated.Browser.dll";
 
             // Initialize the SDK with runtime serializer generation enabled. This scans the entry assembly's
-            // integration reference graph (which includes GameLogic, the shared game types) and populates the
+            // integration reference graph (which includes SharedCode.Client, the shared game types) and populates the
             // serializer type registry.
             MetaplayCore.ClientIntegrationAssemblies = IntegrationAssembly.FindRoots().ToList();
             MetaplayCore.InitializeForExternalApp("WebAssemblyGen");
 
             // Emit the serializer the WebClient loads at startup, by the name the browser build's engine
             // integration reports as its GeneratedSerializerAssemblyName.
+            // enableCaching:true skips the Roslyn compile when the generated source hashes the same as the .hash file
+            // next to an existing DLL, so the WebClient build can run this cheaply when no serializable type changed.
             // generateRuntimeTypeInfo:true embeds the type metadata so no runtime scanning is needed.
             // isMono / useMemberAccessTrampolines:true: the wasm interpreter enforces member accessibility, so the
             // default direct private-field access throws FieldAccessException at deserialization time (e.g. on
             // MetaActivableSet._activableStates). The trampoline path routes member access through generated accessor
             // methods instead, which the interpreter accepts. (This mirrors the Mono/IL2CPP serializer build.)
-            MetaSerializerTypeInfo scannedTypeInfo = MetaplayServices.Get<MetaSerializerTypeRegistry>().TypeInfo;
-
-            // The scanner lists types in the order it discovers them, which follows the order the build fed the
-            // SDK's source files to the compiler and so differs between Windows and Linux. The generator assigns
-            // dispatch indices in that order, so the same commit would emit a different serializer (and .hash) on
-            // each OS. Sorting by name makes the output the same everywhere; the DLL embeds its own type table and
-            // the runtime derives dispatch indices from it, so any order is valid as long as it is stable.
-            MetaDictionary<Type, MetaSerializableType> sortedSpecs = new MetaDictionary<Type, MetaSerializableType>(capacity: scannedTypeInfo.Specs.Count);
-            foreach ((Type type, MetaSerializableType spec) in scannedTypeInfo.Specs.OrderBy(entry => entry.Key.ToNamespaceQualifiedTypeString(), StringComparer.Ordinal))
-                sortedSpecs.Add(type, spec);
-            MetaSerializerTypeInfo typeInfo = new MetaSerializerTypeInfo { Specs = sortedSpecs, FullTypeHash = scannedTypeInfo.FullTypeHash };
-
+            MetaSerializerTypeInfo typeInfo = MetaplayServices.Get<MetaSerializerTypeRegistry>().TypeInfo;
             RoslynSerializerCompileCache.EnsureDllUpToDate(
                 outputDir,
                 dllFileName,
                 Path.Combine(outputDir, "Errors"),
-                true,  // enableCaching: skips the Roslyn compile when the generated source matches the .hash file
+                true,  // enableCaching
                 true,  // forceRoslyn
                 true,  // isMono
                 true,  // useMemberAccessTrampolines

@@ -1,82 +1,61 @@
 using Game.Logic;
 using Microsoft.Playwright;
-using Microsoft.Playwright.NUnit;
-using NUnit.Framework;
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
-using System.Linq;
-using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
 namespace WebClient.Tests;
 
 /// <summary>
-/// Base class for every browser fixture in this suite. It holds where the client and the server are served, the
-/// boot timeout, and the helpers that take a fixture from the menu to a seat at a table and through a game, and
-/// read what the game or a reward changed.
-/// <para>
-/// Before its first test, every fixture checks that the client on the port was built from this working tree (see
-/// <see cref="ServedClientBuildCheck"/>). The default ports are those of a hand-started <c>dotnet run</c> pair. The harness
-/// (<c>tools/run-e2e.sh</c>) gives each worktree's stack free ports in environment variables, and every page URL
-/// is built by <see cref="ClientUrl"/>, so the ports are read in one place.
-/// </para>
+/// The base of this game's browser fixtures, on top of <see cref="GamePageTest"/>: where the game server's web hosts
+/// are, the boot timeout, and the helpers that take a fixture from the menu to a seat at a table and through a game,
+/// and read what the game or a reward changed.
 /// </summary>
-public abstract class PlaywrightPageTest : PageTest
+public abstract class PlaywrightPageTest : GamePageTest
 {
-    /// <summary>
-    /// Origin of the web client, with no path and no query. Defaults to the port in
-    /// <c>WebClient/Properties/launchSettings.json</c>. Overridden by <c>TABLESTAKES_E2E_CLIENT_URL</c>.
-    /// </summary>
-    protected static readonly string ClientOrigin =
-        E2EStackPorts.ReadEnvironmentVariable("TABLESTAKES_E2E_CLIENT_URL") ?? "http://localhost:5290";
-
     /// <summary>
     /// The game server's public web host. It serves the unauthenticated test endpoints, which exist only when the
     /// server was started with <c>--TestRoutes:Enabled=true</c>. Overridden by
-    /// <c>TABLESTAKES_E2E_SERVER_PUBLIC_URL</c>.
+    /// <c>E2E_SERVER_PUBLIC_URL</c>.
     /// </summary>
-    protected static readonly string ServerPublicUrl =
-        E2EStackPorts.ReadEnvironmentVariable("TABLESTAKES_E2E_SERVER_PUBLIC_URL") ?? "http://localhost:5560";
+    protected static readonly string ServerPublicUrl = E2EStack.Setting("E2E_SERVER_PUBLIC_URL") ?? "http://localhost:5560";
 
     /// <summary>
     /// The Admin API that the LiveOps Dashboard reads. A test that asserts what an operator sees, such as a
-    /// player's event log, reads it from here. Overridden by <c>TABLESTAKES_E2E_SERVER_ADMIN_URL</c>.
+    /// player's event log, reads it from here. Overridden by <c>E2E_SERVER_ADMIN_URL</c>.
     /// </summary>
-    protected static readonly string ServerAdminUrl =
-        E2EStackPorts.ReadEnvironmentVariable("TABLESTAKES_E2E_SERVER_ADMIN_URL") ?? "http://localhost:5550";
+    protected static readonly string ServerAdminUrl = E2EStack.Setting("E2E_SERVER_ADMIN_URL") ?? "http://localhost:5550";
 
     /// <summary>
     /// The matchmaking fill wait of the server under test, in milliseconds. A fixture that has to wait out the fill
     /// wait sizes its timeout from this value, so the test asserts the same thing under any server pacing.
     /// <para>
-    /// The harness shortens the fill wait and passes its value in <c>TABLESTAKES_E2E_FILL_WAIT_MS</c>. When the
-    /// variable is not set, the server runs the shipped default. <c>Backend/Server.Tests</c> asserts that default,
-    /// so changing it on the server fails there instead of silently changing what these fixtures measure.
+    /// The harness shortens the fill wait (<c>testArgs</c> in <c>e2e.toml</c>) and passes the server's arguments in
+    /// <c>E2E_SERVER_ARGS</c>. When they set no fill wait, the server runs the shipped default.
+    /// <c>Backend/Server.Tests</c> asserts that default, so changing it on the server fails there instead of
+    /// silently changing what these fixtures measure.
     /// </para>
     /// </summary>
-    protected static readonly int FillWaitMs =
-        int.TryParse(E2EStackPorts.ReadEnvironmentVariable("TABLESTAKES_E2E_FILL_WAIT_MS"), out int exportedFillWaitMs)
-            ? exportedFillWaitMs
-            : 5000;
+    protected static readonly int FillWaitMs = ReadServerDurationMs("Matchmaking:FillWait") ?? 5000;
 
     /// <summary>
-    /// Build a page URL on the client under test from the origin, the route and the test's query. When the harness
-    /// runs the game server on non-default ports, the URL also carries the two parameters that tell the client
-    /// where to connect.
-    /// <para>
-    /// The client reads the connection parameters only at boot, so every URL a test navigates to must carry them.
-    /// In-app navigation drops them without harm because it does not reboot the client, but a reload would boot
-    /// without them. Use <see cref="ReloadOnStackAsync"/> instead of Playwright's reload for that reason.
-    /// </para>
+    /// The duration in milliseconds that the harness passed to the server for option <paramref name="key"/> (for
+    /// example <c>Matchmaking:FillWait</c>), read from <c>E2E_SERVER_ARGS</c>, or null when it passed none.
     /// </summary>
-    protected static string ClientUrl(string route = "", string? query = null)
+    private static int? ReadServerDurationMs(string key)
     {
-        string fullQuery = string.Join('&', new[] { query, E2EStackPorts.EndpointQuery }.Where(part => !string.IsNullOrEmpty(part)));
-        return fullQuery.Length == 0 ? ClientOrigin + route : $"{ClientOrigin}{route}?{fullQuery}";
+        string? serverArgs = E2EStack.Setting("E2E_SERVER_ARGS");
+        if (serverArgs == null)
+            return null;
+
+        string prefix = $"--{key}=";
+        foreach (string arg in serverArgs.Split('\n'))
+        {
+            if (arg.StartsWith(prefix, StringComparison.Ordinal))
+                return (int)Math.Round(TimeSpan.Parse(arg.Substring(prefix.Length), CultureInfo.InvariantCulture).TotalMilliseconds);
+        }
+        return null;
     }
 
     /// <summary>
@@ -110,25 +89,10 @@ public abstract class PlaywrightPageTest : PageTest
     /// The table page in offline mode: the real multiplayer entity hosted in the browser, with no game server.
     /// Offline fixtures append their timing knobs to this URL.
     /// </summary>
-    protected static readonly string OfflineTableUrl = ClientUrl("/table", "env=offline");
-
-    /// <summary>
-    /// Fail the fixture before its first test if the client under test was not built from this working tree.
-    /// </summary>
-    /// <remarks>
-    /// Static because the suite creates a fixture instance per test case (see <c>Parallelism.cs</c>), and NUnit
-    /// requires one-time setup methods to be static in that mode.
-    /// </remarks>
-    [OneTimeSetUp]
-    public static Task VerifyClientUnderTestIsThisBuild() => ServedClientBuildCheck.VerifyIsThisBuildAsync(ClientOrigin);
+    protected static readonly string OfflineTableUrl = ClientUrl("/table", "offline");
 
     /// <summary>Boot timeout. A cold WASM boot under parallel test load can take tens of seconds.</summary>
     protected const int BootTimeoutMs = 60000;
-
-    /// <summary>
-    /// The client's console errors and warnings, page exceptions and failed requests during this test.
-    /// </summary>
-    private ClientHealth.Log? _clientLog;
 
     /// <summary>
     /// The text of every console message and page error during this test, for
@@ -136,11 +100,10 @@ public abstract class PlaywrightPageTest : PageTest
     /// </summary>
     private readonly List<string> _consoleText = new List<string>();
 
-    /// <summary>Start collecting the client's output before the test navigates anywhere.</summary>
+    /// <summary>Start collecting the client's console text before the test navigates anywhere.</summary>
     [SetUp]
     public void ListenToTheClient()
     {
-        _clientLog = ClientHealth.Log.AttachTo(Page);
         Page.Console += (_, message) => AddConsoleText(message.Text);
         Page.PageError += (_, error) => AddConsoleText(error);
     }
@@ -186,40 +149,6 @@ public abstract class PlaywrightPageTest : PageTest
     protected void AssertTheSessionRanConsistencyChecks() =>
         Assert.That(ConsoleText().Any(line => line.Contains("ClientConsistencyChecks=True", StringComparison.Ordinal)), Is.True,
             "the session did not run with consistency checks on, so an empty checker log proves nothing");
-
-    /// <summary>
-    /// Fail a passing test if Blazor's error bar is showing, and print the client's output when the test fails.
-    /// <para>
-    /// The error bar means some code threw and the app stopped rendering. A test whose assertions ran before the
-    /// throw would pass, and a later test would fail with an unrelated locator timeout. The output is printed for
-    /// every failure because a boot starved of CPU also ends in the error bar, and the output shows that cause.
-    /// </para>
-    /// </summary>
-    [TearDown]
-    public async Task FailIfTheClientDied()
-    {
-        bool failed = TestContext.CurrentContext.Result.Outcome.Status == NUnit.Framework.Interfaces.TestStatus.Failed;
-        bool died   = await ClientHealth.ErrorBarRevealedAsync(Page);
-
-        if (failed || died)
-        {
-            IReadOnlyList<string> clientLogEntries = _clientLog?.Entries ?? Array.Empty<string>();
-            if (clientLogEntries.Count > 0)
-            {
-                TestContext.Out.WriteLine("[client] what the client said during this test:");
-                foreach (string entry in clientLogEntries)
-                    TestContext.Out.WriteLine("[client]   " + entry);
-            }
-        }
-
-        if (died && !failed)
-        {
-            Assert.Fail(
-                "the test passed but the client had thrown: Blazor's \"An unhandled error has occurred\" bar is " +
-                "showing, so the app stopped rendering at some point during this test. What the client said is in " +
-                "the [client] block above.");
-        }
-    }
 
     /// <summary>
     /// Wait until the shell shows the player's own state instead of the fixture it renders while the session
@@ -532,20 +461,20 @@ public abstract class PlaywrightPageTest : PageTest
     /// Play every card in the viewer's hand, one per trick, and wait until the match has ended and the results
     /// overlay is shown. Waiting for a playable card also waits out the bots' think delays and the pauses between
     /// tricks. <paramref name="playCard"/> plays one legal card, and defaults to the first one.
+    /// <paramref name="cardsInHand"/> is how many cards the hand holds now.
     /// </summary>
-    protected async Task PlayWholeHandAsync(Func<Task>? playCard = null)
+    protected async Task PlayWholeHandAsync(Func<Task>? playCard = null, int cardsInHand = 5)
     {
-        // own-hand-index is -1 until the deal reaches this client, then the play index the hand was dealt at.
-        // The loop below counts cards to confirm each tap landed. That works only if nothing else plays the
-        // viewer's cards: an expired move deadline auto-plays the seat, and an expired disconnect grace gives
-        // the seat to a bot. The E2E harness keeps both timeouts at their shipped values (tools/run-e2e.py,
-        // SANCTIONED_PACING_KEYS), and they are long enough for the loop to finish first.
-        await Expect(Page.GetByTestId("own-hand-index")).ToHaveTextAsync(new Regex(@"^\d+$"), new() { Timeout = TurnTimeoutMs });
+        // own-seat is -1 until the deal reaches this client. The loop below counts cards to confirm each tap
+        // landed. That works only if nothing else plays the viewer's cards: an expired move deadline auto-plays
+        // the seat, and an expired disconnect grace gives the seat to a bot. The E2E harness keeps both timeouts at their shipped values (testArgsAllowed
+        // in e2e.toml), and they are long enough for the loop to finish first.
+        await Expect(Page.GetByTestId("own-seat")).ToHaveTextAsync(new Regex(@"^\d+$"), new() { Timeout = TurnTimeoutMs });
 
         ILocator   handCount = Page.GetByTestId("own-hand-count");
         Func<Task> play      = playCard ?? PlayFirstLegalCardAsync;
 
-        for (int cardsLeft = 5; cardsLeft > 0; cardsLeft--)
+        for (int cardsLeft = cardsInHand; cardsLeft > 0; cardsLeft--)
         {
             await Expect(handCount).ToHaveTextAsync(cardsLeft.ToString(), new() { Timeout = TurnTimeoutMs });
 
@@ -558,7 +487,7 @@ public abstract class PlaywrightPageTest : PageTest
         await Expect(Page.GetByTestId("results-overlay")).ToBeVisibleAsync(new() { Timeout = TurnTimeoutMs });
     }
 
-    private async Task PlayFirstLegalCardAsync()
+    protected async Task PlayFirstLegalCardAsync()
     {
         ILocator card = Page.GetByTestId("legal-card").First;
         await Expect(card).ToBeVisibleAsync(new() { Timeout = TurnTimeoutMs });

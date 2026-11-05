@@ -131,7 +131,7 @@ namespace Game.Server.Match
         }
 
         /// <summary> The seats in the order they are told: the loser first, and seat order for a draw. </summary>
-        internal static int[] DeliveryOrder(MatchOutcomeRecord result)
+        public static int[] DeliveryOrder(MatchOutcomeRecord result)
         {
             int winner = result != null && !result.IsDraw && MatchSeats.IsValid(result.WinnerSeat) ? result.WinnerSeat : MatchSeats.None;
             return winner == MatchSeats.None ? new[] { 0, 1 } : new[] { MatchSeats.Other(winner), winner };

@@ -1,0 +1,28 @@
+<Solution>
+  <Folder Name="/Client/">
+    <Project Path="SharedCode/SharedCode.Client.csproj" />
+    <Project Path="WebClient/WebClient.csproj" />
+    <Project Path="WebClientBase/WebClientBase.csproj" />
+    <Project Path="WebClient.Tests/WebClient.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Server/">
+    <Project Path="Backend/BotClient/BotClient.csproj" />
+    <Project Path="Backend/Server/Server.csproj" DefaultStartup="true" />
+    <Project Path="Backend/Server.Tests/Server.Tests.csproj" />
+    <Project Path="Backend/SharedCode/SharedCode.csproj" />
+    <Project Path="Backend/SharedCode.Tests/SharedCode.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Tools/">
+    <Project Path="tools/GameConfigGen/GameConfigGen.csproj" />
+    <Project Path="tools/GameConfigGen.Tests/GameConfigGen.Tests.csproj" />
+    <Project Path="tools/SerializerGen/SerializerGen.csproj" />
+  </Folder>
+  <Folder Name="/Metaplay/">
+    <Project Path="MetaplaySDK/Backend/Attributes/Metaplay.Attributes.csproj" />
+    <Project Path="MetaplaySDK/Backend/BotClient/Metaplay.BotClient.csproj" />
+    <Project Path="MetaplaySDK/Backend/Cloud/Metaplay.Cloud.csproj" />
+    <Project Path="MetaplaySDK/Backend/Server/Metaplay.Server.csproj" />
+    <Project Path="MetaplaySDK/Backend/ServerShared/Metaplay.ServerShared.csproj" />
+    <Project Path="MetaplaySDK/Dotnet/Client/Metaplay.Client.csproj" />
+  </Folder>
+</Solution>

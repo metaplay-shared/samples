@@ -13,7 +13,8 @@ namespace WebClient.Tests;
 /// nothing on an element without a <c>tabindex</c>, so focus would stay on the inert content behind the scrim.
 /// <para>
 /// The test scans the Razor source because some dialogs are only reachable through the matchmaking queue and the
-/// property is static markup. It cannot check a <c>tabindex</c> set at runtime.
+/// property is static markup. It cannot check a <c>tabindex</c> set at runtime. A <c>&lt;dialog&gt;</c> element, such
+/// as WebClientBase's connection dialog, is left out: it opens with <c>showModal</c>, and the browser focuses it.
 /// </para>
 /// </summary>
 [TestFixture]
@@ -64,7 +65,7 @@ public class DialogFocusContractTests
             {
                 int start = source.LastIndexOf('<', match.Index);
                 int end   = source.IndexOf('>', match.Index);
-                if (start < 0 || end < 0)
+                if (start < 0 || end < 0 || source.AsSpan(start).StartsWith("<dialog"))
                     continue;
 
                 string relative = Path.GetRelativePath(CssSource.RepoRoot().FullName, file).Replace('\\', '/');

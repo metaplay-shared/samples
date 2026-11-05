@@ -6,9 +6,9 @@ server holds no animation, so the client paces every beat itself.
 
 ## Shape
 
-`ClientBase/` is the game-agnostic half — connection lifecycle, the connection-trouble app shell, environment selection,
-theme, UI primitives. `Client/` is Sticky Paws: the board, the collection, the Heist. Anything that knows a card from a
-clan lives in `Client/`.
+`WebClient/` is Sticky Paws: the board, the collection, the Heist. It is built on the Blazor starter project's
+`WebClientBase/`, which holds the connection handling, the startup splash and the base styles. Anything that knows a
+card from a clan lives in `WebClient/`.
 
 The screens:
 
@@ -327,50 +327,16 @@ own match-gone notice. **The client never skips the Heist**: it is what makes le
 
 ## When the connection drops
 
-A server-authoritative board is dangerous when the connection dies, because it stays on screen looking interactive while
-every press goes nowhere — and here the turn deadline is running the whole time, so the player is not merely confused,
-they are losing the turn. The client closes this at the **app shell**, not per screen: the shell watches the transport's
-own health and raises a modal that takes input away from the whole app. The board never checks connection state.
+A server-authoritative board is dangerous when the connection dies, because it stays on screen looking interactive
+while presses go nowhere, and the turn deadline keeps running. The client takes the starter project's
+[connection handling](https://github.com/metaplay-shared/blazor-starter-project/blob/main/docs/web-client.md#connection-handling):
+a lost session is a modal dialog over the whole app, so the board never checks connection state. The client reconnects
+on its own when the SDK recommends it, and a session taken over by another tab offers **Play here** rather than
+reconnecting on its own. The status line in the session menu and the board's pill read Connected, Connecting…,
+Unhealthy, Connection lost or Offline.
 
-**One connection UI, and it belongs to the shell.** A screen that renders its own connecting spinner and its own retry
-button does not add reassurance; it contradicts the shell, and its copy is the one the player never sees, because the
-shell renders over it. A hidden "Try Again" wired to a reconnect is one layout change away from a kick loop. A screen
-renders the data it has or says it has none, and nothing else.
-
-**Health, not connection state, is the signal.** A socket that dies inside a live session leaves the SDK still reporting
-a connection while it spends its resume budget trying to get the same session back. Waiting that out is exactly the
-failure this exists to prevent, so what the shell reads is the connection's health, which the SDK clears the moment the
-transport is gone.
-
-**A cold start is not an outage until it gives up.** Until a session has started once there is nothing to have lost,
-so the screen's own loading state is the honest thing to show; a first connection that exhausts its retries raises the
-shell's "Can't reach the server" modal with **Try again**. The status line in the session menu reads Connected,
-Connecting…, Connection lost or Offline, and there is no Reconnect anywhere but the shell's own modal.
-
-Four cases, because they are not the same event:
-
-- **A backgrounded tab is not an outage.** The browser throttles the client's update pump when the player switches away,
-  so the link often lapses through nobody's fault and heals a beat after they return. For a short window after the tab
-  regains focus, a lost link shows as a quiet pill and retries at once, rather than as a modal that reads like an error
-  for what was really a resume.
-- **A second tab is terminal.** Two tabs on the same browser profile log in as the same player and the newer session
-  force-terminates the older. An older tab that auto-reconnected would kick the newer one, whose reconnect would kick it
-  back, forever. So a session lost this way is not retried: the tab parks with a notice and an explicit "use this tab
-  instead", and it offers to take the session back, because the newer tab may already be closed and a dead page with no
-  way on is worse than a player who chooses which tab wins. What it must never do is choose for them.
-- **A desync is its own reason.** The replicated model diverging from the server's is recoverable — the SDK drops the
-  entity and pulls fresh state — and reads as "re-syncing your match", not as a network error. A desync is a bug, so the
-  member-level detail belongs in a server-side report and never in the player's face; in development the match checksums
-  every operation, so the diff is logged at the operation that diverged rather than arriving later as a mystery
-  reconnect.
-- **Everything else** is a plain link loss: a bounded retry loop, then a manual retry.
-
-The SDK has **no error of its own** for the desync case. A mid-session mismatch on a *multiplayer entity's* timeline
-goes through a default handler that closes the connection with a generic terminal error, which is wrong in both halves:
-a shell classifying it reports an unreachable server, and *terminal* stops the reconnect that would fetch the fresh
-copy. The game names it instead, as a transient error the shell recognizes — otherwise the one desync route this design
-most expects is the one route that reads as an outage. A mismatch can come from a rules divergence as well as a
-transport fault, so the game expects to meet it in development.
+What a loss means for the match is the game's own: the seat is held on a grace timer, and a bot covers it after that
+until the player reconnects ([`match.md`](match.md#when-players-stop-playing)).
 
 ## The board is never simulated locally
 
@@ -384,10 +350,9 @@ disagrees with the server's the session ends rather than the board drifting.
 
 Nothing here is observed by chance. The pure functions the client leans on — deck legality and Power Score, the hand
 fan's geometry, which of a loser's played cards a Heist lineup offers, what the searching dialog says for a given status
-and how its countdown rounds, and the shell's classification of a connection failure into the four cases above — are
-unit tested away from the browser. Everything else is Playwright against a live server, with the client's beat knob
-forced so a test watches an animation instead of racing it, and the match's own deadlines driven through the server's
-timing options rather than by waiting.
+and how its countdown rounds — are unit tested away from the browser. Everything else is Playwright against a live
+server, with the client's beat knob forced so a test watches an animation instead of racing it, and the match's own
+deadlines driven through the server's timing options rather than by waiting.
 
 ## See also
 

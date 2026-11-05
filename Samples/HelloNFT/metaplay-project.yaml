@@ -1,11 +1,11 @@
 # Configure schema to use.
-# yaml-language-server: $schema=../../MetaplaySDK/projectConfigSchema.json
-$schema: "../../MetaplaySDK/projectConfigSchema.json"
+# yaml-language-server: $schema=MetaplaySDK/projectConfigSchema.json
+$schema: "MetaplaySDK/projectConfigSchema.json"
 
 # Configure project.
 projectID: green-eagles-cheat
-buildRootDir: ../..
-sdkRootDir: ../../MetaplaySDK
+buildRootDir: .
+sdkRootDir: MetaplaySDK
 backendDir: Backend
 sharedCodeDir: Assets/SharedCode
 unityProjectDir: .

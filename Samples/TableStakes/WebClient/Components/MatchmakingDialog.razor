@@ -43,58 +43,12 @@
 
 @code {
     /// <summary>
-    /// How often the countdown is checked. The deadline is an absolute timestamp and no server update fires
-    /// as it approaches, so a timer drives the repaint.
+    /// Subscribes to the client service, which raises <c>OnStateChanged</c> on every frame while connected, so the
+    /// countdown to the seating deadline, which no server update marks, moves on its own.
     /// </summary>
-    private static readonly TimeSpan TickInterval = TimeSpan.FromMilliseconds(200);
-
-    /// <summary>
-    /// The repaint timer, or null when matchmaking is not running. The component stays mounted for as long as
-    /// its page, so the timer runs only during a wait to avoid waking the client for nothing.
-    /// </summary>
-    private RepaintTicker? _ticker;
-
-    /// <summary>The seconds value last rendered, so a tick with the same value skips the render.</summary>
-    private int _shownSeconds = -1;
-
     protected override void OnInitialized()
     {
         MetaplayService.OnStateChanged += OnStateChanged;
-
-        // Matchmaking can already be running when the component mounts, for example when a session starts
-        // while a match is still forming.
-        SyncTicker();
-    }
-
-    /// <summary>
-    /// Starts the timer when matchmaking starts and stops it when matchmaking ends. Both transitions raise
-    /// MetaplayClientService.OnStateChanged, which calls this.
-    /// </summary>
-    private void SyncTicker()
-    {
-        bool waiting = MetaplayService.IsMatchmaking;
-
-        if (waiting && _ticker == null)
-        {
-            _shownSeconds = -1;
-            _ticker = RepaintTicker.Start(TickInterval, TryAdvanceShownSecond, () => InvokeAsync(StateHasChanged));
-        }
-        else if (!waiting && _ticker != null)
-        {
-            _ticker.Dispose();
-            _ticker = null;
-        }
-    }
-
-    /// <summary>Whether the countdown has reached a different second from the one on screen.</summary>
-    private bool TryAdvanceShownSecond()
-    {
-        int seconds = MatchmakingWaitText.SecondsShown(Remaining);
-        if (seconds == _shownSeconds)
-            return false;
-
-        _shownSeconds = seconds;
-        return true;
     }
 
     /// <summary>
@@ -116,11 +70,7 @@
         }
     }
 
-    private void OnStateChanged()
-    {
-        SyncTicker();
-        InvokeAsync(StateHasChanged);
-    }
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
 
     /// <summary>
     /// Asks the server to cancel matchmaking. The dialog closes only when the server confirms, because the
@@ -131,7 +81,5 @@
     public void Dispose()
     {
         MetaplayService.OnStateChanged -= OnStateChanged;
-        _ticker?.Dispose();
-        _ticker = null;
     }
 }

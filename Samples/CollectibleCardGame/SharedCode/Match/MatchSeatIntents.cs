@@ -10,6 +10,7 @@ namespace Game.Logic
         public const int Leave     = 1;
         public const int HeistPick = 3;
         public const int DebugWin  = 4;
+        public const int DebugLapseDeadline = 5;
     }
 
     /// <summary>
@@ -26,6 +27,15 @@ namespace Game.Logic
     /// <summary> Ask the server to finish a developer player's match and open a real Heist. </summary>
     [MetaSerializableDerived(MatchSeatIntentCodes.DebugWin)]
     public class DebugWinMatchIntent : MatchSeatIntent { }
+
+    /// <summary>
+    /// Ask the server to lapse the deadline in force now, for a developer player: the table does what it would
+    /// have done when the clock ran out. Any seat may send it, whoever the deadline is for, so a test can lapse
+    /// the other seat's turn without that seat sending anything — an intent from a seat counts as it being
+    /// present.
+    /// </summary>
+    [MetaSerializableDerived(MatchSeatIntentCodes.DebugLapseDeadline)]
+    public class DebugLapseDeadlineIntent : MatchSeatIntent { }
 
     /// <summary>
     /// Leave the table. Conceding is the same thing: a disconnect that skips grace. The game is still played

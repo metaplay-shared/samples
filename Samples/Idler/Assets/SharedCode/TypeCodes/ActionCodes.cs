@@ -1,5 +1,3 @@
-// This file is part of Metaplay SDK which is released under the Metaplay SDK License.
-
 namespace Game.Logic.TypeCodes
 {
     public static class ActionCodes

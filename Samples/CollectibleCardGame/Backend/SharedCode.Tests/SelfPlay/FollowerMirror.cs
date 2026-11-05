@@ -44,11 +44,9 @@ namespace Game.Logic.Tests
         /// <summary>
         /// Every action type any mirror in this test run has actually executed against a follower.
         /// <para>
-        /// This exists so the coverage can be asserted rather than assumed, and it is assumed easily: the
-        /// first version of this harness mirrored five of fifteen actions and read as though it mirrored all
-        /// of them, because every mirrored game was dealt at zero timings and the actions that only exist
-        /// under a clock — a released beat, a lapsed mulligan, a reserve extension — were unreachable.
-        /// <see cref="FollowerMirrorCoverageTests"/> turns this set into the ratchet: a sixteenth action
+        /// This exists so the coverage can be asserted rather than assumed: a game dealt at zero timings never
+        /// reaches the actions that only exist under a clock — a released beat, a lapsed mulligan, a reserve
+        /// extension. <see cref="FollowerMirrorCoverageTests"/> turns this set into the ratchet: a new action
         /// cannot join the block without a mirrored path that runs it.
         /// </para>
         /// </summary>

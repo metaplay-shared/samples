@@ -1,4 +1,5 @@
 using Game.Logic;
+using Game.Logic.Tests;
 using Game.Server.Matchmaking;
 using NUnit.Framework;
 

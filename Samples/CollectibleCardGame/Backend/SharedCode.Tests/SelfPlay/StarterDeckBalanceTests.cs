@@ -1,3 +1,4 @@
+using Metaplay.Core;
 using NUnit.Framework;
 using System.Collections.Generic;
 using System.Text;
@@ -37,45 +38,14 @@ namespace Game.Logic.Tests
         static SharedGameConfig Config => TestGameConfig.Shared;
 
         /// <summary>
-        /// The tolerance a deck's whole row has to sit inside, wide at the standard size because the sample
-        /// is small there and narrower at the deep size where it is not.
-        /// <para>
-        /// <b>These are set from the first measurement rather than from arithmetic.</b> The 2026-09-09
-        /// baseline (N=200, 6,000 games, row sd ≈ 1.1 pp) reads FireAndFoam 46 %, SunlitThicket 57 %,
-        /// AlleySparks 37 %, PorchlightPack 34 %, RiverbankPatience 64 %, EmberAndOak 59 % — so three rows sit
-        /// twelve to sixteen points off even, by ten standard deviations or more. That is content, not noise:
-        /// the pool is authored to cover the effect vocabulary rather than to be balanced
-        /// (<c>Docs/game-design.md</c>), six decks that differ in twelve cards of twenty-five cannot be made even
-        /// by choosing which Wanderers to drop, and a real balance pass is not built.
-        /// </para>
-        /// <para>
-        /// So what these pins buy is the one thing worth having before that pass: <b>no deck is hopeless</b>.
-        /// A row outside them is a deck losing four games in five — a curve that cannot deploy, a clan pair
-        /// with no answer to anything — which is a content bug rather than a balance question. Tighten them
-        /// against the recorded matrix when the balance pass lands, not before.
-        /// </para>
-        /// <para>
-        /// <b>What these pins guard is card stats and the engine, not deck authoring.</b> Measured, not
-        /// argued: the authoring space for one starter deck is which two of twenty-seven cards to leave out —
-        /// six collectibles per clan × two clans plus fifteen starter Wanderers, against a deck size of
-        /// twenty-five — and the largest legal edit that space allows moves a row by about five points, which
-        /// is nine to eleven points inside the floor. So no edit to <c>StarterDecks.csv</c> alone can fail
-        /// this test, and nobody should read a green run as sign-off on a re-authored deck. A card-level
-        /// regression does fail it. <b>Diffing a fresh print of the matrix against the previous one is the only
-        /// thing that catches a deck-authoring regression, and it catches it by being read — not by failing.</b>
-        /// </para>
+        /// The tolerance a deck's whole row has to sit inside: no deck is hopeless. It is wide at the standard
+        /// size because the sample is small there, and narrower at the deep size where it is not.
         /// </summary>
         static int RowTolerancePercentagePoints => SelfPlayRun.IsDeep ? 25 : 35;
 
         /// <summary>
-        /// The tolerance one cell has to sit inside, asserted only at the deep size. At the standard size a
-        /// pair is 24 games and three standard deviations is 30 pp — wider than any useful pin — so a
-        /// 24-game cell is allowed to say nothing rather than to fail at random.
-        /// <para>
-        /// The 2026-09-09 baseline's widest cells are RiverbankPatience 74 % over AlleySparks and EmberAndOak
-        /// 73 % over PorchlightPack, at a cell sd of 2.5 pp. Thirty-five points leaves four standard
-        /// deviations of headroom over those and still catches a nine-in-ten matchup.
-        /// </para>
+        /// The tolerance one cell has to sit inside, asserted only at the deep size: a pair at the standard size
+        /// is 24 games, whose three standard deviations are wider than any useful pin.
         /// </summary>
         const int CellTolerancePercentagePoints = 35;
 
@@ -119,6 +89,32 @@ namespace Game.Logic.Tests
             }
         }
 
+        [Test]
+        public void EveryStarterDeckCostsTheSame()
+        {
+            // The one authored invariant the six decks share: the same total cost, so the matrix measures what
+            // the cards do rather than what they cost. Clan halves are not equal, so each deck drops the two
+            // Wanderers that cancel its own clan pair's skew.
+            List<int> costs = new List<int>();
+            foreach (StarterDeckInfo deck in Config.StarterDecks.Values)
+            {
+                int cost = 0;
+                foreach (MetaRef<CardInfo> card in deck.Cards)
+                    cost += card.Ref.Cost;
+                costs.Add(cost);
+            }
+
+            Assert.That(costs, Has.All.EqualTo(costs[0]), string.Join(", ", costs));
+        }
+
+        // The 2026-09-09 baseline (N=200, 6,000 games, row sd about 1.1 pp) reads FireAndFoam 46 %, SunlitThicket
+        // 57 %, AlleySparks 37 %, PorchlightPack 34 %, RiverbankPatience 64 % and EmberAndOak 59 %; the widest
+        // cells are RiverbankPatience 74 % over AlleySparks and EmberAndOak 73 % over PorchlightPack (cell sd
+        // 2.5 pp). Three rows sit twelve to sixteen points off even. That is content, not noise: the pool is
+        // authored to cover the effect vocabulary rather than to be balanced (Docs/game-design.md), so the
+        // tolerances above only say no deck is hopeless — tighten them when a balance pass lands. The largest
+        // legal edit to StarterDecks.csv moves a row by about five points, so no deck edit alone can fail the
+        // guardrail: diffing a fresh print against the previous one is what catches a deck-authoring regression.
         [Test, Explicit("Prints the matrix; ~6,000 games. Run it after any content edit and diff the table "
             + "against the previous print — a deck edit cannot fail the guardrail, so this print is "
             + "what catches one.")]

@@ -1,4 +1,3 @@
-// This file is part of Metaplay SDK which is released under the Metaplay SDK License.
 // Import the integration API.
 import { setGameSpecificInitialization } from '@metaplay/core'
 

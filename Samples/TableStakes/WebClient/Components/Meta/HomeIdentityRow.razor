@@ -47,5 +47,5 @@
 
     private bool WearsBadge => Badged ?? BadgePolicy.ShouldBadge(BadgeTarget.Profile, Snapshot, Meta.Seen);
 
-    private void OpenProfile() => EnvironmentLink.NavigateTo(Navigation, MetaRoutes.Profile);
+    private void OpenProfile() => Navigation.NavigateTo(MetaRoutes.Profile);
 }

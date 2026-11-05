@@ -21,8 +21,7 @@ namespace Game.Logic.Tests
     /// purpose: answering it needs the secret, so no client could ask it, and production never does — the
     /// rules branch on public counts and on <see cref="CardInstance.Place"/>.
     /// <para>
-    /// It is what the old <c>CardZone</c> was, reassembled from the two halves the refactor split it into:
-    /// the seat's secret lists for the hidden zones, the public entry for the rest.
+    /// It reads the seat's secret lists for the hidden zones and the public entry for the rest.
     /// </para>
     /// </summary>
     public static class AuthorityZones

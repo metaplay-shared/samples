@@ -1,5 +1,3 @@
-// This file is part of Metaplay SDK which is released under the Metaplay SDK License.
-
 #if UNITY_WEBGL && !UNITY_EDITOR
 #define UNITY_WEBGL_BUILD
 #endif

@@ -1,0 +1,19 @@
+<Project>
+ <!-- The MSBuild configuration of all of this sample's projects: the backend, the web client, the shared game code and
+      the tools. The server image build copies this file along with Backend/. -->
+ <PropertyGroup>
+   <MetaplaySDKPath>$(MSBuildThisFileDirectory)MetaplaySDK</MetaplaySDKPath>
+   <SharedCodePath>$(MSBuildThisFileDirectory)SharedCode</SharedCodePath>
+   <MetaplayClientPath>$(MetaplaySDKPath)/Client</MetaplayClientPath>
+   <MetaplayServerPath>$(MetaplaySDKPath)/Backend</MetaplayServerPath>
+ </PropertyGroup>
+ <!-- Make paths relative to project -->
+ <PropertyGroup>
+   <SharedCodePath>$([MSBuild]::MakeRelative($(MSBuildProjectDirectory), $(SharedCodePath)))</SharedCodePath>
+   <MetaplayClientPath>$([MSBuild]::MakeRelative($(MSBuildProjectDirectory), $(MetaplayClientPath)))</MetaplayClientPath>
+   <MetaplayServerPath>$([MSBuild]::MakeRelative($(MSBuildProjectDirectory), $(MetaplayServerPath)))</MetaplayServerPath>
+ </PropertyGroup>
+
+ <!-- The Metaplay analyzers and source generators, as the SDK's prebuilt DLLs. -->
+ <Import Project="$(MetaplaySDKPath)/Backend/Metaplay.Analyzers.targets" />
+</Project>

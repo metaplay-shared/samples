@@ -165,7 +165,7 @@ namespace Game.Logic
     }
 
     /// <summary>
-    /// The hand delivered to one client, and the play index at which it was read.
+    /// The hand dealt to one client.
     /// <para>
     /// It exists only on a client. The host reads hands from the engine and has no own seat.
     /// </para>
@@ -178,59 +178,15 @@ namespace Game.Logic
         /// <summary>The cards as delivered. The current hand is these minus the cards the board shows as played.</summary>
         [MetaMember(2)] List<Card> _cards;
 
-        /// <summary>The play index at which the hand was read. The client applies it only when its board reaches this index.</summary>
-        [MetaMember(3)] public int PlayIndex { get; private set; }
-
         MatchOwnHand() { }
 
-        public MatchOwnHand(int seat, IReadOnlyList<Card> cards, int playIndex)
+        public MatchOwnHand(int seat, IReadOnlyList<Card> cards)
         {
-            Seat      = seat;
-            _cards    = new List<Card>(cards);
-            PlayIndex = playIndex;
+            Seat   = seat;
+            _cards = new List<Card>(cards);
         }
 
         public IReadOnlyList<Card> Cards => _cards;
-    }
-
-    /// <summary>
-    /// Client callbacks for match timeline events. The host uses <see cref="EmptyMatchModelClientListener"/>.
-    /// </summary>
-    public interface IMatchModelClientListener
-    {
-        void OnCardPlayed(int seat, Card card);
-        void OnTrickResolved(int winnerSeat);
-        void OnMatchEnded();
-    }
-
-    public sealed class EmptyMatchModelClientListener : IMatchModelClientListener
-    {
-        public static readonly EmptyMatchModelClientListener Instance = new EmptyMatchModelClientListener();
-
-        public void OnCardPlayed(int seat, Card card) { }
-        public void OnTrickResolved(int winnerSeat) { }
-        public void OnMatchEnded() { }
-    }
-
-    /// <summary>
-    /// Copies <see cref="MatchModel.ClientListener"/> to the model copies that the SDK's client journal makes. The
-    /// property is <see cref="IgnoreDataMemberAttribute"/>, so without this the first copy would lose it and the
-    /// UI would stop receiving events.
-    /// </summary>
-    public class MatchModelRuntimeData : MultiplayerModelRuntimeDataBase<MatchModel>
-    {
-        readonly IMatchModelClientListener _clientListener;
-
-        public MatchModelRuntimeData(MatchModel instance) : base(instance)
-        {
-            _clientListener = instance.ClientListener;
-        }
-
-        public override void CopySideEffectListenersTo(MatchModel instance)
-        {
-            base.CopySideEffectListenersTo(instance);
-            instance.ClientListener = _clientListener;
-        }
     }
 
     /// <summary>
@@ -280,8 +236,7 @@ namespace Game.Logic
         [MetaMember(14), ServerOnly] List<BotProfile> _seatBotProfiles;
 
         /// <summary>
-        /// The viewing client's own hand. It exists only on a client, set from the subscribe's private state and
-        /// from <see cref="MatchHandDelivered"/> messages.
+        /// The viewing client's own hand. It exists only on a client, set from the subscribe's private state.
         /// <para>
         /// It is marked ServerOnly even though only clients set it, because that keeps it out of the checksum.
         /// Each client holds a different hand but must compute the same checksum.
@@ -337,14 +292,10 @@ namespace Game.Logic
         /// </summary>
         [MetaMember(13)] public MetaTime DealtAt { get; private set; }
 
-        [IgnoreDataMember] public IMatchModelClientListener ClientListener { get; set; } = EmptyMatchModelClientListener.Instance;
-
         /// <summary>One rather than zero because the SDK divides by it to compute model time. The model does not tick.</summary>
         [IgnoreDataMember] public override int TicksPerSecond => 1;
 
         public MatchModel() { }
-
-        public override IModelRuntimeData<MatchModel> GetRuntimeData() => new MatchModelRuntimeData(this);
 
         /// <summary>Does nothing. Messages and host timers drive the match.</summary>
         public override void OnTick() { }
@@ -404,12 +355,10 @@ namespace Game.Logic
         /// <summary>This client's seat, or -1 before a hand has been delivered.</summary>
         public int OwnSeat => _ownHand?.Seat ?? -1;
 
-        /// <summary>The play index of the applied hand delivery, or -1 if none has been applied.</summary>
-        public int OwnHandDeliveredAtPlayIndex => _ownHand?.PlayIndex ?? -1;
-
         /// <summary>
-        /// The cards this client still holds: the delivered hand minus the cards the board shows as played.
-        /// Computing it this way means applying the same delivery twice gives the same hand.
+        /// The cards this client still holds: the delivered hand minus the cards the board shows as played. A hand
+        /// changes only through public plays, so a bot's or a deadline's play of this seat's card needs no new
+        /// delivery.
         /// </summary>
         public List<Card> GetOwnHand()
         {
@@ -434,27 +383,14 @@ namespace Game.Logic
             return MatchSeatView.FromBoard(_board, seat, GetOwnHand());
         }
 
-        /// <summary>
-        /// Apply a hand from the subscribe's private state or a <see cref="MatchHandDelivered"/> message, once the
-        /// board has reached the hand's play index. An entity message can arrive before the timeline update that
-        /// caused it (see <see cref="MatchHandDelivered"/>), so the play index decides, not the arrival order.
-        /// </summary>
-        /// <returns>
-        /// Whether the hand was applied. When it returns false, the caller keeps the hand and retries as the board
-        /// advances.
-        /// </returns>
-        public bool TryDeliverOwnHand(MatchOwnHand hand)
+        /// <summary>Set the hand from the subscribe's private state.</summary>
+        public void DeliverOwnHand(MatchOwnHand hand)
         {
             if (hand == null)
                 throw new ArgumentNullException(nameof(hand));
             MatchRules.ThrowIfInvalidSeat(hand.Seat);
 
-            if (_board == null || _board.PlayIndex < hand.PlayIndex)
-                return false;
-
-            // Replace the local hand completely, so a wrong local hand is corrected rather than merged.
             _ownHand = hand;
-            return true;
         }
 
         #endregion
@@ -564,7 +500,7 @@ namespace Game.Logic
             if (seat < 0 || _engine == null)
                 return null;
 
-            return new MatchMemberPrivateState(memberId, seat, _engine.GetHand(seat), _board.PlayIndex);
+            return new MatchMemberPrivateState(memberId, seat, _engine.GetHand(seat));
         }
 
         #endregion
@@ -628,25 +564,21 @@ namespace Game.Logic
 
         [MetaMember(2)] List<Card> _hand;
 
-        /// <summary>The play index at which the hand was read. See <see cref="MatchModel.TryDeliverOwnHand"/>.</summary>
-        [MetaMember(3)] public int PlayIndex { get; private set; }
-
         MatchMemberPrivateState() { }
 
-        public MatchMemberPrivateState(EntityId memberId, int seat, IReadOnlyList<Card> hand, int playIndex) : base(memberId)
+        public MatchMemberPrivateState(EntityId memberId, int seat, IReadOnlyList<Card> hand) : base(memberId)
         {
-            Seat      = seat;
-            _hand     = new List<Card>(hand);
-            PlayIndex = playIndex;
+            Seat  = seat;
+            _hand = new List<Card>(hand);
         }
 
         public IReadOnlyList<Card> Hand => _hand;
 
-        public MatchOwnHand ToOwnHand() => new MatchOwnHand(Seat, _hand, PlayIndex);
+        public MatchOwnHand ToOwnHand() => new MatchOwnHand(Seat, _hand);
 
         public override void ApplyToModel(IModel model)
         {
-            ((MatchModel)model).TryDeliverOwnHand(ToOwnHand());
+            ((MatchModel)model).DeliverOwnHand(ToOwnHand());
         }
     }
 }

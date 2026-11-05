@@ -43,8 +43,8 @@ namespace Game.Logic.Tests
                         Seat0             = SelfPlaySeats.Strongest,
                         Seat1             = SelfPlaySeats.Profile(BotProfile.Casual),
                         Checks            = SelfPlayChecks.None,
-                    // Every action of this game also runs against a follower, and the two models are
-                    // compared after each one. This is the refactor's proof, and it is on for every batch.
+                    // Every action of this game also runs against a follower, and the two models are compared
+                    // after each one.
                     MirrorOnFollower = true,
                         DeterminismStride = 0,
                         OnDecisionPoint   = (engine, seat) =>

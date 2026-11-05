@@ -55,7 +55,7 @@ namespace Game.Logic
     /// <para>
     /// <b>It must not touch the checksummed model.</b> The server executes a no-op in its place, so any public
     /// mutation here is a mutation the other seat never makes. Only per-viewer state may move — in this game
-    /// <see cref="MatchModel.OwnHand"/>, which is not serialized and therefore out of the checksum. A
+    /// <see cref="MatchModel.OwnHand"/>, which is <c>ServerOnly</c> and therefore out of the checksum. A
     /// violation surfaces as a checksum mismatch on the recipient rather than as silent drift.
     /// </para>
     /// </summary>

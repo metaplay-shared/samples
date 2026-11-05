@@ -5,8 +5,8 @@ import { clickMButton, expect, test } from '@metaplay/playwright-config'
  * the starter collection at `Global.RankMin`, `Record.RankedMatchesPlayed` at zero, no waiver, no saved decks
  * and no remembered deck. Every assertion here is against that known start, so no match is needed.
  *
- * This suite runs against the **built** dashboard served by the game server on 5550 (+
- * `STICKYPAWS_PORT_OFFSET`), not against vite — vite is pinned to 5551 `strictPort` in a file the dashboard
+ * This suite runs against the **built** dashboard served by the game server's Admin API (5550, or the
+ * port in `DASHBOARD_BASE_URL`), not against vite — vite is pinned to 5551 `strictPort` in a file the dashboard
  * sync tool owns. See `AGENTS.md`, "Tests".
  */
 test.describe('Newcomer shield card', () => {
@@ -47,8 +47,7 @@ test.describe('Newcomer shield card', () => {
     // The callout is about a shield that still decides something, so it goes when the waiver lands.
     await expect(card.getByTestId('shield-both-seats-callout')).toBeHidden()
 
-    // And back. This is the direction the SDK's generated modal could not do before this wave: its form
-    // opened on `false` for every account, so `false` was refused as "No changes to Save."
+    // And back. Restoring is the direction a form seeded with `false` would refuse as "No changes to Save."
     await clickMButton(card.getByTestId('shield-toggle-button'))
     await clickMButton(page.getByTestId('shield-toggle-modal-ok-button'))
     await expect(card.getByTestId('shield-state-badge')).toHaveText('Shielded')

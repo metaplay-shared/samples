@@ -53,6 +53,16 @@ public class ThemeColors
     public string AccentBlue { get; set; } = "#3b82f6";
 
     /// <summary>
+    /// Green accent color.
+    /// </summary>
+    public string AccentGreen { get; set; } = "#22c55e";
+
+    /// <summary>
+    /// Amber accent color.
+    /// </summary>
+    public string AccentAmber { get; set; } = "#f59e0b";
+
+    /// <summary>
     /// Red accent color.
     /// </summary>
     public string AccentRed { get; set; } = "#ef4444";
@@ -73,6 +83,8 @@ public class ThemeColors
         sb.AppendLine($"    --text-secondary: {TextSecondary};");
         sb.AppendLine($"    --text-muted: {TextMuted};");
         sb.AppendLine($"    --accent-blue: {AccentBlue};");
+        sb.AppendLine($"    --accent-green: {AccentGreen};");
+        sb.AppendLine($"    --accent-amber: {AccentAmber};");
         sb.AppendLine($"    --accent-red: {AccentRed};");
         sb.AppendLine("}");
         return sb.ToString();

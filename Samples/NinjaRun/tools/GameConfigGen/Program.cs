@@ -14,11 +14,28 @@ namespace Game.GameConfigGen
     /// Builds the game config archives from the files in <c>GameConfigSource/</c> (one CSV sheet per config
     /// entry, or one JSON file for an entry a sheet cannot hold) and writes both copies:
     /// <list type="bullet">
-    /// <item><c>Backend/Server/GameConfig/StaticGameConfig.mpa</c>: what the server boots from.</item>
-    /// <item><c>WebClient/wwwroot/Assets/SharedGameConfig.mpa</c>: the built-in archive offline mode serves.</item>
+    /// <item><c>Backend/Server/GameConfig/StaticGameConfig.mpa</c> — what the server boots from.</item>
+    /// <item><c>WebClient/wwwroot/Assets/SharedGameConfig.mpa</c> — the built-in archive offline mode serves.</item>
     /// </list>
-    /// Run from the repo root whenever a sheet or a config class changes. A build with any error-level message
-    /// writes nothing and exits non-zero. <c>--dry-run</c> is the same build with nothing written.
+    /// The server has to boot from an archive on disk, so both are checked in and this is what regenerates
+    /// them. Run from the repo root, whenever a sheet or a config class changes:
+    /// <code>dotnet run --project tools/GameConfigGen</code>
+    /// <para>
+    /// <b>The build is gated on its own report.</b> A parse failure, or an error a validator merely reports,
+    /// leaves the checked-in archives untouched and exits non-zero — see <see cref="ArchiveIsClean"/> for why
+    /// the report and not just the exception. <c>--dry-run</c> is that same build with nothing written, which
+    /// is the form to run in CI.
+    /// </para>
+    /// <para>
+    /// The build parameters (<see cref="GameBuildParameters.FromSourceFiles"/>) name a CSV directory as the
+    /// build's default source, which is all the SDK needs to read every declared entry from the sheet of the
+    /// same name, and a raw-file source for the entries read from JSON instead
+    /// (<see cref="Game.Logic.GameConfigBuild.JsonSourcedEntries"/>).
+    /// </para>
+    /// <para>
+    /// Publishing is deliberately not here. Making a built archive active on a server is done from the LiveOps
+    /// Dashboard, which owns the auth flow and the audit trail for it; this tool only builds bytes.
+    /// </para>
     /// </summary>
     public class GameConfigBuildTool : GameConfigToolBase
     {
@@ -28,8 +45,9 @@ namespace Game.GameConfigGen
 
         /// <summary>
         /// Content below this many bytes is written uncompressed, matching the default the server publishes a
-        /// shared archive with (<c>ContentDeliveryOptions.ArchiveMinimumSizeBeforeCompression</c>), so the
-        /// built-in copy is the same bytes a live server would hand out for the same content.
+        /// shared archive with (<c>ContentDeliveryOptions.ArchiveMinimumSizeBeforeCompression</c>). Keeping the
+        /// two the same means the built-in copy is the same bytes a live server would hand out for the same
+        /// content; a client reads either form regardless.
         /// </summary>
         const int MinSizeBeforeCompression = 500;
 
@@ -91,7 +109,7 @@ namespace Game.GameConfigGen
             // The tool runs with the caller's working directory, which is meant to be the repo root. Rooting
             // every path against the repo rather than against the cwd is what makes it behave the same when it
             // is run from somewhere else: the archives land where the server and the client look for them.
-            string repoRoot = RepoRoot.TryFind();
+            string repoRoot = TryFindRepoRoot();
             if (repoRoot == null)
             {
                 Console.Error.WriteLine($"Could not find the repo root above {Directory.GetCurrentDirectory()} — no directory on the way up holds metaplay-project.yaml.");
@@ -112,8 +130,6 @@ namespace Game.GameConfigGen
                 return 1;
             }
 
-            // Checked before the build, because inside it a missing file surfaces only as a stack trace in the
-            // build report.
             if (!AllEntriesHaveASourceFile(_sourcesDir))
                 return 1;
 
@@ -139,7 +155,7 @@ namespace Game.GameConfigGen
             catch (GameConfigBuildFailed failed)
             {
                 // The exception itself carries no message, so the report is the only thing that says which
-                // sheet, row and column were at fault.
+                // sheet, row and column were at fault. Printing it here is what makes the failure readable.
                 Console.Error.WriteLine("Game config build FAILED. No archive was written.\n");
                 failed.BuildReport?.PrintToConsole();
                 return 1;
@@ -154,8 +170,8 @@ namespace Game.GameConfigGen
                 return 0;
             }
 
-            // The client's half taken the way a live server takes the one it hands out, re-serialized so
-            // [ServerOnly] members are stripped, so the built-in copy and the served one are the same bytes
+            // The client's half taken the way a live server takes the one it hands out — re-serialized so
+            // [ServerOnly] members are stripped — so the built-in copy and the served one are the same bytes
             // for the same content.
             (ContentHash _, byte[] sharedBytes) = GameConfigUtil.GetSharedArchiveFromFullArchiveForClient(
                 fullArchive, CompressionAlgorithm.Deflate, MinSizeBeforeCompression);
@@ -172,19 +188,31 @@ namespace Game.GameConfigGen
         }
 
         /// <summary>
-        /// Whether a built archive's build report carries no error-level message. Prints the report when it does.
+        /// Whether a built archive carries no error-level message, which is not the same question as whether
+        /// the build threw.
+        /// <para>
+        /// <b>Validation reaches the build two ways, and only one of them is an exception.</b> A parse failure
+        /// throws, so a malformed cell never gets this far. Item validators — the SDK's own, and this game's in
+        /// <see cref="Game.Logic.SharedGameConfig.BuildTimeValidate"/> — report instead: the message lands in
+        /// the build report, the build reports success, and the archive is handed back with the error inside
+        /// it. Written out, that archive is what the server boots from.
+        /// </para>
+        /// <para>
+        /// So the report is the gate, and it holds whoever wrote the check. A game adding checks of its own
+        /// should keep it even if every one of them throws, because the SDK's do not.
+        /// </para>
         /// </summary>
         public static bool ArchiveIsClean(ConfigArchive archive)
         {
             GameConfigMetaData metaData = GameConfigMetaData.FromArchive(archive);
             if (metaData == null)
             {
+                // Only a full (static) archive carries build metadata. Without it there is no report to judge,
+                // and answering "clean" would be a silent pass rather than an answer.
                 Console.Error.WriteLine("The archive carries no build metadata, so its build report cannot be checked. Expected a full (static) archive.");
                 return false;
             }
 
-            // Item validators, the SDK's and SharedGameConfig.BuildTimeValidate, report into the build report
-            // instead of throwing, so a build that succeeded can still hand back an archive with an error in it.
             if (metaData.BuildSummary == null || metaData.BuildSummary.HighestMessageLevel < GameConfigLogLevel.Error)
                 return true;
 
@@ -194,9 +222,19 @@ namespace Game.GameConfigGen
         }
 
         /// <summary>
-        /// Whether every declared config entry has the file it is read from, a sheet or, for one in
-        /// <see cref="Game.Logic.GameConfigBuild.JsonSourcedEntries"/>, a JSON file, and no JSON-sourced entry
-        /// has a sheet beside it. Prints what is missing or unread.
+        /// Whether every declared config entry has the file it is read from, checked before the build rather than
+        /// during it: a sheet or, for one in <see cref="Game.Logic.GameConfigBuild.JsonSourcedEntries"/>, a JSON
+        /// file. A JSON-sourced entry with a sheet beside it fails too, because nothing would read that sheet.
+        /// <para>
+        /// The build reads each entry's file inside that entry's own build step, so a missing one comes back as
+        /// a stack trace buried in the build report — the least legible failure this tool has, and the one an
+        /// ordinary mistake produces: declaring an entry and forgetting its sheet. Checking first turns it into
+        /// the list of missing files.
+        /// </para>
+        /// <para>
+        /// Any other entry naming its own build source (<c>[GameConfigEntry(configBuildSource: ...)]</c>) is
+        /// skipped: it is read from whatever that source is, which need not be a file in this directory.
+        /// </para>
         /// </summary>
         public static bool AllEntriesHaveASourceFile(string sourcesDir)
         {
@@ -257,7 +295,7 @@ namespace Game.GameConfigGen
 
         /// <summary>
         /// Dump the contents of a config archive. Accepts either the full archive, in which case the client's
-        /// half is unwrapped from it, or a shared archive on its own, the shape a client downloads.
+        /// half is unwrapped from it, or a shared archive on its own — the shape a client downloads.
         /// </summary>
         static async Task<int> PrintAsync(string archivePath)
         {
@@ -299,7 +337,9 @@ namespace Game.GameConfigGen
         }
 
         /// <summary>
-        /// Reads the value following an option, rejecting a missing one and one that is itself an option.
+        /// Reads the value following an option, rejecting a missing one and one that looks like the next option
+        /// rather than taking it as a path. <c>--static --dry-run</c> would otherwise write an archive to a
+        /// file called <c>--dry-run</c> and report success.
         /// </summary>
         static bool TryTakeValue(string[] args, ref int index, string what, out string value)
         {
@@ -323,7 +363,16 @@ namespace Game.GameConfigGen
             return true;
         }
 
-        /// <summary>The path resolved against the repo root, unless it is already absolute.</summary>
+        /// <summary>The repo root, found by walking up from the working directory, or null if there is none above it.</summary>
+        static string TryFindRepoRoot()
+        {
+            DirectoryInfo directory = new DirectoryInfo(Directory.GetCurrentDirectory());
+            while (directory != null && !File.Exists(Path.Combine(directory.FullName, "metaplay-project.yaml")))
+                directory = directory.Parent;
+
+            return directory?.FullName;
+        }
+
         static string Rooted(string repoRoot, string path) => Path.IsPathRooted(path) ? path : Path.Combine(repoRoot, path);
 
         /// <summary>Creates the directory an output file goes in, tolerating a path that names no directory.</summary>

@@ -159,7 +159,7 @@
     private void OpenCosmetics()
     {
         Meta.RecordPromotedEntrySelection(PromotedEntryPlacement.FeatureCard, MetaFeature.Cosmetics);
-        EnvironmentLink.NavigateTo(Navigation, MetaRoutes.Cosmetics);
+        Navigation.NavigateTo(MetaRoutes.Cosmetics);
     }
 
     protected override void OnDispose() => MetaplayService.OnStateChanged -= OnChanged;

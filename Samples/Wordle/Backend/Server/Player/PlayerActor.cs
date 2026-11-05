@@ -1,5 +1,3 @@
-// This file is part of Metaplay SDK which is released under the Metaplay SDK License.
-
 using Game.Logic;
 using Metaplay.Cloud.Entity;
 using Metaplay.Core;
@@ -38,7 +36,7 @@ namespace Game.Server.Player
             bool isLastRound = (Model.GuessedWords.Count == (PlayerModel.MaxGuesses - 1));
             if (Model.GuessedWords.Count == 0)
             {
-                ServerGameConfig serverConfig = (ServerGameConfig)_specializedGameConfig.ServerConfig;  
+                ServerGameConfig serverConfig = (ServerGameConfig)SpecializedGameConfig.ServerConfig;
                 Model.Solution = serverConfig.GetSolutionForRound(Model.RoundIndex);
             }
             GuessResult[] result = EvaluateWordGuess(Model.CurrentWord, Model.Solution);

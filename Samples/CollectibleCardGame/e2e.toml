@@ -1,0 +1,63 @@
+# The end-to-end suites, run by run_e2e.py next to this file: `python3 run_e2e.py`.
+# See AGENTS.md, "Which fixtures need what".
+
+# One build of this solution builds the game server, the web client and the test assembly. List only projects the
+# run starts or tests: the harness starts the outputs of this build with --no-build.
+build = "tools/e2e-stack.slnx"
+
+[server]
+project = "Backend/Server"
+
+# Every options file the server reads, in order, ending with the suites' pacing profile: beats and bot think delays
+# at zero, so no fixture waits on the presentation or on a bot pretending to think. METAPLAY_OPTIONS replaces the
+# SDK's built-in list rather than appending to it, which is why the two built-in files are restated. The suites that
+# own a server set the same list (WebClient.Tests/GameServerProcess.cs).
+env = { METAPLAY_OPTIONS = "Config/Options.base.yaml;Config/Options.local.yaml;Config/Options.e2e.yaml" }
+
+[client]
+project = "WebClient/WebClient.csproj"
+framework = "net10.0-browser"
+
+# The shared server serves every suite that does not own a server, in one phase. Its tests run in parallel, but the
+# fixtures that use the one global matchmaking queue or drive the server's match actors are [NonParallelizable], so
+# NUnit runs each of them on its own: two suites' taps inside one fill wait would be paired into one match with two
+# humans in it. The last four suites own a server (GameServerProcess), so the shared one is stopped for them and
+# theirs binds its ports.
+
+# Every fixture the later phases do not run, so a new browser fixture lands here unless it is given a phase of its own.
+# BoardScreenshots is [Explicit], a capture tool run by name (AGENTS.md, "Test-only affordances"); it is excluded here
+# so the filter says what the phase runs.
+[[phases]]
+name = "shared server"
+command = ["dotnet", "test", "WebClient.Tests/WebClient.Tests.csproj", "--no-build",
+    "--filter", "FullyQualifiedName!~MatchAbandonTests&FullyQualifiedName!~TransportOutageTests&FullyQualifiedName!~HeistTests&FullyQualifiedName!~CommunityTests&FullyQualifiedName!~BoardScreenshots"]
+nunitWorkers = true
+playwright = "WebClient.Tests/bin/Debug/net10.0"
+
+# Restarts its server to kill an ephemeral match (a rolling deploy).
+[[phases]]
+name = "MatchAbandonTests"
+server = false
+command = ["dotnet", "test", "WebClient.Tests/WebClient.Tests.csproj", "--no-build",
+    "--filter", "FullyQualifiedName~MatchAbandonTests"]
+
+# No session linger, so a dropped transport always ends the session.
+[[phases]]
+name = "TransportOutageTests"
+server = false
+command = ["dotnet", "test", "WebClient.Tests/WebClient.Tests.csproj", "--no-build",
+    "--filter", "FullyQualifiedName~TransportOutageTests"]
+
+# A two-second result retry and a thirty-second pick clock; two-browser.
+[[phases]]
+name = "HeistTests"
+server = false
+command = ["dotnet", "test", "WebClient.Tests/WebClient.Tests.csproj", "--no-build",
+    "--filter", "FullyQualifiedName~HeistTests"]
+
+# An isolated database, and a restart to prove the ladder persists.
+[[phases]]
+name = "CommunityTests"
+server = false
+command = ["dotnet", "test", "WebClient.Tests/WebClient.Tests.csproj", "--no-build",
+    "--filter", "FullyQualifiedName~CommunityTests"]

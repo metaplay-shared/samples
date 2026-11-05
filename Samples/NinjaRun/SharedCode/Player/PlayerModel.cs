@@ -338,6 +338,12 @@ namespace Game.Logic
             UnlockedSkills.Add(skill.Id);
         }
 
+        /// <summary>Add <paramref name="amount"/> Orbs to the balance outside of a run. The caller has already validated it.</summary>
+        public void GrantOrbs(int amount)
+        {
+            Orbs += amount;
+        }
+
         /// <summary>Set the player's name, which is also the name their ghost is known by. The caller has already validated it.</summary>
         public void SetPlayerName(string name)
         {

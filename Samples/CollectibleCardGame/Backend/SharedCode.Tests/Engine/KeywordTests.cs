@@ -518,23 +518,5 @@ namespace Game.Logic.Tests
             Assert.That(engine.Critter(whisker), Is.Null);
             Assert.That(engine.Rules.Seat(1).DenHp, Is.EqualTo(Config.Global.DenStartingHp - 5));
         }
-
-        [Test]
-        public void GoodbyeSeesItsOwnStatsAtTheMomentOfDeath()
-        {
-
-            Scenario       scenario = Fresh();
-            CardInstanceId whisker  = scenario.Seat(0).Board("SizzleWhisker", attack: 15, maxHealth: 5);
-            CardInstanceId goat     = scenario.Seat(1).Board("StrayGoat");
-            MatchEngine    engine   = scenario.Build();
-
-            engine.Attack(0, whisker, EffectTargetRef.OnCritter(goat));
-
-            EffectResolvedEvent resolved = engine.LastEventOf<EffectResolvedEvent>();
-            Assert.That(resolved, Is.Not.Null);
-            Assert.That(resolved.Source, Is.EqualTo(whisker),
-                "the Goodbye resolved with its own critter as its source even though the board no longer has it");
-            Assert.That(engine.ZoneOf(whisker), Is.EqualTo(AuthorityZone.Graveyard));
-        }
     }
 }

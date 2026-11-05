@@ -20,10 +20,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SharedCode\SharedCode.csproj" />
-    <!-- GameConfigBuildTests asserts the build tool's own two gates - the report gate and the missing-sheet
-         precheck - rather than restating them, so that the checks the tool applies and the checks CI trusts
-         cannot drift apart. -->
-    <ProjectReference Include="..\..\tools\GameConfigGen\GameConfigGen.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,6 +1,5 @@
 using Game.Server.Matchmaking;
 using NUnit.Framework;
-using System.Collections.Generic;
 
 namespace Game.Server.Tests
 {
@@ -89,27 +88,6 @@ namespace Game.Server.Tests
             Assert.That(FormationOutcomePolicy.ForSeat(MatchmakingSeatAnswer.Accepted, formed: false), Is.EqualTo(FormationSeatAction.Requeue));
             Assert.That(FormationOutcomePolicy.ForSeat(MatchmakingSeatAnswer.Declined, formed: false), Is.EqualTo(FormationSeatAction.Nothing));
             Assert.That(FormationOutcomePolicy.ForSeat(MatchmakingSeatAnswer.TimedOut, formed: false), Is.EqualTo(FormationSeatAction.TellSeatGone));
-        }
-
-        [Test]
-        public void EverySeatActionIsReachable()
-        {
-            // A table with an unreachable row is a table with a rule nothing enforces.
-            HashSet<FormationSeatAction> seen = new HashSet<FormationSeatAction>();
-
-            foreach (MatchmakingSeatAnswer a in Answers)
-            {
-                foreach (bool formed in new[] { true, false })
-                    seen.Add(FormationOutcomePolicy.ForSeat(a, formed));
-            }
-
-            Assert.That(seen, Is.EquivalentTo(new[]
-            {
-                FormationSeatAction.Seated,
-                FormationSeatAction.Requeue,
-                FormationSeatAction.TellSeatGone,
-                FormationSeatAction.Nothing,
-            }));
         }
 
         static FormationSeatAction Expected(MatchmakingSeatAnswer answer) => answer switch

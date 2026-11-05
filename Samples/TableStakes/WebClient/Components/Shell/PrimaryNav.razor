@@ -121,7 +121,7 @@
         }
 
         if (MetaRoutes.For(destination) is string route)
-            EnvironmentLink.NavigateTo(Navigation, route);
+            Navigation.NavigateTo(route);
     }
 
     protected override void OnDispose()

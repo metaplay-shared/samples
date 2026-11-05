@@ -11,7 +11,8 @@ namespace Game.Logic.Tests
     /// </summary>
     public static class TestGameConfig
     {
-        // \note Relative to the SharedCode.Tests/ directory, which TestHelper.SetupForTests() makes current.
+        // \note Relative to the test project's directory, which TestHelper.SetupForTests() makes current. Server.Tests
+        //       compiles this file in too, and sits next to SharedCode.Tests.
         public const string StaticGameConfigPath = "../Server/GameConfig/StaticGameConfig.mpa";
 
         static readonly Lazy<SharedGameConfig> _shared = new Lazy<SharedGameConfig>(Import, LazyThreadSafetyMode.ExecutionAndPublication);

@@ -143,9 +143,8 @@ public class ShellPageTests : PlaywrightPageTest
             new Regex("^[A-Z][a-z]+[A-Z][a-z]+[0-9]{2}$"),
             new() { Timeout = BootTimeoutMs });
 
-        // No reconnect pill and no connection error dialog.
-        await Expect(Page.GetByTestId("connection-modal")).ToHaveCountAsync(0);
-        await Expect(Page.GetByTestId("connection-pill")).ToHaveCountAsync(0);
+        // No connection dialog (ConnectionOverlayTests shows the dialog this locator finds).
+        await Expect(Page.GetByRole(AriaRole.Alertdialog)).ToHaveCountAsync(0);
 
         await Expect(Page.GetByTestId("play-hero")).ToBeVisibleAsync();
 
@@ -195,6 +194,10 @@ public class ShellPageTests : PlaywrightPageTest
     public async Task Home_TabOrderStartsAtTheProfileButtonAndEndsAtTheNavigationInVisualOrder()
     {
         await OpenHomeAsync();
+
+        // Home draws other cards once the session replaces the fixture data, and a focused card that goes takes the
+        // focus with it, so the sequence starts on the live screen.
+        await WaitForLiveSessionAsync();
 
         List<string> stops = new();
         for (int i = 0; i < 40 && stops.Count(s => s.StartsWith("nav-", StringComparison.Ordinal)) < 5; i++)

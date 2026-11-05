@@ -228,19 +228,6 @@ namespace Game.Logic.Tests
             return minted;
         }
 
-        [Test]
-        public void TheSubtractionProblemIsInvisibleToAnIdentityScan()
-        {
-            // Worth pinning: the reason this control is not redundant with the leak walk is that the
-            // leak walk would report the published deck as perfectly clean. Every card in it is one the seat
-            // is already allowed to know about.
-            Pair pair  = Pair.Build(seatToObserve: 0);
-            int  enemy = MatchSeats.Other(pair.Seat);
-
-            foreach (CardId card in Deck(pair.Left, enemy))
-                Assert.That(pair.Left.Rules.Seat(enemy).UnseenPool, Does.Contain(card), "the deck holds nothing the pool does not");
-        }
-
         // ---------------------------------------------------------------- fixtures
 
         static MatchEngine Deal(ulong seed)

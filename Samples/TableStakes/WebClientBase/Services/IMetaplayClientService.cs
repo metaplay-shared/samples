@@ -1,62 +1,57 @@
 using Metaplay.Core;
 using Metaplay.Core.Model;
 using Metaplay.Core.Player;
+using Metaplay.Core.Session;
 
 namespace WebClientBase.Services;
 
 /// <summary>
-/// The connection state and controls, for components that do not need the typed player model.
+/// Non-generic interface providing connection state for components that don't need typed PlayerModel access.
 /// </summary>
 public interface IMetaplayConnectionService
 {
     /// <summary>
-    /// Raised when the connection state or the player model changes.
+    /// Event fired when the connection status changes, and while connected on every frame, or for a service that
+    /// renders only on a change, on a frame that requested a render.
     /// </summary>
     event Action? OnStateChanged;
 
     /// <summary>
-    /// The current connection state.
+    /// Current connection state.
     /// </summary>
     ConnectionStatus ConnectionStatus { get; }
 
     /// <summary>
-    /// The error message from the last failed connection, or null.
+    /// The connection loss waiting for the player to reconnect, for the connection overlay to show; null while
+    /// connected or connecting.
     /// </summary>
-    string? ErrorMessage { get; }
+    ConnectionLostEvent? ConnectionLost { get; }
 
     /// <summary>
-    /// The player ID when connected, otherwise null.
+    /// Player ID if connected, otherwise null.
     /// </summary>
     EntityId? PlayerId { get; }
 
     /// <summary>
-    /// What is wrong with the connection, for the connection shell to render. <see cref="ConnectionTrouble.None"/>
-    /// while the connection works and before the first session starts, so the screens show their own connecting
-    /// state at startup.
+    /// Whether the session is running but the SDK reports its connection as unhealthy: the connection is degraded and
+    /// the SDK tries to restore it.
     /// </summary>
-    ConnectionTrouble Trouble { get; }
+    bool IsUnhealthy { get; }
 
     /// <summary>
-    /// Reconnects now: skips the current backoff delay, or restarts the reconnect loop if it has stopped. Can be
-    /// called at any time.
+    /// Start connecting to the Metaplay server, and keep the connection up until <see cref="Reset"/>. Later calls do
+    /// nothing.
     /// </summary>
-    void RetryNow();
+    void Start();
 
     /// <summary>
-    /// Tells the client whether its page is visible. A browser throttles the timers of a hidden tab so much that
-    /// the connection can drop, so a loss around a tab switch is shown as a pill instead of an outage
-    /// (<see cref="ConnectionTrouble.IsQuiet"/>).
+    /// Reconnect after the loss in <see cref="ConnectionLost"/>, at the player's request.
     /// </summary>
-    void NotifyPageVisibilityChanged(bool isVisible);
+    void Reconnect();
 
     /// <summary>
-    /// Initializes the client and connects to the Metaplay server.
-    /// </summary>
-    Task ConnectAsync();
-
-    /// <summary>
-    /// Resets the client: disconnects, deletes the credentials and resets the state.
-    /// Returns true if the reset succeeded.
+    /// Reset the client: disconnect, and delete the credentials and the offline player. The service stays stopped,
+    /// so reload the page afterwards to start as a new player. Returns true if reset was successful.
     /// </summary>
     bool Reset();
 }
@@ -72,4 +67,9 @@ public interface IMetaplayClientService<TPlayerModel> : IMetaplayConnectionServi
     /// The current player model, or null if not connected.
     /// </summary>
     TPlayerModel? PlayerModel { get; }
+
+    /// <summary>
+    /// Execute a player action. Returns its result, or null if there is no session or the action threw.
+    /// </summary>
+    MetaActionResult? ExecuteAction(PlayerActionBase action);
 }

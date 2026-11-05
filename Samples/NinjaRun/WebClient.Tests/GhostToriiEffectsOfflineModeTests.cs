@@ -5,19 +5,15 @@ namespace WebClient.Tests;
 
 /// <summary>
 /// E2E tests for the field arriving and leaving through the torii at the course's two ends, driven through
-/// <c>?env=offline</c> so they need only the web client. The renderer is driven directly with the snapshots a
+/// <c>?offline</c> so they need only the web client. The renderer is driven directly with the snapshots a
 /// run would hand it: the field hidden through the run-in and drawn from step 0, then one opponent hidden at
 /// its own finish-line crossing. The start torii plays one warp-in as the field arrives, the finish line plays
 /// a poof for the opponent that crosses it, and nothing plays for a run-in that has not ended.
 /// </summary>
-[Parallelizable(ParallelScope.Self)]
 [TestFixture]
-public class GhostToriiEffectsOfflineModeTests : GamePageTest
+public class GhostToriiEffectsOfflineModeTests : OfflinePageTest
 {
-    private static readonly string BaseUrl =
-        (Environment.GetEnvironmentVariable("WEBCLIENT_BASE_URL") ?? "http://localhost:5290").TrimEnd('/');
-
-    private static readonly string OfflineUrl = BaseUrl + "/?env=offline";
+    private static readonly string OfflineUrl = ClientUrl(query: "offline");
 
     [Test]
     public async Task TheFieldWarpsInAtTheStartLine_AndPoofsAtTheFinishLine()

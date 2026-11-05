@@ -17,7 +17,11 @@ namespace WebClient.Tests;
 [TestFixture]
 public class TablePageTests : PlaywrightPageTest
 {
-    /// <summary>Both auto-advance timings set to zero, so a game runs as fast as the frame pump allows.</summary>
+    /// <summary>Every test here runs in offline mode, so none may connect to the game server.</summary>
+    [SetUp]
+    public void ExpectOffline() => ExpectNoGameServerConnections();
+
+    /// <summary>Both auto-advance timings set to zero, so a game runs as fast as the frame loop allows.</summary>
     private static readonly string FastTableUrl = OfflineTableUrl + "&botThinkMs=0&resolvePauseMs=0";
 
     /// <summary>

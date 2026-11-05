@@ -50,6 +50,9 @@ public class LiveServerFirstWeekTests : PlaywrightPageTest
         await PlayWholeHandAsync();
         await LeaveTheResultsAsync();
 
+        // Leaving lands on Home, where the player's name is shown, to look the player up on the server later.
+        string playerName = await ReadPlayerNameAsync();
+
         // ---- Day one is finished, and it is finished on the server ----
         // Navigate in-app instead of loading the page. The match result is recorded by a server action
         // (PlayerRecordMatchResult), so the progress shown below already comes from the server. The reload
@@ -75,7 +78,9 @@ public class LiveServerFirstWeekTests : PlaywrightPageTest
         Assert.That(await ReadBalanceAsync("coins"), Is.EqualTo(coinsBefore + 250), "the balance did not move by the reward");
 
         // ---- The reward is paid once. A reload rebuilds the client from the server's state, not from this
-        //      page's prediction.
+        //      page's prediction. The claim is a client action, which the page shows before the client has sent
+        //      it, so the reload waits until the server has committed it.
+        await WaitForServerToHaveEventAsync(playerName, "PlayerEventFirstWeekRewardClaimed");
         await ReloadOnStackAsync(Page);
 
         // Wait on the summary, not the tile. The fixture shown while the session reconnects also shows day one

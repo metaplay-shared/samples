@@ -198,9 +198,8 @@ namespace Game.Logic.Tests
 
         /// <summary>
         /// <see cref="MatchmakingQueue.ReturnToHead"/> keeps one entry per player, like
-        /// <see cref="MatchmakingQueue.TryEnqueue"/>. The matchmaker actor handles one message at a time, so it
-        /// never enqueues a player while a formation is in flight. This test pins the queue's own guarantee for
-        /// any other caller.
+        /// <see cref="MatchmakingQueue.TryEnqueue"/>. The matchmaker queues a player who cancelled and pressed Play
+        /// again while a formation holding them was still waiting on its asks, and that formation may return them.
         /// </summary>
         [Test]
         public void ReturningAWaiterTheQueueAlreadyHoldsDoesNotQueueThemTwice()

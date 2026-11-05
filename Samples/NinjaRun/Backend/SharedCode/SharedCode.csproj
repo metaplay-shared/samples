@@ -7,7 +7,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="$(SharedCodePath)\**\*.cs" LinkBase="SharedCode" />
+    <!-- SharedCode/ also holds the client build's project (SharedCode/SharedCode.Client.csproj), whose build output
+         includes generated .cs files that must not be compiled into this assembly. -->
+    <Compile Include="$(SharedCodePath)\**\*.cs" Exclude="$(SharedCodePath)\bin\**;$(SharedCodePath)\obj\**" LinkBase="SharedCode" />
   </ItemGroup>
 
   <ItemGroup>

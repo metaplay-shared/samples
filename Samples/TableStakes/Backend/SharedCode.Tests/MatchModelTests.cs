@@ -11,8 +11,7 @@ namespace Game.Logic.Tests
 {
     /// <summary>
     /// Tests the replicated <see cref="MatchModel"/>: the board it builds from the engine, the server-only state
-    /// it keeps off the wire, and the two private channels that deliver a player's hand: member private state
-    /// and the <see cref="MatchHandDelivered"/> message.
+    /// it keeps off the wire, and the member private state that delivers a player's hand.
     /// </summary>
     [TestFixture]
     public class MatchModelTests
@@ -91,7 +90,6 @@ namespace Game.Logic.Tests
 
             Assert.That(client.OwnSeat, Is.EqualTo(0), $"seed {Seed}");
             Assert.That(client.GetOwnHand(), Is.EqualTo(host.Engine.GetHand(0)), $"seed {Seed}");
-            Assert.That(client.OwnHandDeliveredAtPlayIndex, Is.EqualTo(host.Board.PlayIndex), $"seed {Seed}");
         }
 
         [Test]
@@ -122,41 +120,37 @@ namespace Game.Logic.Tests
         }
 
         [Test]
-        public void AHandStampedAheadOfTheBoardIsHeldUntilTheBoardCatchesUp()
+        public void TheOwnHandFollowsTheHostThroughAGameTheHostPlays()
         {
-            // The host sends a directed message immediately but flushes timeline changes on its next tick, so a
-            // hand delivery often arrives before the board update it follows. The client compares the delivery's
-            // play index with the board's instead of relying on arrival order.
-            MatchModel host   = NewModel();
-            MatchModel client = OverTheWire(host);
-
-            int  seat = host.Engine.SeatOnTurn;
-            Card card = host.Engine.GetLegalPlays(seat)[0];
-            MatchCardPlayed action = PlayAndApply(host, seat, card);
-
-            MatchHandDelivered delivery = MatchHost.BuildHandDelivery(host, 0);
-            Assert.That(delivery.PlayIndex, Is.EqualTo(1), $"seed {Seed}: a delivery is stamped with the board position it was read at");
-
-            Assert.That(client.Board.PlayIndex, Is.EqualTo(0), $"seed {Seed}");
-            Assert.That(client.TryDeliverOwnHand(delivery.ToOwnHand()), Is.False, $"seed {Seed}: a hand from the future was applied to a board that has not reached it");
-
-            MatchTestDeals.Apply(client, action, Seed);
-            Assert.That(client.TryDeliverOwnHand(delivery.ToOwnHand()), Is.True, $"seed {Seed}: the hand was still refused after the board caught up");
-            Assert.That(client.GetOwnHand(), Is.EqualTo(host.Engine.GetHand(0)), $"seed {Seed}");
-        }
-
-        [Test]
-        public void ADeliveredHandReplacesTheLocalOneWholesale()
-        {
-            MatchModel host   = NewModel();
-            MatchModel client = OverTheWire(host);
+            // The host plays every card here, including seat 0's, as it does for a covering bot or a deadline
+            // auto-play. A hand changes only through public plays, so the hand delivered at subscribe stays correct
+            // after every action, with no further delivery.
+            MatchModel    host   = NewModel();
+            MatchModel    client = OverTheWire(host);
+            TestMatchHost shell  = new TestMatchHost(host, Seed);
             host.GetMemberPrivateState(MatchTestDeals.Seat0PlayerId).ApplyToModel(client);
 
-            // The replacement shares no card with the current hand. A delivered hand replaces the local hand
-            // rather than merging with it, so a diverged client is corrected.
-            List<Card> replacement = new List<Card> { new Card(Suit.Spades, Rank.Two) };
-            Assert.That(client.TryDeliverOwnHand(new MatchOwnHand(0, replacement, playIndex: 0)), Is.True, $"seed {Seed}");
-            Assert.That(client.GetOwnHand(), Is.EqualTo(replacement), $"seed {Seed}");
+            int numApplied = 0;
+            for (int guard = 0; host.Phase == MatchPhase.Playing; guard++)
+            {
+                Assert.That(guard, Is.LessThan(MatchRules.NumPlays * 4), $"seed {Seed}: the game did not finish");
+
+                if (host.Engine.TurnPhase == MatchTurnPhase.AwaitingMove)
+                {
+                    int  onTurn = host.Engine.SeatOnTurn;
+                    Card card   = BotPolicy.DecidePlayOut(MatchSeatView.ForSeat(host.Engine, onTurn), Seed).Card;
+                    Assert.That(MatchHost.TryPlayForSeat(host, onTurn, card, MatchTestDeals.T0, shell), Is.True, $"seed {Seed}");
+                }
+                else
+                {
+                    Assert.That(MatchHost.TryAdvance(host, MatchTestDeals.T0, shell), Is.True, $"seed {Seed}");
+                }
+
+                for (; numApplied < shell.PublishedActions.Count; numApplied++)
+                    MatchTestDeals.Apply(client, shell.PublishedActions[numApplied], Seed);
+
+                Assert.That(client.GetOwnHand(), Is.EqualTo(host.Engine.GetHand(0)), $"seed {Seed}: the client's hand diverged at play index {host.Board.PlayIndex}");
+            }
         }
 
         #endregion
@@ -255,15 +249,9 @@ namespace Game.Logic.Tests
         [Test]
         public void TheDirectedMessagesRoundTripOverTheWire()
         {
-            // No other test in this project serializes these messages, and the host sends MatchHandDelivered and
-            // MatchMoveRefused only when a hand changes or a move is refused. A message that fails to serialize
-            // fails at run time, not at build time.
+            // No other test in this project serializes these messages, and the host sends MatchMoveRefused only
+            // when a move is refused. A message that fails to serialize fails at run time, not at build time.
             MatchModel host = NewModel();
-
-            MatchHandDelivered delivered = RoundTrip(MatchHost.BuildHandDelivery(host, 0));
-            Assert.That(delivered.Seat, Is.EqualTo(0), $"seed {Seed}");
-            Assert.That(delivered.Hand, Is.EqualTo(host.Engine.GetHand(0)), $"seed {Seed}");
-            Assert.That(delivered.PlayIndex, Is.EqualTo(host.Board.PlayIndex), $"seed {Seed}");
 
             Card             card    = host.Engine.GetHand(0)[0];
             MatchMoveRefused refused = RoundTrip(new MatchMoveRefused(3, card, MoveRefusalReason.StalePlayIndex));
@@ -271,42 +259,30 @@ namespace Game.Logic.Tests
             Assert.That(refused.Card, Is.EqualTo(card), $"seed {Seed}");
             Assert.That(refused.Reason, Is.EqualTo(MoveRefusalReason.StalePlayIndex), $"seed {Seed}");
 
-            MatchPlayCardRequest request = RoundTrip(new MatchPlayCardRequest(2, 7, card));
-            Assert.That(request.Seat, Is.EqualTo(2), $"seed {Seed}");
+            MatchPlayCardRequest request = RoundTrip(new MatchPlayCardRequest(7, card));
             Assert.That(request.PlayIndex, Is.EqualTo(7), $"seed {Seed}");
             Assert.That(request.Card, Is.EqualTo(card), $"seed {Seed}");
         }
 
         #endregion
 
-        #region The untrusted seat index
+        #region The submitter's seat
 
         /// <summary>
-        /// Checks that a move is refused when the submitter does not own the seat it names. Seat 0 is the only
-        /// human at this table, so the player owns no other seat, including the seat on turn. A bot seat's owner
-        /// is <see cref="EntityId.None"/>, so a submitter of <see cref="EntityId.None"/> would match every bot
-        /// seat. The host plays bot seats through <see cref="MatchHost.TryPlayForSeat"/>, which takes no
-        /// submitter. <see cref="MatchEngine.PlayCard"/> throws on an out-of-range seat, so
-        /// <see cref="MatchHost.TrySubmitMove"/> must refuse such a seat before calling the engine.
+        /// Checks that a move from a player with no seat at the table is refused. A bot seat's owner is
+        /// <see cref="EntityId.None"/>, so a submitter of <see cref="EntityId.None"/> must not match a bot seat.
+        /// The host plays bot seats through <see cref="MatchHost.TryPlayForSeat"/>, which takes no submitter.
         /// </summary>
-        [TestCase(false, 1)]
-        [TestCase(false, 2)]
-        [TestCase(false, 3)]
-        [TestCase(true,  0)]
-        [TestCase(true,  1)]
-        [TestCase(true,  2)]
-        [TestCase(true,  3)]
-        [TestCase(false, -1)]
-        [TestCase(false, 4)]
-        [TestCase(false, 99)]
-        public void AMoveNamingASeatTheSubmitterDoesNotOwnIsRefused(bool submitterIsNone, int claimedSeat)
+        [TestCase(true)]
+        [TestCase(false)]
+        public void AMoveFromAPlayerWithNoSeatIsRefused(bool submitterIsNone)
         {
             MatchModel model     = NewModel();
             Card       card      = model.Engine.GetLegalPlays(model.Engine.SeatOnTurn)[0];
-            EntityId   submitter = submitterIsNone ? EntityId.None : MatchTestDeals.Seat0PlayerId;
+            EntityId   submitter = submitterIsNone ? EntityId.None : EntityId.Create(EntityKindCore.Player, 999UL);
 
             Assert.That(
-                MatchHost.TrySubmitMove(model, submitter, claimedSeat, model.Board.PlayIndex, card, MatchTestDeals.T0, TestMatchHostEnvironments.Publishing(NeverPublished)),
+                MatchHost.TrySubmitMove(model, submitter, model.Board.PlayIndex, card, MatchTestDeals.T0, TestMatchHostEnvironments.Publishing(NeverPublished)),
                 Is.EqualTo(MoveRefusalReason.NotYourSeat), $"seed {Seed}");
         }
 
@@ -318,12 +294,12 @@ namespace Game.Logic.Tests
 
             Card card = model.Engine.GetLegalPlays(0)[0];
             Assert.That(
-                MatchHost.TrySubmitMove(model, MatchTestDeals.Seat0PlayerId, 0, model.Board.PlayIndex - 1, card, MatchTestDeals.T0, TestMatchHostEnvironments.Publishing(NeverPublished)),
+                MatchHost.TrySubmitMove(model, MatchTestDeals.Seat0PlayerId, model.Board.PlayIndex - 1, card, MatchTestDeals.T0, TestMatchHostEnvironments.Publishing(NeverPublished)),
                 Is.EqualTo(MoveRefusalReason.StalePlayIndex), $"seed {Seed}");
 
             TestMatchHost host = new TestMatchHost(model, Seed);
             Assert.That(
-                MatchHost.TrySubmitMove(model, MatchTestDeals.Seat0PlayerId, 0, model.Board.PlayIndex, card, MatchTestDeals.T0, host),
+                MatchHost.TrySubmitMove(model, MatchTestDeals.Seat0PlayerId, model.Board.PlayIndex, card, MatchTestDeals.T0, host),
                 Is.EqualTo(MoveRefusalReason.None), $"seed {Seed}");
             Assert.That(((MatchCardPlayed)host.PublishedActions.Single()).Card, Is.EqualTo(card), $"seed {Seed}");
         }
@@ -332,12 +308,7 @@ namespace Game.Logic.Tests
 
         #region Helpers
 
-        /// <summary>Returns a client's copy of <paramref name="model"/>: serialized and deserialized with <see cref="MetaSerializationFlags.SendOverNetwork"/>.</summary>
-        static MatchModel OverTheWire(MatchModel model)
-        {
-            byte[] bytes = MetaSerialization.SerializeTagged<IMultiplayerModel>(model, MetaSerializationFlags.SendOverNetwork, logicVersion: null);
-            return (MatchModel)MetaSerialization.DeserializeTagged<IMultiplayerModel>(bytes, MetaSerializationFlags.SendOverNetwork, resolver: null, logicVersion: null);
-        }
+        static MatchModel OverTheWire(MatchModel model) => TestMatchHost.OverTheWire(model);
 
         static T RoundTrip<T>(T message) where T : MetaMessage
         {

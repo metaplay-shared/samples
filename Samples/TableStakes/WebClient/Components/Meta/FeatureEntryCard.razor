@@ -164,6 +164,6 @@
         Meta.RecordPromotedEntrySelection(PromotedEntryPlacement.FeatureCard, View.Feature);
 
         if (MetaRoutes.For(View.Feature) is string route)
-            EnvironmentLink.NavigateTo(Navigation, route);
+            Navigation.NavigateTo(route);
     }
 }

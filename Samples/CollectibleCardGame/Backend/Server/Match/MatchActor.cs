@@ -39,9 +39,7 @@ namespace Game.Server.Match
     /// is sent.
     /// </para>
     /// </summary>
-    // Derives from the vendored SDK base in Backend/Server/SdkPreview because addressed timeline operations
-    // are an SDK change not yet in the R38 release. See SdkPreview/README.md.
-    public sealed partial class MatchActor : SdkPreview.EphemeralMultiplayerEntityActorBase<MatchModel, MatchAction>
+    public sealed partial class MatchActor : EphemeralMultiplayerEntityActorBase<MatchModel, MatchAction>
     {
         // The actor ticks, which is the SDK default: ticks advance the model's clock, which every deadline is
         // stamped from (MatchModel.TicksPerSecond).
@@ -113,8 +111,10 @@ namespace Game.Server.Match
             // Two independent draws from the cryptographic source. RandomPCG.CreateNew() must not be used: a deal
             // seed a client can bracket hands over both hands (Docs/hidden-information.md, "The seed is
             // part of the secret"). The bot seed is not derived from the deal seed, so it cannot lead back to it.
-            ulong dealSeed = BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(8));
-            ulong botSeed  = BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(8));
+            // The browser suites fix both (Match:FixedDealSeed), which MatchOptions allows only in a local or
+            // development environment.
+            ulong dealSeed = _options.FixedDealSeed != 0 ? _options.FixedDealSeed : BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(8));
+            ulong botSeed  = _options.FixedBotSeed  != 0 ? _options.FixedBotSeed  : BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(8));
 
             model.Timings          = _options.ToMatchTimings();
             model.Stakes           = setup.Stakes;

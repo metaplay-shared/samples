@@ -37,10 +37,9 @@ public class LiveServerTableTests : PlaywrightPageTest
             await Expect(plaque).ToHaveAttributeAsync("data-position", ScreenPositionOfSeat(seat, ownSeat));
         }
 
-        // The player's hand arrives on the private channel at subscribe time, together with the play index it was
-        // read at. The client never receives other seats' cards.
+        // The player's hand arrives on the private channel at subscribe time. The client never receives other
+        // seats' cards.
         await Expect(Page.GetByTestId("own-hand-count")).ToHaveTextAsync("5", new() { Timeout = TurnTimeoutMs });
-        await Expect(Page.GetByTestId("own-hand-index")).ToHaveTextAsync("0");
 
         // A player alone in the queue gets bots in the other three seats.
         await ExpectOnlyTheOwnSeatIsHumanAsync(Page);

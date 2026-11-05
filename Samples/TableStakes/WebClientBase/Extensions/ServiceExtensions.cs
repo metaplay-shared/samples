@@ -11,13 +11,13 @@ namespace WebClientBase.Extensions;
 public static class ServiceExtensions
 {
     /// <summary>
-    /// Registers the web client config and the client service as singletons.
+    /// Add WebClientBase services to the service collection.
     /// </summary>
     /// <typeparam name="TPlayerModel">The game-specific PlayerModel type.</typeparam>
     /// <typeparam name="TClientService">The game-specific client service type.</typeparam>
     /// <param name="services">The service collection.</param>
     /// <param name="config">Configuration for the web client.</param>
-    /// <returns>The same service collection.</returns>
+    /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddWebClientBase<TPlayerModel, TClientService>(
         this IServiceCollection services,
         WebClientConfig config)
@@ -26,11 +26,13 @@ public static class ServiceExtensions
     {
         services.AddSingleton(config);
 
+        // Register the concrete service as a singleton
         services.AddSingleton<TClientService>();
 
-        // Both interfaces resolve to the same TClientService instance.
+        // Register the generic interface pointing to the same instance
         services.AddSingleton<IMetaplayClientService<TPlayerModel>>(sp => sp.GetRequiredService<TClientService>());
 
+        // Register the non-generic interface for components that don't need typed access
         services.AddSingleton<IMetaplayConnectionService>(sp => sp.GetRequiredService<TClientService>());
 
         return services;

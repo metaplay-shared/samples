@@ -150,6 +150,23 @@ namespace Game.Server.Migrations
                     b.ToTable("AuthEntries", (string)null);
                 });
 
+            modelBuilder.Entity("Metaplay.Server.Database.PersistedMetaplayGameServerDatabaseFixups", b =>
+                {
+                    b.Property<string>("FixupsKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<int>("FixupVersion")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("DateTime");
+
+                    b.HasKey("FixupsKey");
+
+                    b.ToTable("MetaplayGameServerDatabaseFixups", (string)null);
+                });
+
             modelBuilder.Entity("Metaplay.Server.DatabaseScan.PersistedDatabaseScanCoordinator", b =>
                 {
                     b.Property<string>("EntityId")
@@ -325,8 +342,8 @@ namespace Game.Server.Migrations
             modelBuilder.Entity("Metaplay.Server.InAppPurchase.PersistedInAppPurchaseSubscription", b =>
                 {
                     b.Property<string>("PlayerAndOriginalTransactionId")
-                        .HasMaxLength(530)
-                        .HasColumnType("varchar(530)");
+                        .HasMaxLength(659)
+                        .HasColumnType("varchar(659)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("DateTime");
@@ -340,15 +357,19 @@ namespace Game.Server.Migrations
                         .IsRequired()
                         .HasColumnType("varchar(64)");
 
+                    b.Property<string>("ProductId")
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)");
+
                     b.Property<byte[]>("SubscriptionInfo")
                         .IsRequired()
                         .HasColumnType("longblob");
 
                     b.HasKey("PlayerAndOriginalTransactionId");
 
-                    b.HasIndex("OriginalTransactionId");
-
                     b.HasIndex("PlayerId");
+
+                    b.HasIndex("OriginalTransactionId", "ProductId");
 
                     b.ToTable("InAppPurchaseSubscriptions", (string)null);
                 });

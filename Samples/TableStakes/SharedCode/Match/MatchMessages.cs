@@ -9,26 +9,24 @@ namespace Game.Logic
     /// A client's request to play a card. It is a message rather than an action because only the host writes the
     /// timeline, so a refused move never appears on any board (<c>docs/match.md</c>, "Only the host writes the
     /// timeline"). The request names the card and the play index, not a position in the hand, because the hand's
-    /// order on screen can change between the tap and the host receiving the request.
+    /// order on screen can change between the tap and the host receiving the request. It names no seat: the host
+    /// plays the move for the seat the sender occupies.
     /// </summary>
     [MetaMessage(MessageCodes.MatchPlayCardRequest, MessageDirection.ClientToServer), MessageRoutingRuleEntityChannel]
     public class MatchPlayCardRequest : MetaMessage
     {
-        /// <summary>Untrusted. <see cref="MatchHost.TrySubmitMove"/> checks it against the sender's seat.</summary>
-        public int  Seat      { get; private set; }
         public int  PlayIndex { get; private set; }
         public Card Card      { get; private set; }
 
         MatchPlayCardRequest() { }
 
-        public MatchPlayCardRequest(int seat, int playIndex, Card card)
+        public MatchPlayCardRequest(int playIndex, Card card)
         {
-            Seat      = seat;
             PlayIndex = playIndex;
             Card      = card;
         }
 
-        public override string ToString() => $"play {Card} from seat {Seat} at index {PlayIndex}";
+        public override string ToString() => $"play {Card} at index {PlayIndex}";
     }
 
     /// <summary>
@@ -59,37 +57,6 @@ namespace Game.Logic
         }
 
         public override string ToString() => $"refused {Card} at index {PlayIndex}: {Reason}";
-    }
-
-    /// <summary>
-    /// One seat's current hand, sent when the host changed the hand without the owner playing a card: a deadline
-    /// auto-play, a covering bot's move or a reclaim. The subscribe's private state covers the deal and every
-    /// reconnect.
-    /// <para>
-    /// It carries the play index at which it was built, and the client applies it only when its board reaches that
-    /// index. The SDK sends an entity message immediately but sends timeline updates on the host's next flush, so
-    /// this message often arrives before the timeline update that caused it.
-    /// </para>
-    /// </summary>
-    [MetaMessage(MessageCodes.MatchHandDelivered, MessageDirection.ServerToClient)]
-    public class MatchHandDelivered : MetaMessage
-    {
-        public int        Seat      { get; private set; }
-        public List<Card> Hand      { get; private set; }
-        public int        PlayIndex { get; private set; }
-
-        MatchHandDelivered() { }
-
-        public MatchHandDelivered(int seat, IReadOnlyList<Card> hand, int playIndex)
-        {
-            Seat      = seat;
-            Hand      = new List<Card>(hand);
-            PlayIndex = playIndex;
-        }
-
-        public MatchOwnHand ToOwnHand() => new MatchOwnHand(Seat, Hand, PlayIndex);
-
-        public override string ToString() => $"hand of {Hand.Count} for seat {Seat} at index {PlayIndex}";
     }
 
     /// <summary>

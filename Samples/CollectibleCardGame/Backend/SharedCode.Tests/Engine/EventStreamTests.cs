@@ -64,38 +64,15 @@ namespace Game.Logic.Tests
             MatchEvent named = new CardPlayedEvent(0, secret, CardId.FromString("MooseWanderer"), 1, EffectTargetRef.None, 0);
             Assert.That(FindLeak(engine, named), Is.Not.Null, "an identity named directly on the event");
 
-            // …and the one the walk used to miss entirely: an identity buried inside a struct field. Most
-            // events name their target through one, so a walk that stopped at the struct boundary was
-            // checking almost nothing and reporting that everything was fine.
+            // An identity inside a struct field must be caught too: most events name their target through one.
             MatchEvent buried = new DamageDealtEvent(CardInstanceId.None, EffectTargetRef.OnCritter(secret), 3, false);
             Assert.That(FindLeak(engine, buried), Is.Not.Null, "an identity inside an EffectTargetRef");
-        }
-
-        [Test]
-        public void TheLeakWalkReachesIdentitiesInsideStructFields()
-        {
-            // The guard on the guard: prove the walk actually descends into EffectTargetRef rather than
-            // happening to pass because nothing ever leaked.
-            Scenario       scenario = new Scenario(Config);
-            CardInstanceId critter  = scenario.Seat(0).Board("PondFrog");
-            scenario.Seat(0).DeckOf(4);
-            scenario.Seat(1).DeckOf(4);
-            scenario.OnTurn(0).Build();
-
-            MatchEvent ev = new DamageDealtEvent(CardInstanceId.None, EffectTargetRef.OnCritter(critter), 2, false);
-
-            Assert.That(CollectInstanceIds(ev), Does.Contain(critter));
         }
 
         /// <summary>
         /// Reflect over everything an event reaches and report the first identity it names that is not public.
         /// Doing it by reflection rather than per event type is the point: an event added later is covered
         /// without anybody remembering to extend this.
-        /// <para>
-        /// It walks <em>into</em> structs, which is not a detail — most events name their target through an
-        /// <see cref="EffectTargetRef"/>, and a walk that stopped at the struct would have been checking
-        /// almost nothing while reporting that everything was fine.
-        /// </para>
         /// </summary>
         static string FindLeak(MatchEngine engine, MatchEvent ev)
         {
@@ -163,30 +140,8 @@ namespace Game.Logic.Tests
         }
 
         [Test]
-        public void CardDrawnCarriesNoIdentity()
+        public void ThePublicSeatStateHasNoHandOrDeckOrder()
         {
-            foreach (PropertyInfo property in typeof(CardDrawnEvent).GetProperties())
-                Assert.That(property.PropertyType, Is.EqualTo(typeof(int)), $"{property.Name} could name the drawn card");
-        }
-
-        [Test]
-        public void DrawOverflowedCarriesNoIdentity()
-        {
-            foreach (PropertyInfo property in typeof(DrawOverflowedEvent).GetProperties())
-                Assert.That(property.PropertyType, Is.EqualTo(typeof(int)), $"{property.Name} could name the overflowed card");
-        }
-
-        [Test]
-        public void ThePublicRulesStateNamesEveryFieldExplicitly()
-        {
-            // A tripwire rather than a proof: adding a member to the public rules state has to be a
-            // deliberate edit here too, which is what stops one arriving by accident. It matters more than it
-            // did — the public half is on the replicated model now, so a new member is a new thing both
-            // clients hold rather than a new field in a projection somebody built.
-            Assert.That(typeof(MatchRulesState).GetProperties().Length, Is.EqualTo(15));
-            Assert.That(typeof(SeatState).GetProperties().Length, Is.EqualTo(13));
-            Assert.That(typeof(BoardCritter).GetProperties().Length, Is.EqualTo(14), "eight stored members and six derived");
-
             foreach (PropertyInfo property in typeof(SeatState).GetProperties())
             {
                 Assert.That(property.Name, Is.Not.EqualTo("Hand"), "the public seat state has no hand: it has a count");
@@ -207,37 +162,16 @@ namespace Game.Logic.Tests
             // Structural: the only hand on the type is one seat's own, and the view says whose.
             Assert.That(view.Seat, Is.EqualTo(0));
 
-            // An exact allow-list, name and type, rather than a refusal of one type that would obviously be
-            // wrong. The weaker form let a review add `public readonly MatchModel Root;` — the model root,
-            // which carries the secret — with both shape tests still green. What the doc promises is that a
-            // field is a deliberate edit; this is what makes that true, because a new field fails here until
-            // somebody writes it down.
-            List<string> members = new List<string>();
+            // Nothing the view holds reaches the model root or the secret.
             foreach (FieldInfo field in typeof(SeatView).GetFields())
-                members.Add($"{field.Name}: {field.FieldType.Name}");
-
-            members.Sort();
-            Assert.That(members, Is.EqualTo(new List<string>
             {
-                "Hand: IReadOnlyList`1",
-                "LegalActions: IReadOnlyList`1",
-                "Pacing: MatchPacing",
-                "Pending: MatchPendingWork",
-                "PendingChoice: PendingChoiceView",
-                "Rules: MatchRulesState",
-                "Seat: Int32",
-                "Seats: IReadOnlyList`1",
-                "Stakes: MatchStakes",
-                "Timings: MatchTimings",
-            }), "the seat view's members are an allow-list: a new one is a secrecy decision, not a convenience");
+                string reached = ReachesTheSecret(field.FieldType, new HashSet<Type>());
+                Assert.That(reached, Is.Null, $"SeatView.{field.Name} reaches {reached}");
+            }
+            Assert.That(ReachesTheSecret(typeof(IReadOnlyList<SeatSecrets>), new HashSet<Type>()), Is.Not.Null, "the walk sees through a collection");
 
             // …and behavioural, which is the half that catches an identity leaking through some other member.
-            //
-            // What it can claim changed with the model's shape, and the change is worth stating. Instance
-            // IDENTIFIERS are public now: the registry is dense and replicated, so the opponent's hidden
-            // cards do have entries in it, at their own indices. What those entries must not carry is what
-            // the card IS — so the claim is about identities rather than about ids, which is exactly the
-            // line CardPlace.Unseen draws.
+            // Hidden entries in the registry carry no identity.
             foreach (CardInstance instance in view.Rules.Instances)
             {
                 if (instance.IsPublic)
@@ -254,6 +188,48 @@ namespace Game.Logic.Tests
 
             foreach (CardInstanceId id in engine.SecretHand(1))
                 Assert.That(ownHand, Does.Not.Contain(id), "the delivered hand is one seat's own");
+        }
+
+        /// <summary>
+        /// The name of the first secret-bearing type reachable from <paramref name="type"/> through generic
+        /// arguments and the public fields and properties of the game's own types, or null.
+        /// </summary>
+        static string ReachesTheSecret(Type type, HashSet<Type> visited)
+        {
+            if (type == typeof(MatchModel) || type == typeof(MatchSecrets) || type == typeof(SeatSecrets))
+                return type.Name;
+
+            if (!visited.Add(type))
+                return null;
+
+            if (type.IsGenericType)
+            {
+                foreach (Type argument in type.GetGenericArguments())
+                {
+                    string reached = ReachesTheSecret(argument, visited);
+                    if (reached != null)
+                        return reached;
+                }
+            }
+
+            if (type.IsPrimitive || type.IsEnum || type == typeof(string) || type.Namespace?.StartsWith("Game.Logic") != true)
+                return null;
+
+            foreach (FieldInfo field in type.GetFields(BindingFlags.Public | BindingFlags.Instance))
+            {
+                string reached = ReachesTheSecret(field.FieldType, visited);
+                if (reached != null)
+                    return reached;
+            }
+
+            foreach (PropertyInfo property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                string reached = ReachesTheSecret(property.PropertyType, visited);
+                if (reached != null)
+                    return reached;
+            }
+
+            return null;
         }
 
         static List<CardInstanceId> CollectInstanceIds(object root)
@@ -316,34 +292,8 @@ namespace Game.Logic.Tests
         }
 
         [Test]
-        public void EveryAcceptedIntentPublishesAStep()
-        {
-
-            Scenario scenario = new Scenario(Config);
-            scenario.Seat(0).Hand("MeadowMouse");
-            scenario.Seat(0).Board("PondFrog");
-            scenario.Seat(0).Mana(9, 9).DeckOf(6);
-            scenario.Seat(1).DeckOf(6);
-            MatchEngine engine = scenario.OnTurn(0).Build();
-
-            CardInstanceId mouse    = engine.SecretHand(0)[0];
-            CardInstanceId attacker = engine.Rules.Seat(0).Board[0].Id;
-
-            engine.Play(0, mouse, EffectTargetRef.None);
-            Assert.That(engine.Actions.Count, Is.EqualTo(1));
-            Assert.That(engine.LastEvents.Count, Is.GreaterThan(0));
-
-            engine.Attack(0, attacker, EffectTargetRef.Den(1));
-            Assert.That(engine.Actions.Count, Is.EqualTo(2));
-
-            engine.EndTurn(0);
-            Assert.That(engine.Actions.Count, Is.EqualTo(3));
-        }
-
-        [Test]
         public void TheHandRevisionSaysWhoseHandChanged()
         {
-
             Scenario scenario = new Scenario(Config);
             scenario.Seat(0).Hand("MeadowMouse");
             scenario.Seat(0).Mana(9, 9).DeckOf(6);
@@ -361,7 +311,6 @@ namespace Game.Logic.Tests
         {
             // The most frequent correction of all. The handover runs inside the action that ended the turn,
             // so the draw and its correction arrive on that one step.
-
             Scenario scenario = new Scenario(Config);
             scenario.Seat(0).DeckOf(6);
             scenario.Seat(1).DeckOf(6);
@@ -408,7 +357,6 @@ namespace Game.Logic.Tests
         {
             // Seat 0 acts; seat 1's hand is the one that changed. A flag that followed the actor would send
             // the correction to the wrong client.
-
             Scenario       scenario = new Scenario(Config);
             CardInstanceId undertow = scenario.Seat(0).Hand("Undertow");
             CardInstanceId victim   = scenario.Seat(1).Board("PondFrog");

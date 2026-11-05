@@ -30,7 +30,7 @@ when the claim action runs, whatever its result, because a refused claim leaves 
 from the SDK's `OnAfterAction` hook, which runs whether the client or the server executed the action. The guarantee that
 a day is claimed once is the model's own guard, not the in-flight record.
 
-The offline host has no handler for the claim request, so a claim needs a live server.
+The offline host answers the claim request with the same policy and wallet check, without the throttle.
 
 ## Day numbering
 

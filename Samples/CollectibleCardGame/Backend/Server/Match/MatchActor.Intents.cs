@@ -67,7 +67,7 @@ namespace Game.Server.Match
             }
         }
 
-        /// <summary> One seat intent: leave, or one of the two that are declared and refused. </summary>
+        /// <summary> One seat intent: leave, the Heist pick, or a developer player's debug intent. </summary>
         [PubSubMessageHandler]
         void HandleMatchSeatIntentMessage(EntitySubscriber session, MatchSeatIntentMessage message)
         {
@@ -87,14 +87,24 @@ namespace Game.Server.Match
                     return;
 
                 case DebugWinMatchIntent _:
-                    bool isDeveloper = GlobalStateProxyActor.ActiveDevelopers.Get()?.IsPlayerDeveloper(Model.Seats[seat].PlayerId) == true;
-                    if (!isDeveloper || Model.Phase != MatchTablePhase.Playing || Model.Rules.Phase == MatchPhase.Complete || Model.Result != null)
+                    if (!IsDeveloperSeat(seat) || Model.Phase != MatchTablePhase.Playing || Model.Rules.Phase == MatchPhase.Complete || Model.Result != null)
                     {
                         Refuse(session, message.RequestId, MatchRefusalCode.NotAvailableYet);
                         return;
                     }
                     ExecuteMatchAction(new MatchDebugWin(seat));
                     AfterActions();
+                    return;
+
+                case DebugLapseDeadlineIntent _:
+                    if (!IsDeveloperSeat(seat) || !MatchDeadlinePolicy.DeadlineIsInForce(Model))
+                    {
+                        Refuse(session, message.RequestId, MatchRefusalCode.NotAvailableYet);
+                        return;
+                    }
+                    _log.Info("Seat {Seat} lapsed the {Kind} deadline early (developer tool)", seat, Model.Pacing.DeadlineKind);
+                    OnDeadlineLapsed(Model.Pacing.DeadlineKind);
+                    RearmFromModel();
                     return;
 
                 case HeistPickIntent pick:
@@ -108,6 +118,10 @@ namespace Game.Server.Match
         }
 
         // ---------------------------------------------------------------- the pieces
+
+        /// <summary> Whether the seat's player is marked as a developer, which the debug intents require. </summary>
+        bool IsDeveloperSeat(int seat)
+            => GlobalStateProxyActor.ActiveDevelopers.Get()?.IsPlayerDeveloper(Model.Seats[seat].PlayerId) == true;
 
         /// <summary> The seat this session's player owns, or <see cref="MatchSeats.None"/>. </summary>
         int ResolveSeat(EntitySubscriber session)

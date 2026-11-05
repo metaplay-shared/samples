@@ -49,6 +49,14 @@ namespace Game.Server.Match
         [MetaDescription("How long a table's actor stays alive after its last subscriber leaves. Must exceed DisconnectGrace and JoinWindow, or a table shuts down before those timers end. The server refuses to start otherwise.")]
         public TimeSpan ActorLingerAfterLastSubscriber { get; private set; } = TimeSpan.FromSeconds(30);
 
+        /// <summary>
+        /// How long the actor stays alive before its first subscriber. A table woken from the database holds its seats
+        /// on <see cref="RestartReconnectGrace"/>, and the actor must outlive that grace and then play the game out,
+        /// or the table would wait in the database unfinished until something woke it again. A new table's join
+        /// window is shorter than the linger, so this covers it too.
+        /// </summary>
+        public TimeSpan GetActorInitialWait() => RestartReconnectGrace + ActorLingerAfterLastSubscriber;
+
         [MetaDescription("Consecutive move-deadline lapses before a seat is handed to a covering bot. Any move from the seat's owner resets the count and takes the seat back.")]
         public int StrikesBeforeCover { get; private set; } = MatchTimings.Default.StrikesBeforeCover;
 

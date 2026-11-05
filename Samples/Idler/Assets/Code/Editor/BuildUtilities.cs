@@ -1,11 +1,10 @@
-// This file is part of Metaplay SDK which is released under the Metaplay SDK License.
-
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Metaplay.Core.Client;
+using Metaplay.Unity;
 using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEngine;
@@ -14,33 +13,6 @@ namespace Code.Editor
 {
     public class BuildUtilities
     {
-        private static void IncrementBuildNumberBasedOnEnv()
-        {
-            var incrementStr = Environment.GetEnvironmentVariable("UCB_UNITY_BUILD_NUMBER_INCREMENT");
-            
-            if (!int.TryParse(incrementStr, out var increment))
-                throw new InvalidOperationException("Could not convert  " + incrementStr + " to int");
-            
-            // Load the PlayerSettings asset.
-            var playerSettings = Resources.FindObjectsOfTypeAll<PlayerSettings>().FirstOrDefault();
-
-            if (playerSettings != null)
-            {
-                SerializedObject so = new SerializedObject(playerSettings);
-
-                // Find the build number property.
-                var sp = so.FindProperty("AndroidBundleVersionCode");
-
-                var currentValue = sp.longValue;
-
-                sp.longValue = currentValue + increment;
-
-                // Save player settings.
-                so.ApplyModifiedProperties();
-                AssetDatabase.SaveAssets();
-            }
-        }
-
         static string ExecuteCommand(string executable, string arguments)
         {
             var prc = new System.Diagnostics.Process();
@@ -85,9 +57,8 @@ namespace Code.Editor
             // Update CommitId in ClientVersion.cs
             //UpdateCommitId();
 
-            // Build environment configs using the default environment config provider
-            DefaultEnvironmentConfigProvider defaultEnvironmentConfigProvider = DefaultEnvironmentConfigProvider.Instance;
-            defaultEnvironmentConfigProvider.BuildEnvironmentConfigs(environmentId, includedEnvironments);
+            // Bake the environment configs into the build
+            MetaplayUnityEditorEnvironmentConfigBuilder.Build(environmentId, includedEnvironments);
 
             // Build game
             BuildPipeline.BuildPlayer(new BuildPlayerOptions
@@ -132,9 +103,17 @@ namespace Code.Editor
 
         #if UNITY_CLOUD_BUILD
         public static void PreExport(UnityEngine.CloudBuild.BuildManifestObject manifest) {
-            int buildNumber = manifest.GetValue<int>("buildNumber");
+            string offsetStr = Environment.GetEnvironmentVariable("UCB_UNITY_BUILD_NUMBER_OFFSET");
+            int offset;
+            if (offsetStr == null)
+                offset = 0;
+            else if (!int.TryParse(offsetStr, out offset))
+                throw new InvalidOperationException("Could not convert  " + offsetStr + " to int");
+
+            int buildNumber = offset + manifest.GetValue<int>("buildNumber");
             PlayerSettings.bundleVersion = $"0.1.{buildNumber}";
             PlayerSettings.iOS.buildNumber = $"{buildNumber}";
+            PlayerSettings.Android.bundleVersionCode = buildNumber;
         }
         #endif
     }

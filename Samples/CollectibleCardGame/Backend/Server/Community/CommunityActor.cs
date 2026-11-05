@@ -2,6 +2,7 @@ using Game.Logic;
 using Game.Server.Matchmaking;
 using Metaplay.Cloud.Entity;
 using Metaplay.Cloud.Persistence;
+using Metaplay.Cloud.RuntimeOptions;
 using Metaplay.Cloud.Sharding;
 using Metaplay.Core;
 using Metaplay.Core.Model;
@@ -138,7 +139,7 @@ public class CommunityActor : PersistedEntityActor<PersistedCommunity, Community
     [EntityAskHandler]
     async Task<InternalCommunityReadResponse> HandleRead(EntityId sender, InternalCommunityRead request)
     {
-        if (DateTime.UtcNow - _sampledAt >= TimeSpan.FromSeconds(5))
+        if (DateTime.UtcNow - _sampledAt >= RuntimeOptionsRegistry.Instance.GetCurrent<CommunityOptions>().SampleInterval)
         {
             StatsCollectorNumConcurrentsResponse online = await EntityAskAsync<StatsCollectorNumConcurrentsResponse>(
                 StatsCollectorManager.EntityId, StatsCollectorNumConcurrentsRequest.Instance);

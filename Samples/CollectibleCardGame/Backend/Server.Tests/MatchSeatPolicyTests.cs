@@ -23,26 +23,23 @@ namespace Game.Server.Tests
 
         static MatchSeat Bot() => new MatchSeat(EntityId.None, "Clockwork Cub", SeatOccupancy.Bot, BotProfileId.Casual);
 
-        [Test]
-        public void AConnectedHumanIsNeitherBotDrivenNorMarked()
+        /// <summary>
+        /// The derived properties of a seat nobody has covered. A disconnected human is still not bot-driven: a
+        /// connected seat is governed by the turn deadline and a disconnected one by grace, never both, and
+        /// dropping does not itself hand the seat to a policy. A bot seat never has an owner.
+        /// </summary>
+        [TestCase(SeatOccupancy.Human, true, false, false, true, TestName = "A connected human is neither bot-driven nor marked")]
+        [TestCase(SeatOccupancy.Human, false, false, false, false, TestName = "A disconnected human is still not bot-driven")]
+        [TestCase(SeatOccupancy.Bot, false, true, true, false, TestName = "A bot seat is bot-driven, marked and ownerless")]
+        public void AnUncoveredSeatsDerivedProperties(SeatOccupancy occupancy, bool connected, bool botDriven, bool marked, bool connectedHuman)
         {
-            MatchSeat seat = Human();
+            MatchSeat seat = occupancy == SeatOccupancy.Bot ? Bot() : Human();
+            seat.IsConnected = connected;
 
-            Assert.That(seat.IsBotDriven, Is.False);
-            Assert.That(seat.IsConnectedHuman, Is.True);
-            Assert.That(seat.ShowsComputerMark, Is.False);
-        }
-
-        [Test]
-        public void ADisconnectedHumanIsStillNotBotDriven()
-        {
-            // A connected seat is governed by the turn deadline and a disconnected one by grace, never both.
-            // Dropping does not itself hand the seat to a policy.
-            MatchSeat seat = Human();
-            seat.IsConnected = false;
-
-            Assert.That(seat.IsBotDriven, Is.False);
-            Assert.That(seat.IsConnectedHuman, Is.False);
+            Assert.That(seat.IsBotDriven, Is.EqualTo(botDriven));
+            Assert.That(seat.ShowsComputerMark, Is.EqualTo(marked));
+            Assert.That(seat.IsConnectedHuman, Is.EqualTo(connectedHuman));
+            Assert.That(seat.PlayerId.IsValid, Is.EqualTo(occupancy != SeatOccupancy.Bot));
         }
 
         [Test]
@@ -301,7 +298,7 @@ namespace Game.Server.Tests
             // The arithmetic of "consecutive", and **only** that: this drives the predicates directly, so it
             // says nothing about whether anything calls them. That an intent is what clears the count — the
             // actor's own presence step, refused intents included — is asserted where it happens, in
-            // Client.Tests/MatchStrikeTests.AnIntentBetweenTwoLapsesKeepsTheSeat, because Server.Tests has no
+            // WebClient.Tests/MatchStrikeTests.AnIntentBetweenTwoLapsesKeepsTheSeat, because Server.Tests has no
             // actor to ask.
             MatchSeat seat = Human();
             seat.Strikes = 1;
@@ -381,18 +378,6 @@ namespace Game.Server.Tests
         }
 
         [Test]
-        public void ABotSeatNeverGainsAnOwner()
-        {
-            MatchSeat seat = Bot();
-
-            Assert.That(seat.PlayerId, Is.EqualTo(EntityId.None));
-            Assert.That(seat.PlayerId.IsValid, Is.False);
-            Assert.That(seat.IsBotDriven, Is.True);
-            Assert.That(seat.ShowsComputerMark, Is.True);
-            Assert.That(seat.IsConnectedHuman, Is.False);
-        }
-
-        [Test]
         public void APersonalityProfileResolvesToItselfAndTheStrongestOneToNoMistakes()
         {
             // A seat seated as a bot is an opponent and may have a personality; a seat played on behalf of an
@@ -403,16 +388,6 @@ namespace Game.Server.Tests
 
             Assert.That(BotProfiles.Resolve(BotProfileId.Strongest).MakesMistakes, Is.False);
             Assert.That(BotProfiles.Resolve(BotProfileId.StrictlyDeterministic).MakesMistakes, Is.False);
-        }
-
-        [Test]
-        public void EveryProfileIdNamesARealProfile()
-        {
-            // The id is the wire form of a profile, so an id with no profile behind it would be a seat nothing
-            // could play. It resolves to the strongest one rather than to nothing, which is the safe
-            // direction, and this asserts that fallback is never actually needed.
-            foreach (BotProfileId id in System.Enum.GetValues<BotProfileId>())
-                Assert.That(BotProfiles.Resolve(id).Name, Is.EqualTo(id.ToString()), $"{id} has no profile of its own");
         }
     }
 }

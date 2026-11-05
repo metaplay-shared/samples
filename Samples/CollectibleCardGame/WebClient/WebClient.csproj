@@ -1,0 +1,127 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <!-- The browser platform TFM is what selects the SDK's browser flavor across the whole reference graph:
+         the compiler defines BROWSER, which switches Metaplay.Client to the WebSocket transport and the
+         browser blob store, and compiles out the runtime codegen mono-wasm cannot run. -->
+    <TargetFramework>net10.0-browser</TargetFramework>
+    <Nullable>disable</Nullable>
+    <!-- CS8632: Nullable annotation used outside #nullable context -->
+    <!-- CS8669: Nullable annotation in auto-generated code requires explicit #nullable directive -->
+    <NoWarn>$(NoWarn);CS8632;CS8669</NoWarn>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>Latest</LangVersion>
+    <!-- Single-threaded browser runtime. -->
+    <WasmEnableThreads>false</WasmEnableThreads>
+
+    <!-- Ship no ICU data, so the client downloads no icudt_*.dat file. This applies to every build, `dotnet build`
+         and the dev server as well as a publish. Culture-sensitive APIs then use the invariant culture instead of
+         the browser's locale, so dates and numbers are formatted the same for every player. That is this game's
+         choice, for its English-only UI. A game that formats for the player's locale removes this line, to keep
+         ICU. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- Trim the published client. This applies to `dotnet publish` only: `dotnet build` and the dev server use
+         the untrimmed build, so the trimmed mode of `run_e2e.py` is what tests it. The Blazor default, partial
+         mode, trims only assemblies marked [IsTrimmable]. Full mode trims the rest too, including members that
+         are only reached through reflection, so the assemblies that need such members are rooted in the
+         TrimmerRootAssembly list below. -->
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>full</TrimMode>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The built-in game config archive, wwwroot/Assets/SharedGameConfig.mpa. The build's endpoint manifest, which
+         the dev server serves the client by, gives a file type it does not know the caching of an image:
+         an hour without revalidation. The archive changes with every config build and offline mode runs on it, so
+         it is revalidated on each load like the scripts and stylesheets. -->
+    <StaticWebAssetContentTypeMapping Include="application/octet-stream" Pattern="*.mpa" Cache="no-cache" Priority="1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.*" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.*" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Shared game-logic assembly (the SharedCode types). Referenced as an assembly (not source-included) so the
+         pre-built serializer's assembly identity matches at runtime. SharedCode.Client multi-targets, and this project's
+         net10.0-browser TFM picks its browser flavor. -->
+    <ProjectReference Include="..\SharedCode\SharedCode.Client.csproj" />
+    <ProjectReference Include="..\WebClientBase\WebClientBase.csproj" />
+  </ItemGroup>
+
+  <!-- The pre-built serializer, Metaplay.Generated.Browser.dll, because mono-wasm cannot generate one at runtime.
+       This build generates it with tools/SerializerGen into obj/, and references it from there; nothing is committed.
+       - The ProjectReference only orders the build: the generator, and with it the net10.0 flavour of SharedCode.Client
+         it scans, is built before this project. The .NET SDK refuses a self-contained app (a WebAssembly app is one)
+         referencing a framework-dependent executable (NETSDK1150), hence ValidateExecutableReferencesMatchSelfContained.
+       - The Reference is copy-local, which enrolls the DLL in the Blazor boot manifest.
+       - The HintPath is normalized: IntermediateOutputPath defaults to obj\$(Configuration)/..., and on Linux reference
+         resolution does not convert that backslash. It then looks for a file that cannot exist, warns (MSB3245) and
+         builds a client without the serializer, which fails at startup. -->
+  <PropertyGroup>
+    <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Metaplay.Generated.Browser">
+      <HintPath>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'MetaplaySerializer', 'Metaplay.Generated.Browser.dll'))</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <ProjectReference Include="..\tools\SerializerGen\SerializerGen.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+  </ItemGroup>
+
+  <!-- Runs the generator before references are resolved, when the serializer is older than anything the generator
+       loads (its build output: the game code, the SDK and the tool itself). The generator leaves the DLL untouched
+       when the generated source has not changed, so the Touch marks it up to date. Design-time builds skip this, so
+       that an IDE does not run a code generator. -->
+  <Target Name="GenerateBrowserSerializer"
+          BeforeTargets="ResolveAssemblyReferences"
+          DependsOnTargets="_CollectBrowserSerializerInputs"
+          Condition="'$(DesignTimeBuild)' != 'true'"
+          Inputs="@(_BrowserSerializerInput)"
+          Outputs="$(_BrowserSerializerOutDir)Metaplay.Generated.Browser.dll">
+    <PropertyGroup>
+      <_DotnetHost>$(DOTNET_HOST_PATH)</_DotnetHost>
+      <_DotnetHost Condition="'$(_DotnetHost)' == ''">dotnet</_DotnetHost>
+    </PropertyGroup>
+    <Exec Command="&quot;$(_DotnetHost)&quot; exec &quot;$(_BrowserSerializerGenOutDir)SerializerGen.dll&quot; &quot;$(_BrowserSerializerOutDir.TrimEnd('\/'))&quot;"
+          WorkingDirectory="$(MSBuildProjectDirectory)" />
+    <Touch Files="$(_BrowserSerializerOutDir)Metaplay.Generated.Browser.dll" />
+  </Target>
+
+  <Target Name="_CollectBrowserSerializerInputs">
+    <PropertyGroup>
+      <_BrowserSerializerGenOutDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '..', 'tools', 'SerializerGen', 'bin', '$(Configuration)', 'net10.0'))</_BrowserSerializerGenOutDir>
+      <_BrowserSerializerOutDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'MetaplaySerializer'))</_BrowserSerializerOutDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <_BrowserSerializerInput Include="$(_BrowserSerializerGenOutDir)*.dll" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Assemblies whose members are reached through reflection, which the trimmer cannot see. Rooting keeps all of
+       an assembly's members; other assemblies, including .NET's own, are still trimmed.
+
+       The SDK has no trim annotations, so a missing entry produces no build warning. It fails only at run time,
+       in the published client, when a screen first needs a removed type. The dev server runs an untrimmed build,
+       so only the trimmed mode of `run_e2e.py` detects it. -->
+  <ItemGroup>
+    <!-- The prebuilt serializer: the SDK loads it by name, and nothing references it statically. -->
+    <TrimmerRootAssembly Include="Metaplay.Generated.Browser" />
+    <!-- The serializer reaches serialized members and constructors by name, through reflection: the SDK's own types
+         (such as PlayerModelBase) and the game's (the player model, actions and config types). -->
+    <TrimmerRootAssembly Include="Metaplay.Client" />
+    <TrimmerRootAssembly Include="SharedCode.Client" />
+    <!-- Blazor creates components by type, from WebClientHostBuilder's generic TApp, and dependency injection
+         constructs the client service by type, from the generic TClientService; neither generic parameter tells the
+         trimmer to keep the constructors. WebClient also holds the routed pages, which the router finds by scanning
+         the assembly. -->
+    <TrimmerRootAssembly Include="WebClientBase" />
+    <TrimmerRootAssembly Include="WebClient" />
+  </ItemGroup>
+
+</Project>

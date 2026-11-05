@@ -285,8 +285,8 @@ namespace Game.Logic
         /// because all clients reconnect at once. That includes a connected owner whose seat a bot covers. Without the
         /// grace, that seat would be neither connected nor in grace, and <see cref="NobodyIsComingBack"/> would let
         /// the table be played out before anyone could reconnect. A seat that was not connected, or already has a
-        /// running grace timer, gets no new grace. The actor shuts down before the restart grace ends, so a later
-        /// restore acts on the ended grace, and a new grace on each restore would keep the table alive forever.
+        /// running grace timer, gets no new grace. A table can be restored again before or after its restart grace
+        /// ends, for example after a second restart, and a new grace on each restore would keep postponing the game.
         /// </summary>
         public static List<MatchSeatState> StatesAfterColdWake(MatchModel model, MetaTime now, MetaDuration restartGrace)
         {

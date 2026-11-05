@@ -15,7 +15,8 @@ namespace Game.Server.Matchmaking
     /// </para>
     /// <list type="bullet">
     /// <item><c>FillWait + SeatReservationAskTimeout &lt; SearchTimeout</c>. A searching player's reservation ask
-    /// arrives at most this long after they joined the queue.</item>
+    /// arrives at most this long after they joined the queue. Formations do not wait for each other, so this holds
+    /// unless the matchmaker is at its limit of formations in flight or waiting to retry after a failed mint.</item>
     /// <item><c>SeatReservationAskTimeout + MintAskTimeout &lt; SeatReservationTimeout</c>. A reserved player's
     /// table is created at most this long after the reservation.</item>
     /// </list>
@@ -59,8 +60,9 @@ namespace Game.Server.Matchmaking
                 "The player's actor would give up while the matchmaker is still seating them, so the player is told the "
                 + "search failed and is then seated anyway. See MatchmakingOptions.";
 
-            // The reservation asks for one table are sent in parallel, so the longest a search waits for its ask is
-            // the fill wait plus one ask timeout, and the longest a formation takes is one ask plus the table creation.
+            // Formations run off the matchmaker's message loop and send their asks in parallel, so the longest a
+            // search waits for its ask is the fill wait plus one ask timeout, and the longest a formation takes is
+            // one ask plus the table creation.
             OptionsOrder.ThrowIfNotShorter("Matchmaking", FillWait + SeatReservationAskTimeout, "FillWait + SeatReservationAskTimeout", SearchTimeout, nameof(SearchTimeout), Consequence);
             OptionsOrder.ThrowIfNotShorter("Matchmaking", SeatReservationAskTimeout + MintAskTimeout, "SeatReservationAskTimeout + MintAskTimeout", SeatReservationTimeout, nameof(SeatReservationTimeout), Consequence);
 

@@ -2,12 +2,13 @@
 
 What the game is: the match, the cards, the Heist and the economy around it. A compact but complete PvP card game loop
 with a small hand-authored pool, built as a Metaplay sample. The numbers are content in game config, tuned by feel and
-by self-play rather than by a balance pass. How each system is built is indexed in [`README.md`](README.md); possible
-extensions are the README's [Follow-up work](../README.md#follow-up-work).
+by self-play rather than by a balance pass. How each system is built is indexed in [`README.md`](README.md).
 
-**The game is intentionally minimal and not designed to be fun.** Its rules and cards are the smallest set that
-exercises every system the sample demonstrates. The pillars below describe the kind of game this skeleton is shaped
-for; delivering on them — interesting mechanics, cards and synergies — is the work a real game would add.
+> [!NOTE]
+> **This is a toy game.** It exists to exercise the systems the sample demonstrates, and its rules and cards are the
+> smallest set that does. It is not designed to be fun or balanced. The pitch and pillars below describe the kind of
+> game this skeleton is shaped for; delivering on them — interesting mechanics, cards and synergies — is the work a
+> real game would add.
 
 ---
 

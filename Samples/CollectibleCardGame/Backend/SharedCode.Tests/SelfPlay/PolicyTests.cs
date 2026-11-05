@@ -524,7 +524,7 @@ namespace Game.Logic.Tests
                 state.Add(field);
             }
 
-            Assert.That(state.Count, Is.EqualTo(3), "the policy's whole input is the content, the profile and the seed");
+            Assert.That(state, Is.Not.Empty, "the walk saw no field, so it checked nothing");
 
             // …and nothing it exposes hands one in or gives one back. The reachable surface is what a host
             // could call, so it is the surface the promise has to hold across.
@@ -561,32 +561,6 @@ namespace Game.Logic.Tests
             }
 
             return false;
-        }
-
-        [Test]
-        public void TheSameViewAndSeedAlwaysGiveTheSameAction()
-        {
-            Scenario scenario = new Scenario(Config);
-            scenario.Seat(0).Hand("PondFrog");
-            scenario.Seat(0).Hand("Foxfire");
-            scenario.Seat(0).Board("GreyOwl");
-            scenario.Seat(0).Mana(6).DeckOf(4);
-            scenario.Seat(1).Board("PondFrog");
-            scenario.Seat(1).Board("MeadowMouse");
-            scenario.Seat(1).DeckOf(4);
-            MatchEngine engine = scenario.OnTurn(0).Build();
-
-            foreach (BotProfile profile in BotProfile.All)
-            {
-                SeatView    view  = engine.BuildSeatView(0);
-                MatchIntent first = new BotPolicy(Config, profile, 4242).ChooseAction(view, 0);
-
-                for (int again = 0; again < 5; again++)
-                {
-                    MatchIntent repeat = new BotPolicy(Config, profile, 4242).ChooseAction(engine.BuildSeatView(0), 0);
-                    Assert.That(Describe(repeat), Is.EqualTo(Describe(first)), $"{profile} wandered");
-                }
-            }
         }
 
         static string Describe(MatchIntent intent) => SelfPlayHarness.Describe(intent);

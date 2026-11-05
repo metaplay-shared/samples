@@ -27,9 +27,15 @@ namespace Game.Server.Matchmaking
     /// wait has passed, whichever comes first, and bots fill the empty seats.
     /// <para>
     /// The queue is in memory only. After a restart, each player's own search timeout returns them to the menu.
-    /// The formation rule is in <see cref="MatchmakingPolicy"/>. Every handler and scheduled callback returns a
-    /// task that the SDK awaits before the next message, so a formation finishes before any other arrival, cancel
-    /// or timer is handled, and two formations never run at once.
+    /// The formation rule is in <see cref="MatchmakingPolicy"/> and the bookkeeping after a formation in
+    /// <see cref="FormationOutcomePolicy"/>.
+    /// </para>
+    /// <para>
+    /// A formation takes its waiters off the queue, then runs its seat reservation asks and its mint as a task
+    /// through <c>ContinueTaskOnActorContext</c>, so the actor keeps handling arrivals, cancels and timers while
+    /// it waits. The task reads no actor state. Its result is applied by a callback that the SDK runs on the actor
+    /// context, which is the only place the queue changes. Up to <see cref="MaxFormationsInFlight"/> formations
+    /// run at once.
     /// </para>
     /// </summary>
     public sealed class MatchmakerActor : EphemeralEntityActor
@@ -41,13 +47,20 @@ namespace Game.Server.Matchmaking
         public static readonly EntityId SingletonId = EntityId.Create(EntityKindGame.Matchmaker, 0);
 
         /// <summary>
-        /// How long the queue waits before trying again after a table could not be created. The waiters are back in
-        /// the queue and already past their fill wait, so without a delay the retry would be a busy loop.
+        /// How long the queue waits before forming again after a table could not be created. The waiters are back
+        /// in the queue and already past their fill wait, so without a delay the retry would be a busy loop.
         /// </summary>
         static readonly TimeSpan MintRetryDelay = TimeSpan.FromSeconds(1);
 
         /// <summary>How many entity ids <see cref="MintMatchAsync"/> tries before it gives up.</summary>
         const int MaxMintAttempts = 3;
+
+        /// <summary>
+        /// How many formations may wait on their asks and mint at once. It bounds the asks and table setups the
+        /// matchmaker has outstanding when a large queue forms many tables at once. At the limit, the queue waits
+        /// until a formation finishes.
+        /// </summary>
+        const int MaxFormationsInFlight = 16;
 
         static MatchmakingOptions Options => RuntimeOptionsRegistry.Instance.GetCurrent<MatchmakingOptions>();
 
@@ -57,11 +70,27 @@ namespace Game.Server.Matchmaking
         readonly RandomPCG _rng = RandomPCG.CreateNew();
 
         /// <summary>
-        /// The fill timer, armed by <see cref="ArmFillTimer"/> and run by <see cref="OnFillTimerAsync"/>. Its padding
+        /// The fill timer, armed by <see cref="ArmFillTimer"/> and run by <see cref="OnFillTimer"/>. Its padding
         /// keeps a timer that fires slightly early from finding the fill wait not yet passed, forming nothing, and
         /// scheduling itself for the same time again.
         /// </summary>
         readonly DeadlineWakeup _fillTimer = new DeadlineWakeup();
+
+        /// <summary>How many formations have started and not yet been applied.</summary>
+        int _numFormationsInFlight;
+
+        /// <summary>
+        /// The players in a formation that has not been applied yet, with what each did with the queue since. A player
+        /// is in at most one formation, so a seat release or assignment that reaches their actor is always from the
+        /// formation they answered.
+        /// </summary>
+        readonly Dictionary<EntityId, FormationLateChange> _inFormation = new Dictionary<EntityId, FormationLateChange>();
+
+        /// <summary>
+        /// No formation starts before this time. Set after a formation could not create a table, so that the
+        /// retry waits <see cref="MintRetryDelay"/> whatever wakes the queue first.
+        /// </summary>
+        MetaTime _formNotBefore = MetaTime.Epoch;
 
         // The SDK's default policy shuts down an entity without subscribers, and this entity never has any. A
         // shut-down matchmaker would lose the queue and the fill timer.
@@ -79,92 +108,122 @@ namespace Game.Server.Matchmaking
         /// Adds a player to the queue. A player already in the queue is not added again. The player's actor also
         /// refuses a second entry, and both checks are needed: the actor catches a double press of Play, and this
         /// handler catches an actor that restarted and forgot it was searching.
+        /// <para>
+        /// A player who cancelled and pressed Play again may still be in a formation that is waiting on its asks.
+        /// Their entry is held until that formation is applied, so the player is never in two formations at once.
+        /// </para>
         /// </summary>
         [MessageHandler]
-        async Task HandleEnterQueue(MatchmakerEnterQueueMessage message)
+        void HandleEnterQueue(MatchmakerEnterQueueMessage message)
         {
-            if (!_queue.TryEnqueue(new MatchmakingWaiter(message.Identity, MetaTime.Now)))
+            MatchmakingWaiter waiter = new MatchmakingWaiter(message.Identity, MetaTime.Now);
+            if (_inFormation.ContainsKey(waiter.PlayerId))
+            {
+                _inFormation[waiter.PlayerId] = FormationLateChange.PlayAgain(waiter);
+                return;
+            }
+
+            if (!_queue.TryEnqueue(waiter))
             {
                 _log.Warning("Player {PlayerId} is already in the queue. Not queuing them twice.", message.Identity?.PlayerId);
                 return;
             }
 
-            await FormTablesFromQueueAsync();
+            FormTablesFromQueue();
         }
 
         /// <summary>
         /// Removes a player from the queue because they cancelled or their session ended. If a formation already
-        /// took the player's entry, this does nothing, and the seat reservation decides the outcome instead.
+        /// took the player's entry, the seat reservation decides the outcome, and the cancel only keeps a failed mint from
+        /// returning the player to the queue.
         /// </summary>
         [MessageHandler]
-        async Task HandleLeaveQueue(MatchmakerLeaveQueueMessage message)
+        void HandleLeaveQueue(MatchmakerLeaveQueueMessage message)
         {
+            if (_inFormation.ContainsKey(message.PlayerId))
+            {
+                _inFormation[message.PlayerId] = FormationLateChange.Cancelled();
+                return;
+            }
+
             if (!_queue.Remove(message.PlayerId))
                 return;
 
-            await FormTablesFromQueueAsync();
+            FormTablesFromQueue();
         }
 
         /// <summary>
-        /// Forms as many tables as the queue allows, then schedules the fill timer for the players left waiting.
+        /// Starts as many formations as the queue and <see cref="MaxFormationsInFlight"/> allow, then schedules the
+        /// fill timer for the players left waiting.
         /// <para>
         /// After each formation the loop asks the policy again, and the policy returns a time whenever the queue is
         /// non-empty. So a player left over after a full table formed gets a fill timer instead of waiting for more
-        /// players who may never arrive.
+        /// players who may never arrive. At the formation limit the loop stops without a timer, and the next
+        /// formation to finish calls this again.
         /// </para>
         /// </summary>
-        async Task FormTablesFromQueueAsync()
+        void FormTablesFromQueue()
         {
-            while (true)
+            while (_numFormationsInFlight < MaxFormationsInFlight)
             {
-                MatchmakingDecision decision = MatchmakingPolicy.Decide(_queue.Waiters, MetaTime.Now, Options.FillWaitDuration);
+                MetaTime            now      = MetaTime.Now;
+                MatchmakingDecision decision = MatchmakingPolicy.Decide(_queue.Waiters, now, Options.FillWaitDuration);
                 if (decision.Action != MatchmakingAction.Form)
                 {
                     ArmFillTimer(decision.NextLookAt);
                     return;
                 }
 
-                // Remove the waiters from the queue before the first await, so a cancel handled during the
-                // formation finds no entry and does nothing.
-                List<MatchmakingWaiter> formation = _queue.TakeFromHead(decision.NumWaitersToSeat);
-
-                if (!await TryFormTableAsync(formation))
+                if (now < _formNotBefore)
                 {
-                    // No table was created and the waiters are back at the head of the queue, all past their fill
-                    // wait. Deciding again now would form the same table and fail the same way, so wait first.
-                    ArmFillTimer(MetaTime.Now + MetaDuration.FromTimeSpan(MintRetryDelay));
+                    ArmFillTimer(_formNotBefore);
                     return;
                 }
+
+                // Bot names come from the active game config. Check them before taking any waiter, so that if this
+                // fails no player actor has been asked anything.
+                //
+                // Enough names for a full table are required even if every seat has a human, because the number of
+                // players who accept is not known until the reservations return. The config build also refuses a
+                // roster that cannot fill a table.
+                BotNameRoster roster = ServerBotNames.FromActiveBaseline();
+                if (roster.Count < MatchRules.NumSeats)
+                {
+                    _log.Error("The active game config offers {NumNames} computer-player names, which is fewer than a table's {NumSeats} seats. Forming nothing.", roster.Count, MatchRules.NumSeats);
+                    _formNotBefore = now + MetaDuration.FromTimeSpan(MintRetryDelay);
+                    ArmFillTimer(_formNotBefore);
+                    return;
+                }
+
+                // Remove the waiters from the queue before the formation waits on anything, so a cancel handled
+                // during the formation finds no entry and does nothing.
+                StartFormation(_queue.TakeFromHead(decision.NumWaitersToSeat), roster);
             }
         }
 
         /// <summary>
         /// Schedules the fill timer for <paramref name="formAt"/>, or clears it when <paramref name="formAt"/> is
         /// <see cref="MetaTime.Epoch"/>. Does nothing if a timer is already scheduled for the same time, because two
-        /// callbacks for one time would both pass the check in <see cref="OnFillTimerAsync"/>.
+        /// callbacks for one time would both pass the check in <see cref="OnFillTimer"/>.
         /// </summary>
         void ArmFillTimer(MetaTime formAt)
         {
             if (!_fillTimer.TryArm(formAt, MetaTime.Now, out TimeSpan delay))
                 return;
 
-            // Declared as Func<Task> so that the overload that awaits the callback is chosen. The Action overload
-            // would not wait for the formation, so it would run outside the actor's serialized message handling
-            // and its exceptions would be lost.
-            Func<Task> onTimer = () => OnFillTimerAsync(formAt);
-            ScheduleExecuteOnActorContext(delay, onTimer);
+            ScheduleExecuteOnActorContext(delay, () => OnFillTimer(formAt));
         }
 
         /// <summary>
         /// Runs the fill timer. Does nothing if <paramref name="scheduledFor"/> is no longer the scheduled time, which
         /// is how outdated callbacks are ignored instead of cancelled.
         /// </summary>
-        async Task OnFillTimerAsync(MetaTime scheduledFor)
+        void OnFillTimer(MetaTime scheduledFor)
         {
             if (!_fillTimer.TryConsume(scheduledFor))
                 return;
 
-            await FormTablesFromQueueAsync();
+            FormTablesFromQueue();
         }
 
         #endregion
@@ -172,117 +231,159 @@ namespace Game.Server.Matchmaking
         #region Forming a table
 
         /// <summary>
-        /// Creates a table from a formation: reserves a seat with each player's actor, creates the table entity,
-        /// and only then tells the players their table. A player whose actor declines (cancelled, or no live
-        /// connection: <see cref="MatchmakingPolicy.AnswerSeatReservation"/>) is dropped. No table is created
-        /// unless at least one human accepted. If creation fails, the players who accepted are re-queued with their
-        /// original enqueue times.
+        /// What a formation's task came back with. It holds only the answers and the mint result, so the task
+        /// needs no actor state and the bookkeeping happens in <see cref="ApplyFormation"/>.
         /// </summary>
-        /// <returns>True if the formation is finished, false if the waiters were queued again.</returns>
-        async Task<bool> TryFormTableAsync(List<MatchmakingWaiter> formation)
+        readonly struct FormationResult
         {
-            // Bot names come from the active game config. Check them before reserving any seat, so that if this
-            // fails no player actor has been asked anything: the waiters go back to the head of the queue and the
-            // retry delay applies.
-            //
-            // Enough names for a full table are required even if every seat has a human, because the number of
-            // players who accept is not known until the reservations return. The config build also refuses a
-            // roster that cannot fill a table.
-            BotNameRoster roster = ServerBotNames.FromActiveBaseline();
-            if (roster.Count < MatchRules.NumSeats)
+            public readonly SeatAskReply[]      Replies;
+            public readonly FormationMintResult Mint;
+            public readonly EntityId            MatchId;
+
+            public FormationResult(SeatAskReply[] replies, FormationMintResult mint, EntityId matchId)
             {
-                _log.Error("The active game config offers {NumNames} computer-player names, which is fewer than a table's {NumSeats} seats. Forming nothing.", roster.Count, MatchRules.NumSeats);
-                _queue.ReturnToHead(formation);
-                return false;
+                Replies = replies;
+                Mint    = mint;
+                MatchId = matchId;
             }
-
-            // Send all reservation asks in parallel and collect the answers afterwards. The matchmaker handles no
-            // other message while it waits, so sequential asks would block every other player's Play, cancel and
-            // fill timer for one ask timeout per unresponsive player. In parallel, the wait is at most one
-            // ask timeout.
-            Task<MatchmakerReserveSeatResponse>[] reservations = new Task<MatchmakerReserveSeatResponse>[formation.Count];
-            for (int index = 0; index < formation.Count; index++)
-                reservations[index] = EntityAskAsync(formation[index].PlayerId, new MatchmakerReserveSeatRequest(), Options.SeatReservationAskTimeout);
-
-            // seated: players who accepted. unanswered: players whose answer never arrived. retained: every player
-            // who did not decline, in queue order, which is who goes back into the queue if the table cannot be
-            // created.
-            List<MatchmakingWaiter> seated     = new List<MatchmakingWaiter>(formation.Count);
-            List<MatchmakingWaiter> unanswered = new List<MatchmakingWaiter>();
-            List<MatchmakingWaiter> retained   = new List<MatchmakingWaiter>(formation.Count);
-
-            for (int index = 0; index < formation.Count; index++)
-            {
-                MatchmakingWaiter waiter = formation[index];
-
-                MatchmakerReserveSeatResponse response;
-                try
-                {
-                    response = await reservations[index];
-                }
-                catch (Exception ex)
-                {
-                    // The player's actor commits the reservation (status SeatReserved, timeout scheduled) before it
-                    // sends its answer. A lost or late answer therefore leaves the player holding a seat that this
-                    // table will not have, stuck on a searching screen without Cancel until the reservation times
-                    // out. ReleaseSeats below tells them explicitly.
-                    _log.Warning("Player {PlayerId} did not answer a seat reservation ({Error}). Releasing whatever seat they committed to.", waiter.PlayerId, ex.Message);
-                    unanswered.Add(waiter);
-                    retained.Add(waiter);
-                    continue;
-                }
-
-                if (!response.Accepted)
-                {
-                    // A declining actor did not commit, so there is no seat to release and the player does not go
-                    // back in the queue.
-                    _log.Info("Player {PlayerId} declined a seat: they cancelled, are already at a table, or nobody is on the other end any more.", waiter.PlayerId);
-                    continue;
-                }
-
-                MatchmakingWaiter confirmed = new MatchmakingWaiter(response.Identity, waiter.EnqueuedAt);
-                seated.Add(confirmed);
-                retained.Add(confirmed);
-            }
-
-            if (seated.Count == 0)
-            {
-                _log.Info("No live human took a seat. Forming nothing.");
-                ReleaseSeats(unanswered, isStillQueued: false);
-                return true;
-            }
-
-            EntityId matchId;
-            try
-            {
-                matchId = await MintMatchAsync(CreateSeats(seated, roster));
-            }
-            catch (Exception ex)
-            {
-                _log.Error("Could not mint a table for {NumPlayers} players ({Error}). They stay queued.", seated.Count, ex.Message);
-
-                _queue.ReturnToHead(retained);
-                ReleaseSeats(retained, isStillQueued: true);
-                return false;
-            }
-
-            foreach (MatchmakingWaiter waiter in seated)
-                CastMessage(waiter.PlayerId, new MatchmakerSeatAssignedMessage(matchId, seated.Count));
-
-            ReleaseSeats(unanswered, isStillQueued: false);
-
-            _log.Info("Formed table {MatchId} with {NumHumans} human seats.", matchId, seated.Count);
-            return true;
         }
 
         /// <summary>
-        /// Tells players that the seat they may have committed to will not be filled. A player's actor that did not
-        /// commit ignores the message, so it is safe to send to any player the formation asked.
+        /// Starts forming a table from <paramref name="formation"/>, which has already left the queue. The random
+        /// draws and option values the task needs are taken here, on the actor context.
         /// </summary>
-        void ReleaseSeats(List<MatchmakingWaiter> waiters, bool isStillQueued)
+        void StartFormation(List<MatchmakingWaiter> formation, BotNameRoster roster)
         {
-            foreach (MatchmakingWaiter waiter in waiters)
-                CastMessage(waiter.PlayerId, new MatchmakerSeatReleasedMessage(isStillQueued));
+            _numFormationsInFlight++;
+            foreach (MatchmakingWaiter waiter in formation)
+                _inFormation.Add(waiter.PlayerId, FormationLateChange.None);
+
+            ulong    seatOrderSeed = _rng.NextULong();
+            ulong    botNameSeed   = _rng.NextULong();
+            TimeSpan askTimeout    = Options.SeatReservationAskTimeout;
+            TimeSpan mintTimeout   = Options.MintAskTimeout;
+
+            ContinueTaskOnActorContext(
+                FormTableAsync(formation, roster, seatOrderSeed, botNameSeed, askTimeout, mintTimeout),
+                result => ApplyFormation(formation, result),
+                error =>
+                {
+                    // Unknown which players committed. Return everyone who has not cancelled to the queue and
+                    // release them as still queued: an actor that committed goes back to searching, and one that
+                    // did not ignores the release.
+                    _log.Error("Forming a table for {NumPlayers} players failed ({Error}). They go back in the queue.", formation.Count, error.Message);
+
+                    SeatAskReply[] unknown = new SeatAskReply[formation.Count];
+                    for (int index = 0; index < unknown.Length; index++)
+                        unknown[index] = SeatAskReply.Unanswered();
+
+                    ApplyFormation(formation, new FormationResult(unknown, FormationMintResult.Failed, EntityId.None));
+                });
+        }
+
+        /// <summary>
+        /// Reserves a seat with each player's actor, and creates the table if at least one human accepted
+        /// (<see cref="FormationOutcomePolicy.Accepted"/>). Runs off the actor's message loop, so it must not
+        /// read or change actor state.
+        /// </summary>
+        async Task<FormationResult> FormTableAsync(List<MatchmakingWaiter> formation, BotNameRoster roster, ulong seatOrderSeed, ulong botNameSeed, TimeSpan askTimeout, TimeSpan mintTimeout)
+        {
+            // In parallel, so the reservation step takes at most one ask timeout.
+            Task<SeatAskReply>[] asks = new Task<SeatAskReply>[formation.Count];
+            for (int index = 0; index < formation.Count; index++)
+                asks[index] = AskForSeatAsync(formation[index], askTimeout);
+
+            SeatAskReply[] replies = await Task.WhenAll(asks);
+
+            List<MatchmakingWaiter> accepted = FormationOutcomePolicy.Accepted(formation, replies);
+            if (accepted.Count == 0)
+                return new FormationResult(replies, FormationMintResult.NotAttempted, EntityId.None);
+
+            List<MatchSeatSetup> seats = CreateSeats(accepted, roster, seatOrderSeed, botNameSeed);
+
+            try
+            {
+                EntityId matchId = await MintMatchAsync(seats, mintTimeout);
+                return new FormationResult(replies, FormationMintResult.Succeeded, matchId);
+            }
+            catch (Exception ex)
+            {
+                _log.Error("Could not mint a table for {NumPlayers} players ({Error}). They stay queued.", accepted.Count, ex.Message);
+                return new FormationResult(replies, FormationMintResult.Failed, EntityId.None);
+            }
+        }
+
+        /// <summary>
+        /// Asks one player's actor to commit to a seat. A refusal proves the actor answered. A failure proves
+        /// nothing, so it is <see cref="SeatAskResult.Unanswered"/>.
+        /// </summary>
+        async Task<SeatAskReply> AskForSeatAsync(MatchmakingWaiter waiter, TimeSpan askTimeout)
+        {
+            MatchmakerReserveSeatResponse response;
+            try
+            {
+                response = await EntityAskAsync(waiter.PlayerId, new MatchmakerReserveSeatRequest(), askTimeout);
+            }
+            catch (Exception ex)
+            {
+                // The player's actor commits the reservation (status SeatReserved, timeout scheduled) before it
+                // sends its answer. A lost or late answer therefore leaves the player holding a seat that this
+                // table will not have, stuck on a searching screen without Cancel until the reservation times
+                // out. The formation's outcome releases them explicitly.
+                _log.Warning("Player {PlayerId} did not answer a seat reservation ({Error}). Releasing whatever seat they committed to.", waiter.PlayerId, ex.Message);
+                return SeatAskReply.Unanswered();
+            }
+
+            if (!response.Accepted)
+            {
+                // A declining actor did not commit, so there is no seat to release and the player does not go
+                // back in the queue.
+                _log.Info("Player {PlayerId} declined a seat: they cancelled, are already at a table or reserved for another, or nobody is on the other end any more.", waiter.PlayerId);
+                return SeatAskReply.Declined();
+            }
+
+            return SeatAskReply.Accepted(response.Identity);
+        }
+
+        /// <summary>
+        /// Carries out a finished formation on the actor context: tells the seated players their table, releases
+        /// the players whose answer was lost, and after a failed mint returns everyone who did not decline to the
+        /// head of the queue. Then forms again from the queue.
+        /// </summary>
+        void ApplyFormation(List<MatchmakingWaiter> formation, FormationResult result)
+        {
+            _numFormationsInFlight--;
+
+            FormationLateChange[] lateChanges = new FormationLateChange[formation.Count];
+            for (int index = 0; index < formation.Count; index++)
+                _inFormation.Remove(formation[index].PlayerId, out lateChanges[index]);
+
+            FormationOutcome outcome = FormationOutcomePolicy.Decide(formation, result.Replies, result.Mint, lateChanges);
+
+            foreach (MatchmakingWaiter waiter in outcome.Seated)
+                CastMessage(waiter.PlayerId, new MatchmakerSeatAssignedMessage(result.MatchId, outcome.Seated.Count));
+
+            _queue.ReturnToHead(outcome.ReturnToHead);
+            foreach (MatchmakingWaiter waiter in outcome.Enqueue)
+                _queue.TryEnqueue(waiter);
+
+            // A player's actor that did not commit ignores the release, so it is safe to send to any player the
+            // formation asked.
+            foreach (FormationRelease release in outcome.Releases)
+                CastMessage(release.PlayerId, new MatchmakerSeatReleasedMessage(release.IsStillQueued));
+
+            if (result.Mint == FormationMintResult.Failed)
+            {
+                // The returned waiters are past their fill wait, so forming at once would fail the same way.
+                _formNotBefore = MetaTime.Now + MetaDuration.FromTimeSpan(MintRetryDelay);
+            }
+
+            if (result.Mint == FormationMintResult.Succeeded)
+                _log.Info("Formed table {MatchId} with {NumHumans} human seats.", result.MatchId, outcome.Seated.Count);
+            else if (result.Mint == FormationMintResult.NotAttempted)
+                _log.Info("No live human took a seat. Forming nothing.");
+
+            FormTablesFromQueue();
         }
 
         /// <summary>
@@ -294,9 +395,9 @@ namespace Game.Server.Matchmaking
         /// A human seat uses the identity returned with the player's acceptance.
         /// </para>
         /// </summary>
-        List<MatchSeatSetup> CreateSeats(List<MatchmakingWaiter> seated, BotNameRoster roster)
+        static List<MatchSeatSetup> CreateSeats(List<MatchmakingWaiter> seated, BotNameRoster roster, ulong seatOrderSeed, ulong botNameSeed)
         {
-            int[] seatOrder = MatchmakingPolicy.DrawSeatOrder(_rng.NextULong());
+            int[] seatOrder = MatchmakingPolicy.DrawSeatOrder(seatOrderSeed);
 
             MatchSeatSetup[] seats = new MatchSeatSetup[MatchRules.NumSeats];
             for (int index = 0; index < seated.Count; index++)
@@ -304,7 +405,7 @@ namespace Game.Server.Matchmaking
 
             // The matchmaker sets only a bot seat's name. The table draws the bot's cosmetics and strength from
             // its own seed and game config (BotSeatIdentity).
-            List<string> botNames = roster.Draw(_rng.NextULong(), MatchRules.NumSeats - seated.Count);
+            List<string> botNames = roster.Draw(botNameSeed, MatchRules.NumSeats - seated.Count);
             for (int index = seated.Count; index < MatchRules.NumSeats; index++)
                 seats[seatOrder[index]] = new MatchSeatSetup(PlayerPublicIdentity.ForBot(EntityId.None, botNames[index - seated.Count], avatarId: null));
 
@@ -317,14 +418,14 @@ namespace Game.Server.Matchmaking
         /// id. After any other failure, such as an ask timeout, the setup may have completed, and a retry could
         /// create a second table for the same formation, so the method rethrows. No player points at such a table.
         /// </summary>
-        async Task<EntityId> MintMatchAsync(List<MatchSeatSetup> seats)
+        async Task<EntityId> MintMatchAsync(List<MatchSeatSetup> seats, TimeSpan mintTimeout)
         {
             for (int attempt = 0; attempt < MaxMintAttempts; attempt++)
             {
                 EntityId matchId = EntityId.CreateRandom(EntityKindGame.Match);
                 try
                 {
-                    _ = await EntityAskAsync(matchId, new InternalEntitySetupRequest(new MatchSetupParams(seats)), Options.MintAskTimeout);
+                    _ = await EntityAskAsync(matchId, new InternalEntitySetupRequest(new MatchSetupParams(seats)), mintTimeout);
                     return matchId;
                 }
                 catch (InternalEntitySetupRefusal)

@@ -1,7 +1,7 @@
 namespace WebClientBase.Services;
 
 /// <summary>
-/// The connection state of the Metaplay client.
+/// Connection state enumeration for Metaplay client connections.
 /// </summary>
 public enum ConnectionStatus
 {

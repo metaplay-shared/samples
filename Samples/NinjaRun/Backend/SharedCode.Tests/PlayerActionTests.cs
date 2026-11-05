@@ -471,6 +471,40 @@ namespace Game.Logic.Tests
             Assert.That(playerModel.AllowsDeveloperActions, Is.True);
         }
 
+        /// <summary>
+        /// The actions behind the developer tools are registered as development-only, which is what the server
+        /// checks before it runs one a client sent: it runs them for a developer, or with its development
+        /// features on, and refuses them for anyone else.
+        /// </summary>
+        [TestCase(typeof(PlayerStartPracticeTimeTrial))]
+        [TestCase(typeof(PlayerStartDraftPartTimeTrial))]
+        [TestCase(typeof(PlayerDeveloperGrantOrbs))]
+        public void TheDeveloperToolsActions_AreDevelopmentOnly(Type actionType)
+        {
+            ModelActionSpec spec = ModelActionRepository.Instance.SpecFromType[actionType];
+            Assert.That(spec.IsDevelopmentOnlyAction, Is.True, $"{actionType.Name} would run for any player on any server");
+        }
+
+        /// <summary>The developer Orb grant adds to the balance and nothing else, within its bounds.</summary>
+        [Test]
+        public void PlayerDeveloperGrantOrbs_AddsToTheBalance()
+        {
+            PlayerModel playerModel = CreatePlayerModel();
+
+            Assert.That(ExecuteAction(playerModel, new PlayerDeveloperGrantOrbs(5)), Is.EqualTo(MetaActionResult.Success));
+            Assert.That(ExecuteAction(playerModel, new PlayerDeveloperGrantOrbs(PlayerDeveloperGrantOrbs.MaxAmount)), Is.EqualTo(MetaActionResult.Success));
+            Assert.That(playerModel.Orbs, Is.EqualTo(5 + PlayerDeveloperGrantOrbs.MaxAmount));
+            Assert.That(playerModel.LastOrbsEarned, Is.EqualTo(0), "a grant was recorded as a run's payout");
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(ExecuteAction(playerModel, new PlayerDeveloperGrantOrbs(0)), Is.EqualTo(ActionResults.InvalidOrbGrant));
+                Assert.That(ExecuteAction(playerModel, new PlayerDeveloperGrantOrbs(-1)), Is.EqualTo(ActionResults.InvalidOrbGrant));
+                Assert.That(ExecuteAction(playerModel, new PlayerDeveloperGrantOrbs(PlayerDeveloperGrantOrbs.MaxAmount + 1)), Is.EqualTo(ActionResults.InvalidOrbGrant));
+            });
+            Assert.That(playerModel.Orbs, Is.EqualTo(5 + PlayerDeveloperGrantOrbs.MaxAmount), "a refused grant changed the balance");
+        }
+
         #endregion // Test cases
 
         #region A run on a part editor draft

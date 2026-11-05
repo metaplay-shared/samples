@@ -1,17 +1,35 @@
-# Temporary build files
-**/obj/
+# Visual Studio cache directory
+.vs/
+
+# Visual Studio launch profiles not shared (StickyPaws.slnLaunch holds the shared ones)
+*.slnLaunch.user
+
+### Metaplay-related ignores
+
+# Build outputs
+**/out/
 **/bin/
+**/obj/
 
 # `dotnet ef` on macOS/Linux leaves a literal "bin\Debug" directory behind (it hands MSBuild a
 # Windows-style relative output path), which the **/bin/ rule above does not match.
 **/bin\\Debug/
 
-# Metaplay client storage dirs
+# State dumps from checksum mismatches with server
+StateDump_*.txt
+
+# Metaplay Agent
+/.claude/metaplay-plugin-assets-dir
+/.claude/scheduled_tasks.lock
+/.claude/worktrees/
+
+# Per-user Claude Code settings (machine-specific; shared defaults live in settings.json)
+/.claude/settings.local.json
+**/node_modules/
+
+# Metaplay client storage
 **/PersistentData/
 **/TemporaryCache/
 
-# State dumps from checksum mismatches with the server
-StateDump_*.txt
-
-# Per-checkout local listener configuration; never shipped or shared with another worktree.
-Client/wwwroot/appsettings.Development.json
+# Python bytecode cache
+__pycache__/

@@ -8,7 +8,7 @@ namespace Game.Server
     /// weekly events (<c>docs/architecture.md</c>, "HTTP endpoints").
     /// <para>
     /// The routes are on the public, unauthenticated PublicWebApi host, so they are off in every environment
-    /// and only the E2E harness turns them on (<c>tools/run-e2e.py</c>). The environment type and
+    /// and only the E2E harness turns them on (<c>e2e.toml</c>). The environment type and
     /// <c>Environment:EnableDevelopmentFeatures</c> are not used as the switch, because both are on in deployed
     /// development environments that anyone can reach.
     /// </para>

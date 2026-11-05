@@ -1,5 +1,3 @@
-// This file is part of Metaplay SDK which is released under the Metaplay SDK License.
-
 using Game.Logic;
 using Game.Logic.League;
 using Game.Logic.Matchmaking;
@@ -48,6 +46,11 @@ namespace Game.BotClient
         GuildModel GuildModel => (GuildModel)GuildContext?.CommittedModel;
 
         bool _leagueJoinRequestSent = false;
+        // The matchmaking request in flight, if any. A bot reads its replies only
+        // in a later tick, so the request is checked on each tick rather than
+        // awaited: awaiting it would hold this tick open, and no later tick could
+        // run to read the reply.
+        Task<IdleMatchingResponse> _matchingRequest;
         IdlerLeagueClient _idlerLeagueClient;
         LeagueClient<IdlerPvPDivisionModel> _idlerPvPLeagueClient;
         
@@ -75,7 +78,7 @@ namespace Game.BotClient
             switch (State)
             {
                 case BotClientState.Main:
-                    await TickMainState();
+                    TickMainState();
                     break;
             }
 
@@ -101,13 +104,16 @@ namespace Game.BotClient
 
         protected override Task OnSessionStartedAsync(BotSessionStartedArgs args)
         {
+            // Make sure we don't handle an earlier session's lingering matchmaking result.
+            _matchingRequest = null;
+
             State = BotClientState.Main;
             PlayerModel playerModel = (PlayerModel)args.PlayerModel;
             playerModel.ClientListener = this;
             return Task.CompletedTask;
         }
 
-        async Task TickMainState()
+        void TickMainState()
         {
             RandomPCG rnd = RandomPCG.CreateNew();
 
@@ -144,13 +150,24 @@ namespace Game.BotClient
             if (rnd.NextInt(100) < 5)
                 TryStartInAppPurchase(rnd);
 
-            // Send a matchmaking request and wait for the response
-            if (rnd.NextInt(100) < 1)
+            // Send a matchmaking request now and then, one at a time, and log its
+            // reply once it's been received.
+            // MetaRequests' responses are processed later in the bot's tick,
+            // not concurrently with OnUpdate(), which is why we can't
+            // simply await the task here (it would deadlock the bot).
+            if (_matchingRequest?.IsCompleted == true)
             {
-                IdleMatchingResponse matchingResponse = await MessageDispatcher.SendRequestAsync<IdleMatchingResponse>(
-                    new IdleMatchingRequest());
-                _log.Debug("Received matching response: success={IsSuccess}, won={DidWinBattle}.", matchingResponse.IsSuccess, matchingResponse.DidWinBattle);
+                if (_matchingRequest.IsCompletedSuccessfully)
+                {
+                    IdleMatchingResponse matchingResponse = _matchingRequest.Result;
+                    _log.Debug("Received matching response: success={IsSuccess}, won={DidWinBattle}.", matchingResponse.IsSuccess, matchingResponse.DidWinBattle);
+                }
+                else if (_matchingRequest.IsFaulted)
+                    _log.Warning("Matching request failed: {Error}", _matchingRequest.Exception);
+                _matchingRequest = null;
             }
+            if (_matchingRequest == null && rnd.NextInt(100) < 1)
+                _matchingRequest = MessageDispatcher.SendRequestAsync<IdleMatchingResponse>(new IdleMatchingRequest());
 
             TickLeaguesLogic();
         }

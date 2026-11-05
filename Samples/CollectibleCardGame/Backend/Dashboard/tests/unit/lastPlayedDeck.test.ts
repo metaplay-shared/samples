@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 
-import { lastPlayedDeckLabel } from '../../src/lastPlayedDeck'
+import { type DeckChoiceJson, lastPlayedDeckLabel } from '../../src/lastPlayedDeck'
 
 const savedDecks = { '1': 'Load', '4': 'Kitsune burn' }
 const starterDecks = { FireAndFoam: 'Fire and Foam', AlleySparks: 'Alley Sparks' }
@@ -33,18 +33,16 @@ describe('lastPlayedDeckLabel', () => {
     expect(lastPlayedDeckLabel(choice, savedDecks, starterDecks)).toEqual('starter:RetiredDeck')
   })
 
-  test('a malformed choice says so — neither half set', () => {
-    // No picker produces one, but a persisted row can carry anything and this is the one row an operator is
-    // reading precisely because something is off.
-    expect(lastPlayedDeckLabel({ isSaved: false, isStarter: false }, savedDecks, starterDecks)).toEqual(
-      'Malformed deck choice'
-    )
-  })
-
-  test('a malformed choice says so — both halves set', () => {
-    // The case the fallback's comment claims: checking `isStarter` alone would give this row a confident
-    // starter-deck label rather than saying the row itself is wrong.
-    const choice = { savedDeckId: 4, starterDeckId: 'FireAndFoam', isSaved: true, isStarter: true }
+  // No picker produces one, but a persisted row can carry anything and this is the one row an operator is
+  // reading precisely because something is off. With both halves set, checking `isStarter` alone would give
+  // the row a confident starter-deck label rather than saying the row itself is wrong.
+  test.each<{ name: string; choice: DeckChoiceJson }>([
+    { name: 'neither half set', choice: { isSaved: false, isStarter: false } },
+    {
+      name: 'both halves set',
+      choice: { savedDeckId: 4, starterDeckId: 'FireAndFoam', isSaved: true, isStarter: true },
+    },
+  ])('a malformed choice says so — $name', ({ choice }) => {
     expect(lastPlayedDeckLabel(choice, savedDecks, starterDecks)).toEqual('Malformed deck choice')
   })
 })

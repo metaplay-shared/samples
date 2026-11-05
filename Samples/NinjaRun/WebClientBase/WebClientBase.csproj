@@ -8,7 +8,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>Latest</LangVersion>
     <!-- Suppress nullable annotation warnings since Nullable is disabled -->
-    <NoWarn>CS8632;CS8669</NoWarn>
+    <NoWarn>$(NoWarn);CS8632;CS8669</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -18,15 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\MetaplaySDK\Backend\CodeAnalyzers\Metaplay.CodeAnalyzers.csproj">
-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-      <OutputItemType>Analyzer</OutputItemType>
-    </ProjectReference>
-    <ProjectReference Include="..\..\..\MetaplaySDK\Backend\CodeAnalyzers.Shared\Metaplay.CodeAnalyzers.Shared.csproj">
-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-      <OutputItemType>Analyzer</OutputItemType>
-    </ProjectReference>
-    <ProjectReference Include="..\..\..\MetaplaySDK\Dotnet\Client\Metaplay.Client.csproj" />
+    <ProjectReference Include="$(MetaplaySDKPath)\Dotnet\Client\Metaplay.Client.csproj" />
   </ItemGroup>
 
 </Project>

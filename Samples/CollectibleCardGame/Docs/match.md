@@ -4,7 +4,7 @@ The table that hosts one game of Sticky Paws — where the rules run, who is sea
 stalls, and how the result and the Heist reach the two players' accounts.
 
 A match is one **ephemeral multiplayer entity**: a server-authoritative actor that owns the game state and advances it
-by issuing the actions that are the rules, which the SDK replicates to the two subscribed clients and both clients
+by issuing the rules as actions, which the SDK replicates to the two subscribed clients and both clients
 re-execute. It is created by the [matchmaker](matchmaking.md) with its seats and its stakes already decided, plays one
 game, resolves the Heist, and ends. **A match lives exactly as long as its actor**: it has no database row, and if the
 process it is on goes away the match goes with it and both players are told so. The SDK mechanics are in
@@ -68,12 +68,12 @@ losing cannot padlock at turn nine the card they are about to be robbed of. The 
 with, so a lock taken mid-match applies to the *next* match. Locks are open information from the pre-match panel
 onward, which is what makes the wager legible before it is agreed rather than after it is lost.
 
-Beneath the one `ServerOnly` member are both deck orders, both hands, the seeded stream, the bot seed, the hidden half
+Beneath the secret member are both deck orders, both hands, the seeded stream, the bot seed, the hidden half
 of the card registry and a held peek's reveal. Each seat's own hand reaches its own
 client separately ([`hidden-information.md`](hidden-information.md#delivering-a-hand)). Everything else is public,
-replicated identically and checksummed — **including the rules**. Two hosts that come to disagree about the game end the
-session rather than drawing two boards, which is stronger than a projection could offer: a projection can only be wrong
-about the picture, and this can only be wrong about the game.
+replicated identically and checksummed, and both clients run the rules themselves. A client whose copy of the game
+comes to disagree with the server's ends its session rather than drawing a different board. A per-viewer projection
+([`rules.md`](rules.md)) could only catch a wrongly drawn board; this catches a wrongly played game.
 
 ## The turn flow
 

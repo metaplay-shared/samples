@@ -89,7 +89,7 @@ public class LiveServerSpinWheelTests : PlaywrightPageTest
     /// <para>
     /// <c>SpinWheelRenderTests</c> checks the odds sheet's layout against the fixture's table. This test checks only
     /// that a live session draws the percentages from the table the server serves.
-    /// <c>Backend/Server.Tests.GameConfigBuildTests.ThePublishedWheelIsTheApprovedBaselineTable</c> checks the
+    /// <c>tools/GameConfigGen.Tests: GameConfigBuildTests.ThePublishedWheelIsTheApprovedBaselineTable</c> checks the
     /// archive's table itself, so changing the wheel's odds requires updating both tests.
     /// </para>
     /// </summary>

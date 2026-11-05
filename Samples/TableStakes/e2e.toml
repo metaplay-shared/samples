@@ -1,0 +1,63 @@
+# The browser test stack, run by run_e2e.py next to this file: `python3 run_e2e.py`.
+# See docs/testing.md, "The E2E harness".
+
+# One build of this solution builds the game server, the web client and the test assembly. List only projects the
+# run starts or tests: the harness starts the outputs of this build with --no-build.
+build = "tools/e2e-stack.slnx"
+
+[server]
+project = "Backend/Server"
+
+# Enables the unauthenticated test/ routes that the suite uses to force timers and create weekly events. They are
+# off by default (Backend/Server/TestRoutes/TestRoutesOptions.cs).
+args = ["--TestRoutes:Enabled=true"]
+
+# Server timings shortened for a test stack (dropped with --plain-server). Live-server tests wait these out, and no
+# test depends on their length. Timers that tests measure against, such as the move deadline, the grace windows
+# and the join window, keep their shipped values, and testArgsAllowed enforces this.
+#
+# - Bot think delay: imitates a human opponent. MatchPacingTests covers the pacing rules.
+# - Trick-resolve pause: MatchClocks.GetBeatEndsAt ends the client's trick animation when the pause ends. Tests of
+#   the animation force the pause at the offline table with resolvePauseMs.
+# - Matchmaking fill wait: live fixtures rely on two searches within one wait sharing a table, which holds for any
+#   length. The cancelled-search fixture must wait longer than it, so it reads the value from
+#   E2E_SERVER_ARGS (PlaywrightPageTest.FillWaitMs).
+testArgs = [
+    "--Match:BotThinkDelayMin=00:00:00.150",
+    "--Match:BotThinkDelayMax=00:00:00.300",
+    "--Match:BotThinkDelayOccasionalMax=00:00:00.300",
+    "--Match:ResolvePause=00:00:00.200",
+    "--Matchmaking:FillWait=00:00:01.500",
+]
+
+# The options testArgs may set. Do not add a timer that a fixture measures itself against: the fixture would keep
+# passing while testing a different case. Either leave such a timer at its shipped value, or have the fixture read
+# its value from E2E_SERVER_ARGS the way the fill wait is read, and size itself from that.
+testArgsAllowed = [
+    "Match:BotThinkDelayMin",
+    "Match:BotThinkDelayMax",
+    "Match:BotThinkDelayOccasionalMax",
+    "Match:ResolvePause",
+    "Matchmaking:FillWait",
+]
+
+[client]
+project = "WebClient/WebClient.csproj"
+framework = "net10.0-browser"
+
+# Every fixture except the ones that own a game server, so a new fixture lands here unless it is given a phase of
+# its own.
+[[phases]]
+name = "WebClient.Tests"
+command = ["dotnet", "test", "WebClient.Tests/WebClient.Tests.csproj", "--no-build",
+    "--filter", "FullyQualifiedName!~LiveServerRestartTests"]
+nunitWorkers = true
+playwright = "WebClient.Tests/bin/Debug/net10.0"
+
+# Restarts its own game server to show that a game in progress survives a deploy. The shared server is stopped for
+# it, and its server binds the same ports (WebClient.Tests/GameServerProcess.cs).
+[[phases]]
+name = "LiveServerRestartTests"
+server = false
+command = ["dotnet", "test", "WebClient.Tests/WebClient.Tests.csproj", "--no-build",
+    "--filter", "FullyQualifiedName~LiveServerRestartTests"]

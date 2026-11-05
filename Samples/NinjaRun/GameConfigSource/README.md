@@ -26,7 +26,7 @@ carrying an error either way. `--dry-run` is the form to run in CI.
 The file name is the entry name declared in `SharedCode/GameConfigs/SharedGameConfig.cs`, and that is not a
 convention but the mechanism: the build asks its source for one sheet per declared entry. **Adding an entry
 means adding its sheet**, or the build fails — `EveryConfigEntryHasItsSourceFile` in
-`Backend/SharedCode.Tests/` says so in one line rather than leaving it to a stack trace.
+`tools/GameConfigGen.Tests/` says so in one line rather than leaving it to a stack trace.
 
 **One entry is the deliberate exception.** `CourseParts` is read from `CourseParts.json` instead, because a
 course part is nested — lists of ground segments, spike beds and bridges — and a sheet's rows cannot hold
@@ -70,30 +70,13 @@ hazard above.
 
 ## How a sheet is written
 
-- **The header row names members.** A column header is the member name, exactly and case-sensitively;
-  `displayname` does not match `DisplayName`. An unknown header fails the build — *unless every cell under it
-  is empty*, in which case the column is silently dropped, so a typo'd column nobody has filled in yet will
-  pass. (A type may instead take its columns from a constructor tagged
-  `[MetaGameConfigBuildConstructor]`, matching parameter names case-insensitively. Nothing here uses one.)
-- **One column carries the key**, tagged `#key`. A single-object entry such as `Global.csv` is the
-  exception: it is written as `Member,Value` rows instead.
-- **A blank cell means "not written here"**, which leaves the member at its C# default.
-- **An enum cell is the value's name**, spelled as the enum declares it: `Shield`, not `2`. A blank one is
-  the default, the enum's first value.
-- **A multi-row item** leaves the key cell empty on its continuation rows, and ends at the next row that
-  fills one — the key cell alone decides the grouping. A collection member is written as a `Foo[]` column,
-  one element per cell down the item's rows (or across the `Value` span in a `Member,Value` sheet); `Foo[N]`
-  addresses one element, and a dotted header (`Schedule.Start.Date`) reaches a nested member. A `Foo[]`
-  column does not by itself make an item multi-row.
-- **`//` in a header cell drops the column; `//` in the leftmost cell drops the row.** That is where a note
-  to the next editor goes, and it is how the marker row at the top of each sheet here is ignored. The test is
-  the raw cell value, untrimmed, so the `//` must be the first two characters.
-- **A course id cell may name a map, `+` and all.** A map id is its three part ids joined by `+`, which the
-  SDK's default reading of a `StringId` stops at; the game registers a parser of its own that admits it, so a
-  cell such as `OfflinePracticeMapId` can hold one.
+The sheets follow the starter project's [sheet format](https://github.com/metaplay-shared/blazor-starter-project/blob/main/GameConfigSource/README.md#how-a-sheet-is-written). Two more rules apply here:
 
-The sheets in this directory are small enough that they exercise only the first four of these. The rest is
-written down because the moment a real game config arrives, it needs them.
+- **An enum cell is the value's name**, spelled as the enum declares it: `Shield`, not `2`. A blank one is the
+  default, the enum's first value.
+- **A course id cell may name a map, `+` and all.** A map id is its three part ids joined by `+`, which the SDK's
+  default reading of a `StringId` stops at; the game registers a parser of its own that admits it, so a cell such as
+  `OfflinePracticeMapId` can hold one.
 
 ## How the parts file is written
 
@@ -183,13 +166,7 @@ under a new id.
 
 ## Rules worth keeping
 
-- **Ids are permanent; everything else is not.** Player state and analytics reference rows by id, so a row
-  can be repriced or renamed but not re-keyed.
-- **A published table is never edited in place** once player state can be part-way through it. Retuning
-  means authoring a new id and pointing a `Global.csv` row at it, so a player keeps what they were promised.
-- **Semantics are code, values are here.** What a currency or an objective *is* is a compatibility contract
-  between the server and every stored player state. What these files decide is how much, how many, and which
-  one.
+The starter project's [rules worth keeping](https://github.com/metaplay-shared/blazor-starter-project/blob/main/GameConfigSource/README.md#rules-worth-keeping) apply to these files.
 
 ## The over-the-air demo
 

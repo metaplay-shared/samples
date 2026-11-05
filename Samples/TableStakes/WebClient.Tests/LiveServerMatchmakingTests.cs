@@ -40,6 +40,26 @@ public class LiveServerMatchmakingTests : PlaywrightPageTest
     /// </summary>
     private static readonly int PastTheFillWaitMs = FillWaitMs * 9 / 5;
 
+    /// <summary>The browser contexts this test opened besides its own, closed after the test.</summary>
+    private readonly List<IBrowserContext> _otherContexts = new List<IBrowserContext>();
+
+    /// <summary>
+    /// A browser context of the test's own, a second player with stored credentials of its own. It is closed after
+    /// the test, once its pages have been checked.
+    /// </summary>
+    private async Task<IBrowserContext> NewBrowserContextAsync()
+    {
+        IBrowserContext context = await Browser.NewContextAsync();
+        _otherContexts.Add(context);
+        return context;
+    }
+
+    protected override async Task CloseAfterTestAsync()
+    {
+        foreach (IBrowserContext context in _otherContexts)
+            await context.CloseAsync();
+    }
+
     /// <summary>
     /// Boot a page to Home and wait until its session is behind the screen, so its PLAY answers. Returns the PLAY
     /// button.
@@ -97,60 +117,54 @@ public class LiveServerMatchmakingTests : PlaywrightPageTest
     {
         // Two browser contexts are two accounts: credentials live in the page's own storage, so an isolated
         // context logs in as a guest of its own rather than force-terminating the other's session.
-        IBrowserContext second = await Browser.NewContextAsync();
-        try
+        IBrowserContext second = await NewBrowserContextAsync();
+
+        IPage pageA = Page;
+        IPage pageB = Watch(await second.NewPageAsync());
+
+        // Both pages show the Play button before either taps, so the two taps land inside one fill wait
+        // instead of a WASM boot apart. The two boots are independent, so they run at the same time.
+        await Task.WhenAll(OpenHomeAsync(pageA), OpenHomeAsync(pageB));
+
+        Stopwatch sinceTapped = Stopwatch.StartNew();
+
+        // One lock covers both taps and both seat assertions, because the two pages must share a table with
+        // each other and not with a player from another fixture.
+        await using (await LiveServerLocks.QueueAsync("two browsers tapping play together"))
         {
-            IPage pageA = Page;
-            IPage pageB = await second.NewPageAsync();
+            await pageA.GetByTestId("play").ClickAsync();
+            await pageB.GetByTestId("play").ClickAsync();
 
-            // Both pages show the Play button before either taps, so the two taps land inside one fill wait
-            // instead of a WASM boot apart. The two boots are independent, so they run at the same time.
-            await Task.WhenAll(OpenHomeAsync(pageA), OpenHomeAsync(pageB));
-
-            Stopwatch sinceTapped = Stopwatch.StartNew();
-
-            // One lock covers both taps and both seat assertions, because the two pages must share a table with
-            // each other and not with a player from another fixture.
-            await using (await LiveServerLocks.QueueAsync("two browsers tapping play together"))
-            {
-                await pageA.GetByTestId("play").ClickAsync();
-                await pageB.GetByTestId("play").ClickAsync();
-
-                await Expect(pageA.GetByTestId("match-phase")).ToHaveTextAsync("Playing", new() { Timeout = SeatingTimeoutMs });
-                await Expect(pageB.GetByTestId("match-phase")).ToHaveTextAsync("Playing", new() { Timeout = SeatingTimeoutMs });
-            }
-            sinceTapped.Stop();
-
-            Assert.That(sinceTapped.ElapsedMilliseconds, Is.LessThan(SeatedTogetherWithinMs),
-                "both players should be seated by the one fill wait their taps fell inside");
-
-            // Neither client shows the table id, so identical seat names in identical seat order prove both
-            // browsers are at the same table.
-            string[] namesA = await ReadSeatNamesAsync(pageA);
-            string[] namesB = await ReadSeatNamesAsync(pageB);
-            Assert.That(namesB, Is.EqualTo(namesA), "the two browsers are looking at different tables");
-
-            // Each client draws its own player at South, so the seat indexes must differ to prove the players
-            // sit in different seats of one table.
-            int seatA = int.Parse(await pageA.GetByTestId("own-seat").InnerTextAsync());
-            int seatB = int.Parse(await pageB.GetByTestId("own-seat").InnerTextAsync());
-            Assert.That(seatB, Is.Not.EqualTo(seatA));
-
-            // Both browsers must show exactly two humans and two bots. Checking only the two human seats would
-            // also pass on a table of four humans, which a queue that pooled players from other tests produces.
-            foreach (IPage page in new[] { pageA, pageB })
-            {
-                for (int seat = 0; seat < 4; seat++)
-                {
-                    ILocator plaque = page.GetByTestId($"seat-{seat}");
-                    bool     isHuman = seat == seatA || seat == seatB;
-                    await Expect(plaque).ToHaveAttributeAsync("data-occupancy", isHuman ? "Human" : "Bot");
-                }
-            }
+            await Expect(pageA.GetByTestId("match-phase")).ToHaveTextAsync("Playing", new() { Timeout = SeatingTimeoutMs });
+            await Expect(pageB.GetByTestId("match-phase")).ToHaveTextAsync("Playing", new() { Timeout = SeatingTimeoutMs });
         }
-        finally
+        sinceTapped.Stop();
+
+        Assert.That(sinceTapped.ElapsedMilliseconds, Is.LessThan(SeatedTogetherWithinMs),
+            "both players should be seated by the one fill wait their taps fell inside");
+
+        // Neither client shows the table id, so identical seat names in identical seat order prove both
+        // browsers are at the same table.
+        string[] namesA = await ReadSeatNamesAsync(pageA);
+        string[] namesB = await ReadSeatNamesAsync(pageB);
+        Assert.That(namesB, Is.EqualTo(namesA), "the two browsers are looking at different tables");
+
+        // Each client draws its own player at South, so the seat indexes must differ to prove the players
+        // sit in different seats of one table.
+        int seatA = int.Parse(await pageA.GetByTestId("own-seat").InnerTextAsync());
+        int seatB = int.Parse(await pageB.GetByTestId("own-seat").InnerTextAsync());
+        Assert.That(seatB, Is.Not.EqualTo(seatA));
+
+        // Both browsers must show exactly two humans and two bots. Checking only the two human seats would
+        // also pass on a table of four humans, which a queue that pooled players from other tests produces.
+        foreach (IPage page in new[] { pageA, pageB })
         {
-            await second.CloseAsync();
+            for (int seat = 0; seat < 4; seat++)
+            {
+                ILocator plaque = page.GetByTestId($"seat-{seat}");
+                bool     isHuman = seat == seatA || seat == seatB;
+                await Expect(plaque).ToHaveAttributeAsync("data-occupancy", isHuman ? "Human" : "Bot");
+            }
         }
     }
 
@@ -269,35 +283,29 @@ public class LiveServerMatchmakingTests : PlaywrightPageTest
     [Test]
     public async Task APlayerWhoClosesTheirTabIsNotSeated_AndTheirSeatGoesToABot()
     {
-        IBrowserContext leaver = await Browser.NewContextAsync();
-        try
+        IBrowserContext leaver = await NewBrowserContextAsync();
+
+        IPage stays = Page;
+        IPage goes  = Watch(await leaver.NewPageAsync());
+
+        // Both pages boot before either taps, so the two taps land inside one fill wait. The two boots are
+        // independent, so they run at the same time.
+        await Task.WhenAll(OpenHomeAsync(stays), OpenHomeAsync(goes));
+
+        // One lock covers both taps and the remaining player's seat assertion, so a tap from another fixture
+        // cannot take the leaver's seat.
+        await using (await LiveServerLocks.QueueAsync("a player who closes their tab is not seated"))
         {
-            IPage stays = Page;
-            IPage goes  = await leaver.NewPageAsync();
+            await stays.GetByTestId("play").ClickAsync();
+            await goes.GetByTestId("play").ClickAsync();
+            await Expect(goes.GetByTestId("searching")).ToBeVisibleAsync();
 
-            // Both pages boot before either taps, so the two taps land inside one fill wait. The two boots are
-            // independent, so they run at the same time.
-            await Task.WhenAll(OpenHomeAsync(stays), OpenHomeAsync(goes));
-
-            // One lock covers both taps and the remaining player's seat assertion, so a tap from another fixture
-            // cannot take the leaver's seat.
-            await using (await LiveServerLocks.QueueAsync("a player who closes their tab is not seated"))
-            {
-                await stays.GetByTestId("play").ClickAsync();
-                await goes.GetByTestId("play").ClickAsync();
-                await Expect(goes.GetByTestId("searching")).ToBeVisibleAsync();
-
-                // Close the leaver's tab while the fill wait is still running.
-                await leaver.CloseAsync();
-
-                await Expect(stays.GetByTestId("match-phase")).ToHaveTextAsync("Playing", new() { Timeout = SeatingTimeoutMs });
-            }
-
-            await ExpectOnlyTheOwnSeatIsHumanAsync(stays);
-        }
-        finally
-        {
+            // Close the leaver's tab while the fill wait is still running.
             await leaver.CloseAsync();
+
+            await Expect(stays.GetByTestId("match-phase")).ToHaveTextAsync("Playing", new() { Timeout = SeatingTimeoutMs });
         }
+
+        await ExpectOnlyTheOwnSeatIsHumanAsync(stays);
     }
 }

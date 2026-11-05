@@ -8,56 +8,12 @@ namespace Game.Logic.Tests
     /// is the fixture that carries bots.md's first required property — a bot never takes an illegal action —
     /// and the fuzzer role at the same time: a random player walks into the legality holes a heuristic never
     /// would, and every action either of them takes is checked against the rules a second time before the
-    /// engine sees it.
+    /// engine sees it. <c>InvariantBatchTests</c> runs the walk over the bulk seeded run.
     /// </summary>
     [TestFixture]
     public class LegalityTests
     {
         static SharedGameConfig Config => TestGameConfig.Shared;
-
-        [Test]
-        public void NoProfileEverTakesAnIllegalAction()
-        {
-            SelfPlayHarness.RunBatch(
-                "legality",
-                SelfPlayStreams.Legality,
-                SelfPlayRun.Games(standard: 80, deep: 5000),
-                index => new SelfPlayGameSpec
-                {
-                    Config = Config,
-                    Seat0   = SelfPlaySeats.Mix[index % SelfPlaySeats.Mix.Length].Seat0,
-                    Seat1   = SelfPlaySeats.Mix[index % SelfPlaySeats.Mix.Length].Seat1,
-                    Pairing = SelfPlaySeats.Mix[index % SelfPlaySeats.Mix.Length].Name,
-                    Checks = SelfPlayChecks.Legality,
-                    // Every action of this game also runs against a follower, and the two models are
-                    // compared after each one. This is the refactor's proof, and it is on for every batch.
-                    MirrorOnFollower = true,
-                });
-        }
-
-        [Test]
-        public void NoSeatEverTakesAnIllegalActionInAPacedGame()
-        {
-            // The same games, paced. The clock changes no rule, but it changes the *stamps*: at zero timings
-            // every deadline is null, so a follower deriving one from (payload, public state) is never
-            // actually put to the test. This batch is where it is — a follower that reached a different
-            // stamp fails the mirror.
-            SelfPlayHarness.RunBatch(
-                "legality, paced",
-                SelfPlayStreams.Legality,
-                SelfPlayRun.Games(standard: 20, deep: 400),
-                index => new SelfPlayGameSpec
-                {
-                    Config  = Config,
-                    Seat0   = SelfPlaySeats.Mix[index % SelfPlaySeats.Mix.Length].Seat0,
-                    Seat1   = SelfPlaySeats.Mix[index % SelfPlaySeats.Mix.Length].Seat1,
-                    Pairing = SelfPlaySeats.Mix[index % SelfPlaySeats.Mix.Length].Name,
-                    Checks  = SelfPlayChecks.Legality,
-                    Timings = MatchTimings.Default,
-                    MirrorOnFollower = true,
-                });
-
-        }
 
         [Test]
         public void ADecisionIsAPureFunctionOfTheSeatViewAndTheSeed()
@@ -75,8 +31,8 @@ namespace Game.Logic.Tests
                     Seat1             = SelfPlaySeats.Mix[index % SelfPlaySeats.Mix.Length].Seat1,
                     Pairing           = SelfPlaySeats.Mix[index % SelfPlaySeats.Mix.Length].Name,
                     Checks            = SelfPlayChecks.Legality,
-                    // Every action of this game also runs against a follower, and the two models are
-                    // compared after each one. This is the refactor's proof, and it is on for every batch.
+                    // Every action of this game also runs against a follower, and the two models are compared
+                    // after each one.
                     MirrorOnFollower = true,
                     DeterminismStride = 1,
                 });

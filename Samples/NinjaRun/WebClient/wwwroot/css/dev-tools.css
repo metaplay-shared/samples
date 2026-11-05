@@ -2,7 +2,7 @@
 
 /* ---------------------------------------------------------------------------
    Developer course tools (/dev/courses) and part editor (/dev/parts). Developer-only, so plain and dense:
-   each page sits under the shared top bar and does its own scrolling, because the document never scrolls.
+   each page sits under the debug bar and does its own scrolling, because the document never scrolls.
    --------------------------------------------------------------------------- */
 .dev-courses {
     position: fixed;
@@ -383,7 +383,7 @@ tr.selected {
     user-select: text;
 }
 
-/* The part editor fills the viewport under the top bar with two panes side by side: the stage (toolbar, the
+/* The part editor fills the viewport under the debug bar with two panes side by side: the stage (toolbar, the
    editing canvas taking every pixel of height left, and a fixed-height strip of gaps and runner times) and a
    fixed-width side pane that scrolls on its own. Nothing in the stage changes height when the draft changes,
    so the canvas never moves under the mouse. Narrower than 1100px the panes stack and the page scrolls, with

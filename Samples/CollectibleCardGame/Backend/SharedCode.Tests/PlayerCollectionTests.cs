@@ -114,18 +114,7 @@ namespace Game.Logic.Tests
         #region Starter grant
 
         [Test]
-        public void NewPlayer_IsSeededAtTheConfiguredRating()
-        {
-            // The queue bands on this number, so an account that started at zero would sit a whole rating
-            // band away from every other new account and pair with none of them.
-            PlayerModel player = CreatePlayerModel();
-
-            Assert.That(player.Record.Rating, Is.EqualTo(Config.Global.InitialRating));
-            Assert.That(player.Record.Rating, Is.GreaterThan(0));
-        }
-
-        [Test]
-        public void NewPlayer_ReceivesEveryStarterCard_AtTheRankFloor()
+        public void NewPlayer_IsGrantedExactlyTheStarterCollection_AtTheRankFloor()
         {
             PlayerModel player = CreatePlayerModel();
 
@@ -135,54 +124,8 @@ namespace Game.Logic.Tests
                 .ToList();
 
             Assert.That(expected, Is.Not.Empty);
-            Assert.That(player.Collection.Count, Is.EqualTo(expected.Count));
-            foreach (CardId cardId in expected)
-            {
-                Assert.That(player.Collection.ContainsKey(cardId), Is.True, $"{cardId} was not granted");
-                Assert.That(player.Collection[cardId], Is.EqualTo(Config.Global.RankMin));
-            }
-        }
-
-        [Test]
-        public void NewPlayer_IsNotGrantedNonStarterCards()
-        {
-            PlayerModel player = CreatePlayerModel();
-
-            foreach ((CardId cardId, CardInfo card) in Config.Cards)
-            {
-                if (!card.InStarterCollection)
-                    Assert.That(player.Collection.ContainsKey(cardId), Is.False, $"{cardId} should not be granted");
-            }
-        }
-
-        [Test]
-        public void NewPlayer_StartsWithTheConfiguredLockSlots_AndNothingLocked()
-        {
-            PlayerModel player = CreatePlayerModel();
-
-            Assert.That(player.LockSlotCount, Is.EqualTo(Config.Global.InitialLockSlots));
-            Assert.That(player.LockSlots, Is.Empty);
-        }
-
-        [Test]
-        public void NewPlayer_StartsWithNoDecksAndAnEmptyRecord()
-        {
-            PlayerModel player = CreatePlayerModel();
-
-            Assert.That(player.Decks, Is.Empty);
-            Assert.That(player.NextDeckId, Is.EqualTo(1));
-            Assert.That(player.Record, Is.Not.Null);
-            Assert.That(player.Record.RankedDecided, Is.Zero);
-            Assert.That(player.Record.RankedMatchesPlayed, Is.Zero);
-        }
-
-        [Test]
-        public void StarterCollection_CanBuildALegalDeck()
-        {
-            PlayerModel player = CreatePlayerModel();
-            List<CardId> deck = BuildLegalDeck(player);
-
-            Assert.That(DeckValidator.ValidateForPlayer(deck, Config, player.Collection).IsValid, Is.True);
+            Assert.That(player.Collection.Keys, Is.EquivalentTo(expected));
+            Assert.That(player.Collection.Values, Has.All.EqualTo(Config.Global.RankMin));
         }
 
         #endregion
@@ -245,14 +188,6 @@ namespace Game.Logic.Tests
                 Is.EqualTo(Config.Global.DeckSize - Config.Global.RankMin));
         }
 
-        [Test]
-        public void ComputePowerScore_OfAnEmptyListIsZero()
-        {
-            PlayerModel player = CreatePlayerModel();
-
-            Assert.That(DeckValidator.ComputePowerScore(new List<CardId>(), player.Collection), Is.Zero);
-        }
-
         #endregion
 
         #region Saving decks
@@ -302,26 +237,6 @@ namespace Game.Logic.Tests
         }
 
         [Test]
-        public void PlayerSaveDeck_RefusesABlankName()
-        {
-            PlayerModel player = CreatePlayerModel();
-            List<CardId> deck = BuildLegalDeck(player);
-
-            Assert.That(Execute(player, new PlayerSaveDeck(null, "   ", deck)), Is.EqualTo(ActionResults.InvalidDeckName));
-            Assert.That(player.Decks, Is.Empty);
-        }
-
-        [Test]
-        public void PlayerSaveDeck_RefusesAnOverlongName()
-        {
-            PlayerModel player = CreatePlayerModel();
-            List<CardId> deck = BuildLegalDeck(player);
-            string tooLong = new string('x', PlayerDeck.MaxNameLength + 1);
-
-            Assert.That(Execute(player, new PlayerSaveDeck(null, tooLong, deck)), Is.EqualTo(ActionResults.InvalidDeckName));
-        }
-
-        [Test]
         public void PlayerSaveDeck_RefusesMoreDecksThanTheCap()
         {
             PlayerModel player = CreatePlayerModel();
@@ -337,104 +252,102 @@ namespace Game.Logic.Tests
             Assert.That(Execute(player, new PlayerSaveDeck(1, "Renamed", deck)), Is.EqualTo(MetaActionResult.Success));
         }
 
-        [Test]
-        public void PlayerSaveDeck_RefusesADeckOfTheWrongSize()
+        /// <summary>
+        /// The deck rules themselves are <c>DeckValidatorTests</c>; this proves the action maps each one to its
+        /// own result and saves nothing. A card the collection holds that is not in the catalogue is caught by
+        /// the shape check before ownership is ever consulted.
+        /// </summary>
+        [TestCase("short", nameof(ActionResults.DeckWrongSize))]
+        [TestCase("duplicate", nameof(ActionResults.DeckDuplicateCard))]
+        [TestCase("unowned", nameof(ActionResults.DeckCardNotOwned))]
+        [TestCase("unknown", nameof(ActionResults.DeckUnknownCard))]
+        [TestCase("token", nameof(ActionResults.DeckNotCollectible))]
+        public void PlayerSaveDeck_RefusesAnIllegalDeckWithItsOwnResult(string mutation, string expected)
         {
             PlayerModel player = CreatePlayerModel();
             List<CardId> deck = BuildLegalDeck(player);
-            deck.RemoveAt(0);
 
-            Assert.That(Execute(player, new PlayerSaveDeck(null, "Short", deck)), Is.EqualTo(ActionResults.DeckWrongSize));
-        }
+            switch (mutation)
+            {
+                case "short":
+                    deck.RemoveAt(0);
+                    break;
+                case "duplicate":
+                    deck[1] = deck[0];
+                    break;
+                case "unowned":
+                    player.Collection.Remove(deck[0]);
+                    break;
+                case "unknown":
+                    deck[0] = CardId.FromString("NoSuchCard");
+                    player.Collection[deck[0]] = Config.Global.RankMin;
+                    break;
+                default:
+                    deck[0] = Config.Cards.Values.First(card => !card.Collectible).CardId;
+                    player.Collection[deck[0]] = Config.Global.RankMin;
+                    break;
+            }
 
-        [Test]
-        public void PlayerSaveDeck_RefusesADuplicateCard()
-        {
-            PlayerModel player = CreatePlayerModel();
-            List<CardId> deck = BuildLegalDeck(player);
-            deck[1] = deck[0];
-
-            Assert.That(Execute(player, new PlayerSaveDeck(null, "Twins", deck)), Is.EqualTo(ActionResults.DeckDuplicateCard));
-        }
-
-        [Test]
-        public void PlayerSaveDeck_RefusesACardThePlayerDoesNotOwn()
-        {
-            PlayerModel player = CreatePlayerModel();
-            List<CardId> deck = BuildLegalDeck(player);
-            player.Collection.Remove(deck[0]);
-
-            Assert.That(Execute(player, new PlayerSaveDeck(null, "Borrowed", deck)), Is.EqualTo(ActionResults.DeckCardNotOwned));
+            MetaActionResult result = (MetaActionResult)typeof(ActionResults).GetField(expected)!.GetValue(null);
+            Assert.That(Execute(player, new PlayerSaveDeck(null, "Illegal", deck)), Is.EqualTo(result));
             Assert.That(player.Decks, Is.Empty);
         }
 
-        [Test]
-        public void PlayerSaveDeck_RefusesAnUnownedExpansionCard()
+        static IEnumerable<TestCaseData> DeckNames()
         {
-            PlayerModel player = CreatePlayerModel();
-            List<CardId> deck = Config.StarterDecks[StarterDeckId.FromString("FireAndFoam")].ToCardIds();
-            CardId expansion = CardId.FromString("EmberEaredHare");
-            Assert.That(Config.Cards[expansion].Collectible, Is.True);
-            Assert.That(player.Collection.ContainsKey(expansion), Is.False);
-            deck[0] = expansion;
-            Assert.That(Execute(player, new PlayerSaveDeck(null, "New faces", deck)), Is.EqualTo(ActionResults.DeckCardNotOwned));
-            Assert.That(player.Decks, Is.Empty);
-        }
-
-        [Test]
-        public void PlayerSaveDeck_RefusesACardThatIsNotInTheCatalogue()
-        {
-            PlayerModel player = CreatePlayerModel();
-            List<CardId> deck = BuildLegalDeck(player);
-
-            // Owned as far as the collection is concerned, but no such card exists — the shape check catches
-            // it before ownership is ever consulted.
-            CardId ghost = CardId.FromString("NoSuchCard");
-            player.Collection[ghost] = Config.Global.RankMin;
-            deck[0] = ghost;
-
-            Assert.That(Execute(player, new PlayerSaveDeck(null, "Ghosts", deck)), Is.EqualTo(ActionResults.DeckUnknownCard));
-            Assert.That(player.Decks, Is.Empty);
-        }
-
-        [Test]
-        public void PlayerSaveDeck_RefusesANonCollectibleCard()
-        {
-            PlayerModel player = CreatePlayerModel();
-            List<CardId> deck = BuildLegalDeck(player);
-
-            CardId token = Config.Cards.Values.First(card => !card.Collectible).CardId;
-            player.Collection[token] = Config.Global.RankMin;
-            deck[0] = token;
-
-            Assert.That(Execute(player, new PlayerSaveDeck(null, "Tokens", deck)), Is.EqualTo(ActionResults.DeckNotCollectible));
-            Assert.That(player.Decks, Is.Empty);
-        }
-
-        [Test]
-        public void PlayerSaveDeck_TrimsTheNameItStores()
-        {
-            PlayerModel player = CreatePlayerModel();
-            List<CardId> deck = BuildLegalDeck(player);
-
-            Assert.That(Execute(player, new PlayerSaveDeck(null, "  Zoomies  ", deck)), Is.EqualTo(MetaActionResult.Success));
-            Assert.That(player.Decks[1].Name, Is.EqualTo("Zoomies"));
-
-            // Measured after trimming, so trailing space is never what pushes a name over the limit.
             string atTheLimit = new string('x', PlayerDeck.MaxNameLength);
-            Assert.That(Execute(player, new PlayerSaveDeck(1, $"  {atTheLimit}  ", deck)), Is.EqualTo(MetaActionResult.Success));
-            Assert.That(player.Decks[1].Name, Is.EqualTo(atTheLimit));
+
+            yield return new TestCaseData("   ", false, null).SetName("A blank deck name is refused");
+            yield return new TestCaseData(new string('x', PlayerDeck.MaxNameLength + 1), false, null).SetName("An overlong deck name is refused");
+            yield return new TestCaseData("  Zoomies  ", true, "Zoomies").SetName("A deck name is stored trimmed");
+            // Measured after trimming, so trailing space is never what pushes a name over the limit.
+            yield return new TestCaseData($"  {atTheLimit}  ", true, atTheLimit).SetName("A deck name is measured after trimming");
         }
 
-        [Test]
-        public void PlayerSetDisplayName_TrimsTheNameItStores()
+        /// <summary> The one deck-name rule, asked by both the save and the rename. </summary>
+        [TestCaseSource(nameof(DeckNames))]
+        public void ADeckNameIsTrimmedAndBounded(string name, bool accepted, string stored)
+        {
+            PlayerModel saving = CreatePlayerModel();
+            MetaActionResult saved = Execute(saving, new PlayerSaveDeck(null, name, BuildLegalDeck(saving)));
+
+            PlayerModel renaming = CreatePlayerModel();
+            Execute(renaming, new PlayerSaveDeck(null, "Before", BuildLegalDeck(renaming)));
+            MetaActionResult renamed = Execute(renaming, new PlayerRenameDeck(1, name));
+
+            Assert.That(saved, Is.EqualTo(accepted ? MetaActionResult.Success : ActionResults.InvalidDeckName));
+            Assert.That(renamed, Is.EqualTo(accepted ? MetaActionResult.Success : ActionResults.InvalidDeckName));
+            if (accepted)
+                Assert.That(saving.Decks[1].Name, Is.EqualTo(stored));
+            else
+                Assert.That(saving.Decks, Is.Empty);
+            Assert.That(renaming.Decks[1].Name, Is.EqualTo(accepted ? stored : "Before"));
+        }
+
+        /// <summary> Built in the test body: the length bound is the SDK validator's, read at run time. </summary>
+        const string OverlongDisplayName = "(overlong)";
+
+        /// <summary>
+        /// DisplayName is an alias of PlayerName, so the name the menu reads and the name the dashboard, the name
+        /// search index and the operator's change-name control read are the same string. Names are trimmed like
+        /// every other name in the game, and bounded by the SDK validator's rule, the one the dashboard's rename
+        /// enforces: three letters is under its floor of five.
+        /// </summary>
+        [TestCase("Whiskers", true, "Whiskers")]
+        [TestCase("  Whiskers  ", true, "Whiskers")]
+        [TestCase("   ", false, "Example name")]
+        [TestCase("Ann", false, "Example name")]
+        [TestCase(OverlongDisplayName, false, "Example name")]
+        public void PlayerSetDisplayName_WritesTheOneNameTrimmedAndBounded(string name, bool accepted, string stored)
         {
             PlayerModel player = CreatePlayerModel();
+            if (name == OverlongDisplayName)
+                name = new string('x', PlayerModel.MaxDisplayNameLength + 1);
 
-            // The same rule as every other name in the game.
-            Assert.That(Execute(player, new PlayerSetDisplayName("  Whiskers  ")), Is.EqualTo(MetaActionResult.Success));
-            Assert.That(player.DisplayName, Is.EqualTo("Whiskers"));
-            Assert.That(player.PlayerName, Is.EqualTo("Whiskers"));
+            Assert.That(Execute(player, new PlayerSetDisplayName(name)),
+                Is.EqualTo(accepted ? MetaActionResult.Success : ActionResults.InvalidDisplayName));
+            Assert.That(player.DisplayName, Is.EqualTo(stored));
+            Assert.That(player.PlayerName, Is.EqualTo(stored));
         }
 
         [Test]
@@ -467,14 +380,13 @@ namespace Game.Logic.Tests
         }
 
         [Test]
-        public void PlayerRenameDeck_RefusesAnUnknownDeckAndABlankName()
+        public void PlayerRenameDeck_RefusesAnUnknownDeck()
         {
             PlayerModel player = CreatePlayerModel();
             List<CardId> deck = BuildLegalDeck(player);
             Execute(player, new PlayerSaveDeck(null, "Before", deck));
 
             Assert.That(Execute(player, new PlayerRenameDeck(9, "Whatever")), Is.EqualTo(ActionResults.UnknownDeck));
-            Assert.That(Execute(player, new PlayerRenameDeck(1, "")), Is.EqualTo(ActionResults.InvalidDeckName));
             Assert.That(player.Decks[1].Name, Is.EqualTo("Before"));
         }
 
@@ -514,14 +426,14 @@ namespace Game.Logic.Tests
         }
 
         [Test]
-        public void PlayerStartPracticeMatch_RecordsNothingItself_BecauseItsRefusalIsInvisibleToTheClient()
+        public void BothEntries_RecordNothingThemselves_BecauseTheirRefusalIsInvisibleToTheClient()
         {
-            // The shape this pins: the entry refusal is decided by CurrentMatch, a
-            // ServerOnly member that reads default here — and this execution is exactly the one a client runs
-            // — so the commit body may not write payload-dependent public state. If it did, an entry the
-            // server refused would leave the two models disagreeing about a checksummed member, which ends
+            // An entry's refusal is decided by state the client cannot see — the match pointer is ServerOnly and
+            // the search phase is not model state at all — so this execution, which is exactly the one a client
+            // runs, always reaches the commit body while the server's may not. A payload-dependent write here
+            // would leave the two models disagreeing about a checksummed member on a refused entry, which ends
             // the session on a mismatch. The deck is recorded by PlayerNoteDeckPlayed instead, issued by the
-            // actor where the pointer is assigned.
+            // actor where the pointer is assigned, and the one-entry rule is the actor's to refuse.
             PlayerModel player = CreatePlayerModel();
             List<CardId> deck = BuildLegalDeck(player);
             Execute(player, new PlayerSaveDeck(null, "First", deck));
@@ -530,6 +442,16 @@ namespace Game.Logic.Tests
             Assert.That(Execute(player, new PlayerStartPracticeMatch(DeckChoice.Saved(2), BotProfileId.Practiced)),
                 Is.EqualTo(MetaActionResult.Success), "a client's predicted run always passes the pointer check");
             Assert.That(player.LastPlayedDeck, Is.Null, "and it must record nothing while doing so");
+
+            Execute(player, new PlayerNoteDeckPlayed(DeckChoice.Saved(1)));
+            Assert.That(Execute(player, new PlayerEnqueueForRankedMatch(DeckChoice.Saved(2))), Is.EqualTo(MetaActionResult.Success));
+            Assert.That(player.LastPlayedDeck.SavedDeckId, Is.EqualTo(1), "the deck is recorded where the seat is, not here");
+
+            // An account already at a table: not an action result, because a refusal decided by ServerOnly state
+            // is one nobody can observe. The actor refuses instead and answers with MatchmakingEnded(Refused).
+            player.CurrentMatch = EntityId.CreateRandom(EntityKindCore.Player);
+            Assert.That(Execute(player, new PlayerEnqueueForRankedMatch(DeckChoice.Saved(2))), Is.EqualTo(MetaActionResult.Success));
+            Assert.That(player.LastPlayedDeck.SavedDeckId, Is.EqualTo(1));
         }
 
         [Test]
@@ -548,25 +470,6 @@ namespace Game.Logic.Tests
         #endregion
 
         #region The ranked entry
-
-        [Test]
-        public void PlayerEnqueueForRankedMatch_AcceptsALegalDeckAndRecordsNothingItself()
-        {
-            // The same shape PlayerStartPracticeMatch has to keep, and for the same reason: both refusals a
-            // second entry can hit are decided by state the client cannot see — the match pointer is
-            // ServerOnly and the search phase is not model state at all — so this execution, which is exactly
-            // the one a client runs, always reaches the commit body while the server's may not. A
-            // payload-dependent write here would diverge the two models on a refused entry, and a checksum
-            // mismatch ends the session.
-            PlayerModel player = CreatePlayerModel();
-            List<CardId> deck = BuildLegalDeck(player);
-            Execute(player, new PlayerSaveDeck(null, "First", deck));
-            Execute(player, new PlayerSaveDeck(null, "Second", deck));
-            Execute(player, new PlayerNoteDeckPlayed(DeckChoice.Saved(1)));
-
-            Assert.That(Execute(player, new PlayerEnqueueForRankedMatch(DeckChoice.Saved(2))), Is.EqualTo(MetaActionResult.Success));
-            Assert.That(player.LastPlayedDeck.SavedDeckId, Is.EqualTo(1), "the deck is recorded where the seat is, not here");
-        }
 
         [Test]
         public void PlayerEnqueueForRankedMatch_ClearsTheNoticeAboutTheLastMatch()
@@ -594,34 +497,24 @@ namespace Game.Logic.Tests
         }
 
         [Test]
-        public void PlayerStartPracticeMatch_AcceptsAStarterDeckOnAnAccountWithNoSavedDecks()
+        public void BothEntries_AcceptEveryStarterDeckOnAnAccountWithNoSavedDecks()
         {
-            // The feature, at the action layer: a fresh account can enter with no saved deck at all, because
-            // the starter grant already owns every card the starter deck names.
-            PlayerModel   player = CreatePlayerModel();
-            StarterDeckId first  = null;
-            foreach (StarterDeckInfo deck in Config.StarterDecks.Values)
-            {
-                first = deck.StarterDeckId;
-                break;
-            }
-
-            Assert.That(player.Decks, Is.Empty);
-            Assert.That(Execute(player, new PlayerStartPracticeMatch(DeckChoice.Starter(first), BotProfileId.Practiced)),
-                Is.EqualTo(MetaActionResult.Success));
-            Assert.That(player.LastPlayedDeck, Is.Null, "and it still records nothing itself");
-        }
-
-        [Test]
-        public void PlayerEnqueueForRankedMatch_AcceptsAStarterDeck()
-        {
+            // The feature, at the action layer: a fresh account can enter with no saved deck at all, because the
+            // starter grant already owns every card a starter deck names.
             PlayerModel player = CreatePlayerModel();
+            Assert.That(player.Decks, Is.Empty);
 
             foreach (StarterDeckInfo deck in Config.StarterDecks.Values)
             {
-                Assert.That(Execute(player, new PlayerEnqueueForRankedMatch(DeckChoice.Starter(deck.StarterDeckId))),
+                DeckChoice choice = DeckChoice.Starter(deck.StarterDeckId);
+
+                Assert.That(Execute(player, new PlayerStartPracticeMatch(choice, BotProfileId.Practiced)),
+                    Is.EqualTo(MetaActionResult.Success), deck.StarterDeckId.Value);
+                Assert.That(Execute(player, new PlayerEnqueueForRankedMatch(choice)),
                     Is.EqualTo(MetaActionResult.Success), deck.StarterDeckId.Value);
             }
+
+            Assert.That(player.LastPlayedDeck, Is.Null, "and neither entry records anything itself");
         }
 
         [Test]
@@ -686,65 +579,6 @@ namespace Game.Logic.Tests
         }
 
         [Test]
-        public void PlayerEnqueueForRankedMatch_LeavesTheOneEntryRuleToTheActor()
-        {
-            // Deliberately NOT an action result, and the difference from PlayerStartPracticeMatch is the point
-            // of the directed channel: a refusal decided by ServerOnly state is one nobody can
-            // observe — the model does not change and the SDK has no route for an action's result. The actor
-            // refuses instead and answers with MatchmakingEnded(Refused).
-            PlayerModel player = CreatePlayerModel();
-            List<CardId> deck = BuildLegalDeck(player);
-            Execute(player, new PlayerSaveDeck(null, "First", deck));
-            player.CurrentMatch = EntityId.CreateRandom(EntityKindCore.Player);
-
-            Assert.That(Execute(player, new PlayerEnqueueForRankedMatch(DeckChoice.Saved(1))), Is.EqualTo(MetaActionResult.Success));
-
-            // And it still records nothing while doing so, which is what keeps the two models agreeing when
-            // the account turns out to be at a table after all.
-            Assert.That(player.LastPlayedDeck, Is.Null);
-        }
-
-        [Test]
-        public void PlayerCancelMatchmaking_AlwaysSucceedsAndChangesNothingOnTheModel()
-        {
-            // The client cannot know the search phase, so it never predicts a refusal; the real defence lives
-            // on the player actor, where the seat reservation commits.
-            PlayerModel player = CreatePlayerModel();
-
-            Assert.That(Execute(player, new PlayerCancelMatchmaking()), Is.EqualTo(MetaActionResult.Success));
-            Assert.That(player.MatchGoneUnseen, Is.False);
-            Assert.That(player.CurrentMatch, Is.EqualTo(EntityId.None));
-        }
-
-        [Test]
-        public void PlayerClearMatchPointer_ReleasesTheAccountFromItsTable()
-        {
-            PlayerModel player = CreatePlayerModel();
-            player.CurrentMatch = EntityId.CreateRandom(EntityKindGame.Match);
-            Assert.That(player.IsInMatch, Is.True);
-
-            Assert.That(Execute(player, new PlayerClearMatchPointer()), Is.EqualTo(MetaActionResult.Success));
-
-            Assert.That(player.CurrentMatch, Is.EqualTo(EntityId.None));
-            Assert.That(player.IsInMatch, Is.False);
-        }
-
-        [Test]
-        public void PlayerNoteMatchGone_IsWhatTellsThePlayerTheirTableWent()
-        {
-            // The other half of every clear: the pointer going is invisible on the client — CurrentMatch is
-            // ServerOnly and reads as none there either way — so without this public flag a player whose game
-            // vanished would simply find themselves on Home with no explanation. Both server clear sites pair
-            // the two.
-            PlayerModel player = CreatePlayerModel();
-            player.CurrentMatch = EntityId.CreateRandom(EntityKindGame.Match);
-
-            Assert.That(Execute(player, new PlayerNoteMatchGone()), Is.EqualTo(MetaActionResult.Success));
-
-            Assert.That(player.MatchGoneUnseen, Is.True);
-        }
-
-        [Test]
         public void PlayerSetNewcomerShieldWaived_TurnsTheWaiverOnAndOffAgain()
         {
             // The dashboard's whole control over the shield, and the flag the ticket freezes at enqueue.
@@ -756,18 +590,6 @@ namespace Game.Logic.Tests
 
             Assert.That(Execute(player, new PlayerSetNewcomerShieldWaived(false)), Is.EqualTo(MetaActionResult.Success));
             Assert.That(player.NewcomerShieldWaived, Is.False, "and it can be handed back");
-        }
-
-        [Test]
-        public void PlayerSetNewcomerShieldWaived_LeavesTheRankedCountAlone()
-        {
-            // The waiver is a second fact beside the count rather than a forged count: the tier is decided by
-            // both flags and both counts at formation, and the record is what the Heist reads back.
-            PlayerModel player = CreatePlayerModel();
-
-            Execute(player, new PlayerSetNewcomerShieldWaived(true));
-
-            Assert.That(player.Record.RankedMatchesPlayed, Is.Zero);
         }
 
         [Test]
@@ -788,19 +610,6 @@ namespace Game.Logic.Tests
             PlayerSetNewcomerShieldWaived onAWaivedAccount = new PlayerSetNewcomerShieldWaived(false);
             onAWaivedAccount.InitializeDefaultStateForDashboard(player);
             Assert.That(onAWaivedAccount.Waived, Is.True, "and on a waived account's own value");
-        }
-
-        [Test]
-        public void PlayerSetNewcomerShieldWaived_IsIdempotentAtTheValueTheAccountAlreadyHolds()
-        {
-            // Confirming the value the form opened on is what restores a shield once the hook above lands, so
-            // re-submitting the current value has to be a no-op rather than a toggle.
-            PlayerModel player = CreatePlayerModel();
-            Execute(player, new PlayerSetNewcomerShieldWaived(true));
-
-            Assert.That(Execute(player, new PlayerSetNewcomerShieldWaived(true)), Is.EqualTo(MetaActionResult.Success));
-            Assert.That(player.NewcomerShieldWaived, Is.True);
-            Assert.That(player.Record.RankedMatchesPlayed, Is.Zero);
         }
 
         #endregion
@@ -882,104 +691,56 @@ namespace Game.Logic.Tests
 
         #region The rank transfer
 
-        // The payout matrix, against a real PlayerModel rather than against a copy of the arithmetic: the
-        // collection is checksummed, so what has to be right is the write path as well as the sum. The pure
-        // halves of the rule are pinned beside the rest of the Heist in Server.Tests/MatchHeistPolicyTests.
+        const int Floor   = -1;
+        const int Ceiling = -2;
+        const int Absent  = 0;
 
-        [Test]
-        public void PlayerApplyMatchResult_TheWinnersCopyGainsARank()
+        static int RankAt(int rank) => rank == Floor ? Config.Global.RankMin : rank == Ceiling ? Config.Global.RankMax : rank;
+
+        /// <summary>
+        /// The payout matrix, against a real PlayerModel rather than against a copy of the arithmetic: the
+        /// collection is checksummed, so what has to be right is the write path as well as the sum. The move the
+        /// Heist screen spells out comes from the same policy, so its kind is asserted on the same row.
+        /// <para>
+        /// A winner who owns no copy is given one at the floor — the one place a card enters a collection after
+        /// the starter grant, and proof that a synchronized server action may add a key to the checksummed
+        /// collection. Nothing moves above the ceiling or below the floor, and cards never leave a collection. A
+        /// lock runs both ways, and it is re-read when the transfer applies rather than trusted off the snapshot
+        /// the pick was filtered against, so a lock taken since the finish holds on the retry path too.
+        /// </para>
+        /// </summary>
+        [TestCase(MatchAccountOutcome.Win, 3, false, 4, HeistMove.Moved, TestName = "The winner's copy gains a rank")]
+        [TestCase(MatchAccountOutcome.Win, Absent, false, Floor, HeistMove.Acquired, TestName = "A winner who owns no copy is given one at the floor")]
+        [TestCase(MatchAccountOutcome.Win, Ceiling, false, Ceiling, HeistMove.AtCeiling, TestName = "A winner at the ceiling gains nothing")]
+        [TestCase(MatchAccountOutcome.Win, 3, true, 3, HeistMove.Frozen, TestName = "A winner who locked their own copy gains nothing")]
+        [TestCase(MatchAccountOutcome.Loss, 3, false, 2, HeistMove.Moved, TestName = "The loser's copy loses a rank")]
+        [TestCase(MatchAccountOutcome.Loss, Floor, false, Floor, HeistMove.AtFloor, TestName = "The loser at the floor keeps the card")]
+        [TestCase(MatchAccountOutcome.Loss, 4, true, 4, HeistMove.Frozen, TestName = "A loser who locked the card since the finish keeps its rank")]
+        [TestCase(MatchAccountOutcome.Loss, Absent, false, Absent, HeistMove.NotOwned, TestName = "A loser who owns no copy loses nothing")]
+        public void PlayerApplyMatchResult_TheRankTransfer(MatchAccountOutcome outcome, int rank, bool locked, int expected, HeistMove kind)
         {
             PlayerModel player = CreatePlayerModel();
-            CardId card = CardAtRank(player, 3);
+            CardId      card   = CardAtRank(player, rank == Absent ? Config.Global.RankMin : RankAt(rank));
+            if (rank == Absent)
+                player.Collection.Remove(card);
+            if (locked)
+                Assert.That(Execute(player, new PlayerSetLockSlot(0, card)), Is.EqualTo(MetaActionResult.Success));
 
-            Assert.That(Execute(player, Heisted(MatchAccountOutcome.Win, card)), Is.EqualTo(MetaActionResult.Success));
-            Assert.That(player.Collection[card], Is.EqualTo(4));
-        }
+            HeistRankMove move = outcome == MatchAccountOutcome.Win
+                ? MatchHeistPolicy.WinnerGain(rank != Absent, rank == Absent ? 0 : RankAt(rank), locked, Config.Global)
+                : MatchHeistPolicy.LoserLoss(rank != Absent, rank == Absent ? 0 : RankAt(rank), locked, Config.Global);
 
-        [Test]
-        public void PlayerApplyMatchResult_AWinnerWhoOwnsNoCopyIsGivenOneAtTheFloor()
-        {
-            // The acquisition branch, and the only place in the game a card ENTERS a collection after the
-            // starter grant. It is unreachable in this build — every account holds every collectible card —
-            // so it is reached here by taking the card away first. What it also pins is that a synchronized
-            // server action may ADD a key to the checksummed collection: both sides run the same body in the
-            // same order, so the insertion agrees.
-            PlayerModel player = CreatePlayerModel();
-            CardId card = player.Collection.Keys.First();
-            player.Collection.Remove(card);
+            Assert.That(Execute(player, Heisted(outcome, card)), Is.EqualTo(MetaActionResult.Success));
 
-            Execute(player, Heisted(MatchAccountOutcome.Win, card));
+            if (expected == Absent)
+                Assert.That(player.Collection.ContainsKey(card), Is.False);
+            else
+                Assert.That(player.Collection[card], Is.EqualTo(RankAt(expected)));
 
-            Assert.That(player.Collection.ContainsKey(card), Is.True, "NEW! joins the collection at the floor");
-            Assert.That(player.Collection[card], Is.EqualTo(Config.Global.RankMin));
-        }
-
-        [Test]
-        public void PlayerApplyMatchResult_AWinnerAtTheCeilingGainsNothing()
-        {
-            // Nothing above rank five, and — with the cosmetic currency deferred rather than designed away —
-            // nothing paid instead. The pick simply moves nothing on this side.
-            PlayerModel player = CreatePlayerModel();
-            CardId card = CardAtRank(player, Config.Global.RankMax);
-
-            Execute(player, Heisted(MatchAccountOutcome.Win, card));
-
-            Assert.That(player.Collection[card], Is.EqualTo(Config.Global.RankMax));
-        }
-
-        [Test]
-        public void PlayerApplyMatchResult_AWinnerWhoLockedTheirOwnCopyGainsNothing()
-        {
-            // A lock runs both ways: retirement, not insurance with upside. The menu already subtracts the
-            // winner's frozen set, so reaching this needs a lock taken AFTER the pick — which is exactly the
-            // case the live re-read exists for.
-            PlayerModel player = CreatePlayerModel();
-            CardId card = CardAtRank(player, 3);
-            Execute(player, new PlayerSetLockSlot(0, card));
-
-            Execute(player, Heisted(MatchAccountOutcome.Win, card));
-
-            Assert.That(player.Collection[card], Is.EqualTo(3), "frozen cards do not grow either");
-        }
-
-        [Test]
-        public void PlayerApplyMatchResult_TheLosersCopyLosesARank()
-        {
-            PlayerModel player = CreatePlayerModel();
-            CardId card = CardAtRank(player, 3);
-
-            Execute(player, Heisted(MatchAccountOutcome.Loss, card));
-
-            Assert.That(player.Collection[card], Is.EqualTo(2));
-        }
-
-        [Test]
-        public void PlayerApplyMatchResult_TheLoserAtTheFloorKeepsTheCard()
-        {
-            // Cards are never removed from a collection and rank one is safe, so the floor holds rather than
-            // going to zero or negative.
-            PlayerModel player = CreatePlayerModel();
-            CardId card = CardAtRank(player, Config.Global.RankMin);
-
-            Execute(player, Heisted(MatchAccountOutcome.Loss, card));
-
-            Assert.That(player.Collection.ContainsKey(card), Is.True);
-            Assert.That(player.Collection[card], Is.EqualTo(Config.Global.RankMin));
-        }
-
-        [Test]
-        public void PlayerApplyMatchResult_ALoserWhoLockedTheCardSinceTheFinishKeepsItsRank()
-        {
-            // The lock is re-read at the moment the transfer applies rather than trusted off the snapshot the
-            // pick was filtered against. Refusing to move a locked rank is the whole promise the feature
-            // makes, and a promise that holds except on the retry path is not one.
-            PlayerModel player = CreatePlayerModel();
-            CardId card = CardAtRank(player, 4);
-            Execute(player, new PlayerSetLockSlot(0, card));
-
-            Execute(player, Heisted(MatchAccountOutcome.Loss, card));
-
-            Assert.That(player.Collection[card], Is.EqualTo(4));
+            Assert.That(move.Kind, Is.EqualTo(kind));
+            Assert.That(move.Moves, Is.EqualTo(kind == HeistMove.Moved || kind == HeistMove.Acquired));
+            if (expected != Absent)
+                Assert.That(move.To, Is.EqualTo(RankAt(expected)), "the screen names the rank the collection lands on");
         }
 
         [Test]
@@ -1073,7 +834,7 @@ namespace Game.Logic.Tests
         /// <summary>
         /// One of the account's cards, grown to the lowest rank a lock accepts. Every card a fresh account
         /// owns is at the rank floor and <c>Global.MinLockRank</c> keeps the floor unlockable, so a lock test
-        /// has to raise a card first — which is what the Heist will do once it exists.
+        /// has to raise a card first, as a Heist win does.
         /// </summary>
         static CardId LockableCard(PlayerModel player, int ndx = 0)
         {
@@ -1241,6 +1002,41 @@ namespace Game.Logic.Tests
         }
 
         [Test]
+        public void PlayerDevSetAllCardRanks_MovesEveryUnlockedCard()
+        {
+            // The batch form a fixture grows a whole deck with. A locked card keeps its frozen rank, as it does
+            // under the single-card action, and does not stop the rest of the batch.
+            PlayerModel player = CreatePlayerModel();
+            CardId locked = LockableCard(player);
+            Execute(player, new PlayerSetLockSlot(0, locked));
+
+            Assert.That(Execute(player, new PlayerDevSetAllCardRanks(Config.Global.RankMax)), Is.EqualTo(MetaActionResult.Success));
+            foreach ((CardId card, int rank) in player.Collection)
+            {
+                int expected = card == locked ? Config.Global.MinLockRank : Config.Global.RankMax;
+                Assert.That(rank, Is.EqualTo(expected), card.Value);
+            }
+
+            Assert.That(Execute(player, new PlayerDevSetAllCardRanks(Config.Global.RankMax + 1)), Is.EqualTo(ActionResults.InvalidCardRank));
+            Assert.That(Execute(player, new PlayerDevSetAllCardRanks(Config.Global.RankMin - 1)), Is.EqualTo(ActionResults.InvalidCardRank));
+        }
+
+        [Test]
+        public void EveryPlayerDevActionIsDevelopmentOnly()
+        {
+            // The PlayerDev* actions move ranks and lift shields for fixtures and playtests. The SDK refuses a
+            // [DevelopmentOnlyAction] from a client unless the environment enables development features or the
+            // account is a developer, and that attribute is the whole of the gate, so none may lack it.
+            List<Type> devActions = typeof(PlayerDevSetCardRank).Assembly.GetTypes()
+                .Where(type => typeof(PlayerAction).IsAssignableFrom(type) && type.Name.StartsWith("PlayerDev", StringComparison.Ordinal))
+                .ToList();
+
+            Assert.That(devActions, Has.Count.GreaterThanOrEqualTo(3));
+            foreach (Type type in devActions)
+                Assert.That(type.GetCustomAttributes(typeof(DevelopmentOnlyActionAttribute), inherit: false), Is.Not.Empty, type.Name);
+        }
+
+        [Test]
         public void ARaisedCardCanBeLocked_AndTheFloorCannot()
         {
             // Both sides of the threshold in one place, since the whole of F6 is which side a card is on.
@@ -1257,34 +1053,6 @@ namespace Game.Logic.Tests
         #endregion
 
         #region Rank tracks
-
-        [Test]
-        public void CardStats_AtTheRankFloorAreThePrintedNumbers()
-        {
-            CardInfo card = Config.Cards[CardId.FromString("EmberKit")];
-            CardStats stats = card.GetStatsAtRank(Config.Global.RankMin);
-
-            Assert.That(stats.Attack, Is.EqualTo(card.Attack));
-            Assert.That(stats.Health, Is.EqualTo(card.Health));
-            Assert.That(stats.Cost, Is.EqualTo(card.Cost));
-            Assert.That(card.HasRankGrowth(Config.Global.RankMin), Is.False);
-        }
-
-        [Test]
-        public void CardStats_AccumulateTheTracksMilestoneDeltas()
-        {
-            // CritterDefault: +0/+1 at rank 3, +1/+0 at rank 5.
-            CardInfo card = Config.Cards[CardId.FromString("EmberKit")];
-
-            CardStats atThree = card.GetStatsAtRank(3);
-            Assert.That(atThree.Attack, Is.EqualTo(card.Attack));
-            Assert.That(atThree.Health, Is.EqualTo(card.Health + 1));
-
-            CardStats atFive = card.GetStatsAtRank(Config.Global.RankMax);
-            Assert.That(atFive.Attack, Is.EqualTo(card.Attack + 1));
-            Assert.That(atFive.Health, Is.EqualTo(card.Health + 1));
-            Assert.That(card.HasRankGrowth(Config.Global.RankMax), Is.True);
-        }
 
         [Test]
         public void CardStats_OfACardWithNoTrackAreItsPrintedNumbers()

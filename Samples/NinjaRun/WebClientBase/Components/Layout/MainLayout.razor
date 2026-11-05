@@ -1,86 +1,93 @@
 @inherits LayoutComponentBase
+@using WebClientBase.Configuration
 @using WebClientBase.Services
 @inject IMetaplayConnectionService MetaplayService
 @inject NavigationManager NavigationManager
+@inject WebClientConfig Config
 @implements IDisposable
 
-@* Lightweight, see-through top bar floating over the game. Debug info only.
-   pointer-events:none lets taps pass through to the game; the controls cluster
-   re-enables pointer events for itself. *@
-<header class="app-bar">
-    <div class="container">
-        <div class="app-bar-row">
-            <!-- Debug info cluster (interactive) -->
-            <div class="app-bar-cluster">
-                @if (!string.IsNullOrEmpty(GetPlayerIdText()))
-                {
-                    <span class="app-bar-chip" style="color: var(--text-muted);">
-                        @GetPlayerIdText()
-                    </span>
-                }
+@* Debug controls float over the game without changing its layout. *@
+<header class="mp-debugbar">
+    @if (HeaderBranding != null)
+    {
+        @HeaderBranding
+    }
 
-                <div class="app-bar-chip">
-                    <div class="app-bar-dot @GetConnectionDotClass()"></div>
-                    <span style="color: var(--text-secondary);">@GetConnectionText()</span>
-                </div>
+    @if (!string.IsNullOrEmpty(GetPlayerIdText()))
+    {
+        <span class="mp-debugbar__chip" style="color: var(--text-muted);">
+            @GetPlayerIdText()
+        </span>
+    }
 
-                @if (MetaplayService.ConnectionState == ConnectionState.Error ||
-                     MetaplayService.ConnectionState == ConnectionState.Disconnected)
-                {
-                    <button class="app-bar-button"
-                            style="background: var(--accent-blue); color: white;"
-                            @onclick="OnReconnect">
-                        Reconnect
-                    </button>
-                }
-                @if (MetaplayService.ConnectionState == ConnectionState.Connected)
-                {
-                    <button type="button"
-                            class="app-bar-button"
-                            style="background: rgba(239, 68, 68, 0.15); color: var(--accent-red);"
-                            @onclick="OnReset">
-                        Reset
-                    </button>
-                }
-            </div>
-        </div>
+    <div class="mp-debugbar__chip">
+        <div class="mp-debugbar__dot @GetConnectionDotClass()"></div>
+        <span>@GetConnectionText()</span>
     </div>
+
+    @if (MetaplayService.ConnectionStatus == ConnectionStatus.Connected)
+    {
+        <button type="button"
+                class="mp-button mp-button--danger"
+                @onclick="OnReset">
+            Reset
+        </button>
+    }
+
+    @HeaderActions
 </header>
 
-<main class="container app-main">
+<main class="mp-screen">
     @Body
 </main>
 
 @code {
+    /// <summary>
+    /// Custom branding content for the header. If not provided, uses default branding from WebClientConfig.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? HeaderBranding { get; set; }
+
+    /// <summary>
+    /// Additional actions to display in the header (to the right of connection status).
+    /// </summary>
+    [Parameter]
+    public RenderFragment? HeaderActions { get; set; }
+
     protected override void OnInitialized()
     {
         MetaplayService.OnStateChanged += OnStateChanged;
     }
 
-    /// <summary>
-    /// The service says so when the connection state or the player model changed, which is when the bar's
-    /// connection state or player ID can have.
-    /// </summary>
-    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+    private void OnStateChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
 
     private string GetConnectionDotClass()
     {
-        return MetaplayService.ConnectionState switch
+        if (MetaplayService.IsUnhealthy)
+            return "mp-debugbar__dot--connecting";
+
+        return MetaplayService.ConnectionStatus switch
         {
-            ConnectionState.Connected => "is-connected",
-            ConnectionState.Connecting => "is-connecting",
-            ConnectionState.Error => "is-error",
+            ConnectionStatus.Connected => "mp-debugbar__dot--connected",
+            ConnectionStatus.Connecting => "mp-debugbar__dot--connecting",
+            ConnectionStatus.Error => "mp-debugbar__dot--error",
             _ => ""
         };
     }
 
     private string GetConnectionText()
     {
-        return MetaplayService.ConnectionState switch
+        if (MetaplayService.IsUnhealthy)
+            return "Unhealthy";
+
+        return MetaplayService.ConnectionStatus switch
         {
-            ConnectionState.Connected => "Connected",
-            ConnectionState.Connecting => "Connecting...",
-            ConnectionState.Error => "Error",
+            ConnectionStatus.Connected => "Connected",
+            ConnectionStatus.Connecting => "Connecting...",
+            ConnectionStatus.Error => "Error",
             _ => "Offline"
         };
     }
@@ -90,16 +97,14 @@
         return MetaplayService.PlayerId?.ToString() ?? "";
     }
 
-    private async Task OnReconnect()
-    {
-        await MetaplayService.ConnectAsync();
-    }
-
+    /// <summary>
+    /// Reset, then reload as a new player, in the same offline mode or on the same game server.
+    /// </summary>
     private void OnReset()
     {
         if (MetaplayService.Reset())
         {
-            NavigationManager.NavigateTo("/", forceLoad: true);
+            StartPage.Reload(NavigationManager);
         }
     }
 

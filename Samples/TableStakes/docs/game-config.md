@@ -77,15 +77,16 @@ A failed build writes nothing and exits with an error. There are three ways to f
 
 ### Project references
 
-[`GameConfigGen.csproj`](../tools/GameConfigGen/GameConfigGen.csproj) references the analyzer projects, because SDK
-integration discovery reads source-generated type info from the entry assembly. It references `Backend/Server`, not
+[`GameConfigGen.csproj`](../tools/GameConfigGen/GameConfigGen.csproj) gets the Metaplay analyzers from the sample's
+`Directory.Build.props` like the other projects, because SDK integration discovery reads source-generated type info
+from the entry assembly. It references `Backend/Server`, not
 only the shared code, so the build loads the server's integration types. The integration registry uses the most
 derived implementation it finds, and the server's player requirements validator reads the bot names from the active
 config.
 
 ## Checking the committed archives
 
-`GameConfigBuildTests` in `Backend/Server.Tests` builds the sheets with the same parameters as the tool and compares the
+`GameConfigBuildTests` in `tools/GameConfigGen.Tests` builds the sheets with the same parameters as the tool and compares the
 result with both committed archives, entry by entry. It compares pretty-printed items, not bytes, because every build
 writes its own timestamp and version hash, so identical content produces different files and `git diff` on an archive
 says nothing. The same tests pin a few shipped values, so changing one of those in a sheet also needs the test updated.

@@ -107,7 +107,7 @@ namespace Game.Logic.Tests
         {
             MatchModel model = MatchTestDeals.Model(engine, MatchTestDeals.Seat0PlayerId);
             MatchMemberPrivateState state = new MatchMemberPrivateState(
-                MatchTestDeals.Seat0PlayerId, seat, model.Engine.GetHand(seat), model.Board.PlayIndex);
+                MatchTestDeals.Seat0PlayerId, seat, model.Engine.GetHand(seat));
             return MetaSerialization.SerializeTagged(state, MetaSerializationFlags.SendOverNetwork, logicVersion: null);
         }
 

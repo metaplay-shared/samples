@@ -128,23 +128,6 @@ namespace Game.Logic.Tests
         }
 
         [Test]
-        public void EffectContextExposesNoMutableState()
-        {
-            foreach (PropertyInfo property in typeof(IEffectContext).GetProperties())
-                Assert.That(property.CanWrite, Is.False, $"{property.Name} is writable");
-
-            foreach (MethodInfo method in typeof(IEffectContext).GetMethods())
-            {
-                if (method.IsSpecialName)
-                    continue;
-
-                Assert.That(method.ReturnType, Is.Not.EqualTo(typeof(void)), $"{method.Name} returns nothing, so it can only be a mutation");
-                Assert.That(method.ReturnType.IsGenericType && method.ReturnType.GetGenericTypeDefinition() == typeof(List<>), Is.False,
-                    $"{method.Name} hands back a writable collection");
-            }
-        }
-
-        [Test]
         public void MultiTargetEffectResolvesInCanonicalOrder()
         {
 

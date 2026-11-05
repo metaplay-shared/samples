@@ -18,14 +18,10 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <base href="/" />
-    <!-- The build ID of this page. tools/ServerImageBuild.cs replaces "dev" with the build ID when it stages the
-         published client. The Blazor start script at the end of the body and client-update.js read it. -->
-    <meta name="ts-build-id" content="dev" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- Cinzel is the display font for headings and labels, such as the seat nameplates and the turn banner.
-         Cormorant Garamond is used for card ranks. -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cinzel:wght@500;600;700&family=Cormorant+Garamond:wght@600;700&display=swap" rel="stylesheet">
+    <!-- Starts the fetch of the endpoints file, which the SDK waits for before .NET starts. The empty one in wwwroot/
+         connects a local page to the local game server, and 'metaplay deploy webclient' replaces it. -->
+    <link rel="preload" href="metaplay-endpoints.json" as="fetch" crossorigin />
+    <!-- The styles and the fonts are served with the client, not from another origin. -->
     <link rel="stylesheet" href="_content/WebClientBase/css/app-base.css" />
     <link rel="stylesheet" href="app.css" />
     <!-- The meta-game shell styles. Loaded last so that its rules override app.css at equal specificity. -->
@@ -299,11 +295,17 @@
 
     <div id="blazor-error-ui" data-nosnippet>
         An unhandled error has occurred.
-        <a href="." class="reload">Reload</a>
+        <a href="." class="reload" onclick="location.assign(startPageUrl); return false;">Reload</a>
         <span class="dismiss">🗙</span>
     </div>
 
-    <!-- Suppress the context menu on right-click and Android long-press. CSS cannot block it. -->
+    <script>
+        // Where the error bar's Reload goes: the app root, with the query the page was loaded with, as
+        // WebClientBase's StartPage.Reload does. This one works after Blazor has failed.
+        var startPageUrl = new URL(location.search, document.baseURI).href;
+    </script>
+
+    <!-- Suppress the browser's context menu, from a right-click or a long-press (CSS can't block this). -->
     <script>
         window.addEventListener('contextmenu', function (e) { e.preventDefault(); });
     </script>
@@ -318,36 +320,9 @@
     <script src="modal-focus.js"></script>
     <!-- Scrolls a newly opened screen to its top. -->
     <script src="screen-scroll.js"></script>
-    <!-- Reloads the page when a newer build is deployed and the player is not in a game, a dialog or active
-         input (docs/web-client.md, "Updating clients after a deploy"). -->
-    <script src="client-update.js"></script>
-    <!-- Starts Blazor from script instead of a static script tag, so that the two framework scripts without a
-         content hash in their names get the build ID in their URLs: blazor.webassembly.js, and dotnet.js, which
-         contains the boot manifest that names every hashed assembly. A new build then has new URLs for both, so
-         a browser that cached an older copy still loads the deployed build. When the build ID is "dev", both
-         load without the query. -->
-    <script>
-        (function () {
-            'use strict';
-
-            var buildId = document.querySelector('meta[name="ts-build-id"]').getAttribute('content');
-            var version = buildId && buildId !== 'dev' ? '?v=' + encodeURIComponent(buildId) : '';
-
-            var blazorScript = document.createElement('script');
-            blazorScript.src = '_framework/blazor.webassembly.js' + version;
-            blazorScript.setAttribute('autostart', 'false');
-            blazorScript.onload = function () {
-                Blazor.start({
-                    // Called for each boot resource. Returning undefined keeps the default URL, which is
-                    // already unique to the content for every hashed file.
-                    loadBootResource: function (type, name, defaultUri) {
-                        return type === 'dotnetjs' && version ? defaultUri + version : undefined;
-                    }
-                });
-            };
-            document.body.appendChild(blazorScript);
-        })();
-    </script>
+    <!-- Starts the viewer's played card's flight into the trick from where the card was in the hand. -->
+    <script src="card-flight.js"></script>
+    <script src="_framework/blazor.webassembly.js"></script>
 </body>
 
 </html>

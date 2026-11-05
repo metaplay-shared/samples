@@ -7,19 +7,15 @@ using System.Text.RegularExpressions;
 namespace WebClient.Tests;
 
 /// <summary>
-/// E2E tests for the developer part editor at <c>/dev/parts</c>, driven through <c>?env=offline</c>, which runs
+/// E2E tests for the developer part editor at <c>/dev/parts</c>, driven through <c>?offline</c>, which runs
 /// developer-only actions and so needs only the web client. The editor drafts one part, draws it composed alone
 /// under an overlay canvas that edits it with the mouse, checks it by the part's own rules and writes it out as
 /// a <c>CourseParts.json</c> part object.
 /// </summary>
-[Parallelizable(ParallelScope.Self)]
 [TestFixture]
-public class DevPartEditorOfflineModeTests : GamePageTest
+public class DevPartEditorOfflineModeTests : OfflinePageTest
 {
-    private static readonly string BaseUrl =
-        (Environment.GetEnvironmentVariable("WEBCLIENT_BASE_URL") ?? "http://localhost:5290").TrimEnd('/');
-
-    private static readonly string OfflineUrl = BaseUrl + "/?env=offline";
+    private static readonly string OfflineUrl = ClientUrl(query: "offline");
 
     /// <summary>rr-lowland's first stretch of ground ends here, in meters.</summary>
     private const int LowlandFirstEnd = 37;
@@ -312,7 +308,7 @@ public class DevPartEditorOfflineModeTests : GamePageTest
     /// <summary>Open the editor offline on a fresh draft of the part <paramref name="partId"/>.</summary>
     private async Task OpenOnPartAsync(string partId)
     {
-        await Page.GotoAsync(BaseUrl + "/dev/parts?env=offline&source=" + partId);
+        await Page.GotoAsync(ClientUrl("/dev/parts", "offline&source=" + partId));
 
         await Expect(Page.GetByTestId("dev-parts")).ToBeVisibleAsync(new() { Timeout = 30000 });
         await Expect(Page.GetByTestId("dev-editor-code")).ToHaveValueAsync(new Regex($"\"{Regex.Escape(partId)}\""), new() { Timeout = 30000 });

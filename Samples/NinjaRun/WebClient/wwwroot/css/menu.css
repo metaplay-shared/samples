@@ -3,7 +3,7 @@
 /* ---------------------------------------------------------------------------
    Main menu
    The title top left, the medallion under it and the run button along the bottom, over the moonlit shrine,
-   set below the floating top bar.
+   set below the floating debug bar.
    --------------------------------------------------------------------------- */
 .menu-view {
     --menu-brand-size: clamp(96px, calc(100cqh - 540px), 209px);
@@ -35,7 +35,7 @@
     pointer-events: none;
 }
 
-/* The title art, top left, clear of the floating top bar. It gives up height first on a short portrait
+/* The title art, top left, clear of the floating debug bar. It gives up height first on a short portrait
    area so the medallion and the run button keep theirs. */
 .menu-brand {
     position: absolute;

@@ -1,17 +1,21 @@
 using Metaplay.Client;
 using Metaplay.Core;
 using Metaplay.Core.Client;
+using Metaplay.Core.GameEngineIntegration;
+using Metaplay.Core.Message;
 using Metaplay.Core.Model;
 using Metaplay.Core.Player;
 using Metaplay.Core.Session;
 using Metaplay.Core.Session.ConnectionStates;
 using Metaplay.Unity;
+using System.Diagnostics;
 
 namespace WebClientBase.Services;
 
 /// <summary>
-/// Base class for the game's Metaplay client service. Runs the connection loop, reconnects with exponential
-/// backoff, and runs the SDK frame loop.
+/// Abstract base class for Metaplay client services.
+/// Handles the connection lifecycle, reconnecting after a loss as the SDK recommends, and the per-frame UI updates.
+/// Game-specific implementations should inherit from this class.
 /// </summary>
 /// <typeparam name="TPlayerModel">The game-specific PlayerModel type.</typeparam>
 public abstract class MetaplayClientServiceBase<TPlayerModel> : IMetaplayClientService<TPlayerModel>, IDisposable
@@ -24,105 +28,90 @@ public abstract class MetaplayClientServiceBase<TPlayerModel> : IMetaplayClientS
     private MetaplaySession? _session;
 
     private ConnectionStatus _connectionStatus = ConnectionStatus.Disconnected;
-    private string? _errorMessage;
-    private bool _framePumpRunning;
-    private int _reconnectAttempts = 0;
+
+    /// <summary>The loss waiting for the player to reconnect (<see cref="ConnectionLost"/>).</summary>
+    private ConnectionLostEvent? _connectionLost;
+
+    /// <summary>Whether <see cref="Start"/> has started the per-frame work and the connection loop.</summary>
+    private bool _started;
+
+    /// <summary>Whether <see cref="Reset"/> or <see cref="Dispose"/> has stopped the loops. A stopped service stays stopped.</summary>
+    private bool _stopped;
 
     /// <summary>
-    /// Whether a connection loop is running. <see cref="_framePumpRunning"/> covers the frame pump, which keeps running
-    /// after the connection loop stops on running out of retries. <see cref="RetryNow"/> then starts a new loop.
+    /// Completing this ends the connection loop's wait for the player to reconnect after a loss. Non-null only during
+    /// that wait.
     /// </summary>
-    private bool _connectionLoopActive;
+    private TaskCompletionSource? _reconnectSignal;
+
+    /// <summary>The reconnects in a row that the client has made on its own (<see cref="MaxAutoReconnects"/>).</summary>
+    private int _autoReconnects;
+
+    /// <summary>A session that stays connected this long ends a run of reconnects in a row.</summary>
+    private static readonly TimeSpan StableSessionDuration = TimeSpan.FromSeconds(30);
 
     /// <summary>
-    /// The generation of the current connection loop. <see cref="Reset"/>, <see cref="Dispose"/> and
-    /// <see cref="ConnectAsync"/> increment it, and a loop with an older generation exits instead of connecting.
+    /// Whether a render was requested since listeners were last told, when <see cref="RenderEveryFrame"/> is false.
+    /// Each frame raises <see cref="OnStateChanged"/> once for however many requests it made.
     /// </summary>
-    private int _connectionLoopGeneration;
-
-    /// <summary>Completing this ends the backoff delay early. Non-null only during a backoff delay.</summary>
-    private TaskCompletionSource<bool>? _skipBackoffSignal;
+    private bool _renderRequested;
 
     /// <summary>
-    /// Whether a session has ever started since startup or the last <see cref="Reset"/>. Until then,
-    /// <see cref="Trouble"/> is <see cref="ConnectionTrouble.None"/> and the screens show their own connecting state.
+    /// Delay in milliseconds before reconnecting on the client's own, so a server that keeps refusing for a reason
+    /// the SDK reconnects after, such as one that is starting up, is not retried in a tight loop. Each reconnect in a
+    /// row waits twice as long as the one before, up to 32 times this.
     /// </summary>
-    private bool _hasEverConnected;
-
-    /// <summary>The kind of the last session loss, or <see cref="ConnectionTroubleKind.None"/> in a session.</summary>
-    private ConnectionTroubleKind _sessionTroubleKind = ConnectionTroubleKind.None;
-
-    /// <summary>Whether the client is still retrying after the loss in <see cref="_sessionTroubleKind"/>.</summary>
-    private bool _sessionTroubleRetrying;
-
-    /// <summary>When the SDK connection last became unhealthy, or null while it is healthy.</summary>
-    private DateTime? _linkUnhealthySince;
-
-    /// <summary>Whether the SDK connection has been unhealthy for at least <see cref="LinkStallGrace"/>.</summary>
-    private bool _linkStalled;
-
-    /// <summary>Whether the page is visible, as last reported to <see cref="NotifyPageVisibilityChanged"/>.</summary>
-    private bool _pageVisible = true;
-
-    /// <summary>When the page last became visible. The Unix epoch until the page has been hidden once.</summary>
-    private DateTime _pageForegroundedAt = DateTime.UnixEpoch;
-
-    /// <summary>The trouble kind the frame pump last raised a state change for.</summary>
-    private ConnectionTroubleKind _notifiedTroubleKind = ConnectionTroubleKind.None;
-
-    /// <summary>Whether the trouble the frame pump last raised a state change for was quiet.</summary>
-    private bool _notifiedTroubleQuiet;
+    protected virtual int AutoReconnectDelayMs => 1000;
 
     /// <summary>
-    /// Maximum number of reconnect attempts before the connection loop stops.
+    /// How many times in a row the client reconnects on its own before it waits for the player instead. A loss that
+    /// happens again in each session, such as from an action that throws for this player, then reaches the player
+    /// rather than reconnecting forever. The count starts again when a session stays connected for 30 seconds, and
+    /// when the player reconnects.
     /// </summary>
-    protected virtual int MaxReconnectAttempts => 10;
+    protected virtual int MaxAutoReconnects => 3;
 
     /// <summary>
-    /// Delay in milliseconds before the first reconnect attempt. The delay doubles with each attempt.
+    /// Whether <see cref="OnStateChanged"/> is raised on every frame while connected, so the UI renders again on each
+    /// of the browser's animation frames whatever changed: the player model, or anything that changes with time
+    /// alone, such as an animation or a clock. This is the default.
+    /// <para>
+    /// A game with little that changes on screen can override it to return false. <see cref="OnStateChanged"/> is
+    /// then raised only when the connection status changes, and at the end of a frame in which a client action ran
+    /// (<see cref="ExecuteAction"/>) or the game called <see cref="RequestRender"/>. Any other change the UI shows must
+    /// then reach it through <see cref="RequestRender"/>: a change a model makes outside a client action, in
+    /// <c>GameTick</c> or in a server action, typically from a model client listener, for the player model or any
+    /// other entity's model the game shows; and for a change with time alone, a timer of the game's own.
+    /// </para>
     /// </summary>
-    protected virtual int BaseReconnectDelayMs => 1000;
+    protected virtual bool RenderEveryFrame => true;
 
     /// <summary>
-    /// Maximum delay in milliseconds before a reconnect attempt.
-    /// </summary>
-    protected virtual int MaxReconnectDelayMs => 30000;
-
-    /// <summary>
-    /// Delay in milliseconds between frames of the SDK frame loop.
-    /// </summary>
-    protected virtual int UpdateIntervalMs => 50;
-
-    /// <summary>
-    /// How long the SDK connection must be unhealthy before the shell shows it. The SDK often resumes a dropped
-    /// session within this time, and a shorter value would show the modal for those short drops.
-    /// </summary>
-    protected virtual TimeSpan LinkStallGrace => TimeSpan.FromSeconds(2);
-
-    /// <summary>
-    /// How long after the page becomes visible a lost connection is still shown as a pill instead of the modal.
-    /// It covers the time the client needs to notice the lost connection and reconnect after a tab switch.
-    /// </summary>
-    protected virtual TimeSpan PageShownQuietPeriod => TimeSpan.FromSeconds(10);
-
-    /// <summary>
-    /// Raised when the connection state or the player model changes. Raised on every frame while connected.
+    /// Event fired when the connection status changes, and while connected on every frame, or with
+    /// <see cref="RenderEveryFrame"/> false, on a frame that requested a render.
     /// </summary>
     public event Action? OnStateChanged;
 
     /// <summary>
-    /// The current connection state.
+    /// Event fired on each frame, between the SDK's frame start and end, for the game's own per-frame work, such as
+    /// advancing what a page shows with time. A routed page gets it as <c>GamePageBase.OnFrame</c>.
+    /// </summary>
+    public event Action? OnFrame;
+
+    /// <summary>
+    /// Current connection state.
     /// </summary>
     public ConnectionStatus ConnectionStatus => _connectionStatus;
 
     /// <summary>
-    /// The error message from the last failed connection, or null.
+    /// The connection loss waiting for the player to reconnect (<see cref="Reconnect"/>), for the connection overlay to
+    /// show; null while connected or connecting.
     /// </summary>
-    public string? ErrorMessage => _errorMessage;
+    public ConnectionLostEvent? ConnectionLost => _connectionLost;
 
     /// <summary>
-    /// The current session, or null before the first session has started and after <see cref="Reset"/>. Kept
-    /// after a session ends, so the UI can render the last known state while reconnecting.
+    /// The current session, or null before the first session has started. Remains available after a
+    /// session ends, so the UI can keep rendering the last known state while reconnecting.
     /// </summary>
     protected MetaplaySession? Session => _session;
 
@@ -132,41 +121,15 @@ public abstract class MetaplayClientServiceBase<TPlayerModel> : IMetaplayClientS
     public TPlayerModel? PlayerModel => _session?.PlayerContext?.Model as TPlayerModel;
 
     /// <summary>
-    /// The player ID from <see cref="PlayerModel"/>, or null when there is no player model.
+    /// Player ID if connected, otherwise null.
     /// </summary>
     public EntityId? PlayerId => PlayerModel?.PlayerId;
 
     /// <summary>
-    /// True while the page is hidden or less than <see cref="PageShownQuietPeriod"/> after it became visible. A lost
-    /// connection in this window is more likely caused by browser timer throttling than by an outage.
+    /// Whether the session is running but the SDK reports its connection as unhealthy: the connection is degraded and
+    /// the SDK tries to restore it. If it does not succeed, the connection is lost and the session ends.
     /// </summary>
-    private bool IsPageHiddenOrJustShown => !_pageVisible || DateTime.UtcNow - _pageForegroundedAt < PageShownQuietPeriod;
-
-    /// <summary>
-    /// What is wrong with the connection. A session loss takes precedence over an unhealthy SDK connection,
-    /// because the session loss has a specific kind.
-    /// </summary>
-    public ConnectionTrouble Trouble
-    {
-        get
-        {
-            if (!_hasEverConnected)
-                return ConnectionTrouble.None;
-
-            if (_sessionTroubleKind != ConnectionTroubleKind.None)
-            {
-                bool quiet = _sessionTroubleKind == ConnectionTroubleKind.LinkLost && _sessionTroubleRetrying && IsPageHiddenOrJustShown;
-                return new ConnectionTrouble(_sessionTroubleKind, _sessionTroubleRetrying, quiet, _reconnectAttempts, MaxReconnectAttempts);
-            }
-
-            // The SDK connection is unhealthy while the SDK tries to resume the session. No player action reaches
-            // the server, so the shell shows it now instead of when the SDK gives up on the resume.
-            if (_linkStalled)
-                return new ConnectionTrouble(ConnectionTroubleKind.LinkLost, isRetrying: true, isQuiet: IsPageHiddenOrJustShown, attemptNumber: 0, maxAttempts: MaxReconnectAttempts);
-
-            return ConnectionTrouble.None;
-        }
-    }
+    public bool IsUnhealthy { get; private set; }
 
     protected MetaplayClientServiceBase()
     {
@@ -174,7 +137,7 @@ public abstract class MetaplayClientServiceBase<TPlayerModel> : IMetaplayClientS
     }
 
     /// <summary>
-    /// Initializes MetaplayCore once per process. Override to change the initialization.
+    /// Initialize MetaplayCore. Override to customize initialization.
     /// </summary>
     protected virtual void EnsureCoreInitialized()
     {
@@ -182,8 +145,9 @@ public abstract class MetaplayClientServiceBase<TPlayerModel> : IMetaplayClientS
         {
             if (!_coreInitialized)
             {
-                // The integration roots must be set before initialization. The SDK's browser build selects the
-                // pre-built serializer assembly and the WebSocket transport by itself.
+                // Set the integration roots before init. The platform-specific behavior (loading the pre-built
+                // serializer assembly by name rather than generating one, and the WebSocket transport) follows
+                // from the browser build of the SDK.
                 MetaplayCore.ClientIntegrationAssemblies = IntegrationAssembly.FindRoots().ToList();
                 MetaplayCore.InitializeForClient();
                 _coreInitialized = true;
@@ -192,134 +156,96 @@ public abstract class MetaplayClientServiceBase<TPlayerModel> : IMetaplayClientS
     }
 
     /// <summary>
-    /// Creates the Metaplay client with <see cref="MetaplayClient.Create"/>, passing the game's delegates and
-    /// any additional entity sub-clients.
+    /// Create the Metaplay client, via <see cref="MetaplayClient.Create"/>. Implementations pass the
+    /// game's delegates and any additional entity sub-clients.
     /// </summary>
     protected abstract IMetaplayClient CreateClient();
 
     /// <summary>
-    /// Initializes the client and connects to the Metaplay server. Starts the frame pump on the first call, and
-    /// starts the connection loop when none is running. Does nothing while a connection loop is running.
-    /// <para>
-    /// Virtual so that a host that renders the app's components without a game server, such as a component
-    /// gallery, can override it to return a completed task and open no connection. Screens call this method
-    /// when they render.
-    /// </para>
+    /// Start the SDK's frames (<see cref="BrowserFrameLoop"/>), with the service's per-frame work, and the connection
+    /// loop, which connects to the Metaplay server and runs until <see cref="Reset"/> or <see cref="Dispose"/>. Later
+    /// calls do nothing. After a loss, the loop reconnects on its own when the SDK recommends it, and otherwise waits
+    /// for <see cref="Reconnect"/>. The connection's progress reaches the UI through <see cref="OnStateChanged"/>.
     /// </summary>
-    public virtual Task ConnectAsync()
+    public void Start()
     {
-        if (_connectionLoopActive)
-            return Task.CompletedTask;
+        if (_started || _stopped)
+            return;
 
+        _started = true;
         _connectionStatus = ConnectionStatus.Connecting;
-        _errorMessage = null;
-        _reconnectAttempts = 0;
-        ClearSessionTrouble();
         NotifyStateChanged();
 
         _client ??= CreateClient();
 
-        if (!_framePumpRunning)
-        {
-            _framePumpRunning = true;
-            _ = RunFramePumpAsync();
-        }
-
-        _connectionLoopActive = true;
-        _connectionLoopGeneration++;
-        _ = RunConnectionLoopAsync(_connectionLoopGeneration);
-
-        return Task.CompletedTask;
+        BrowserFrameLoop.Start(RunFrame);
+        _ = RunConnectionLoopAsync();
     }
 
     /// <summary>
-    /// Reconnects now. Ends the current backoff delay early, or starts the connection loop again if it has
-    /// stopped. Also resets the attempt count.
+    /// Reconnect after the loss in <see cref="ConnectionLost"/>, at the player's request, such as to take the session
+    /// back from another tab.
     /// </summary>
-    public void RetryNow()
+    public void Reconnect()
     {
-        _reconnectAttempts = 0;
-
-        TaskCompletionSource<bool>? skipBackoffSignal = _skipBackoffSignal;
-        if (skipBackoffSignal != null)
-        {
-            skipBackoffSignal.TrySetResult(true);
-            return;
-        }
-
-        // No backoff delay is running. Either a connection attempt is in progress, and ConnectAsync does nothing,
-        // or the loop has stopped, and ConnectAsync starts it again.
-        _ = ConnectAsync();
+        _reconnectSignal?.TrySetResult();
     }
 
     /// <summary>
-    /// Records whether the page is visible. When the page becomes visible during a reconnect, retries at once,
-    /// because the browser throttled the backoff timer while the tab was hidden and the remaining delay is not
-    /// related to the server's state.
+    /// Execute a player action. It runs at once, between frames on the browser's one thread, and the SDK sends it at
+    /// the start of the next frame. Returns the action's result, or null if there is no session or the action threw.
     /// </summary>
-    public void NotifyPageVisibilityChanged(bool isVisible)
+    public virtual MetaActionResult? ExecuteAction(PlayerActionBase action)
     {
-        if (isVisible == _pageVisible)
-            return;
-
-        _pageVisible = isVisible;
-
-        if (isVisible)
+        MetaActionResult? result = null;
+        try
         {
-            _pageForegroundedAt = DateTime.UtcNow;
-
-            ConnectionTrouble trouble = Trouble;
-            if (trouble.Kind == ConnectionTroubleKind.LinkLost && trouble.IsRetrying)
-            {
-                Console.WriteLine($"[{GetType().Name}] Page back on screen with the link down; reconnecting now");
-                RetryNow();
-            }
+            result = _session?.PlayerContext?.ExecuteAction(action);
         }
-
-        NotifyStateChanged();
+        catch (UnhandledModelExecutionException ex)
+        {
+            // The action threw, and the SDK has ended the session over it, which the connection overlay shows. Left
+            // to escape, the exception would also bring up Blazor's error banner.
+            Console.WriteLine($"[{GetType().Name}] Action {action.GetType().Name} failed: {ex.Message}");
+        }
+        _renderRequested = true;
+        return result;
     }
 
     /// <summary>
-    /// Called when a session has started, before <c>SessionStartComplete</c> is called. Override to add model
-    /// listeners and load game content. An exception here fails the session start.
+    /// Called when a session has started, before the SDK is told the start completed. Override to wire up
+    /// model listeners and load game content.
     /// </summary>
     protected virtual void OnSessionStarted(MetaplaySession session)
     {
     }
 
     /// <summary>
-    /// Called when a session has ended, before any reconnect. Server replies to requests sent in that session
-    /// will not arrive. The SDK resuming a session does not end it, so this is not called for a resume.
+    /// Called when a started session has ended, before the client waits to reconnect. Override to drop what belonged
+    /// to the session, such as requests whose responses will not arrive.
     /// </summary>
-    protected virtual void OnSessionEnded()
+    protected virtual void OnSessionEnded(ConnectionLostEvent connectionLost)
     {
     }
 
     /// <summary>
-    /// Resets the client: disconnects, deletes the credentials and resets the state. Also stops the frame pump,
-    /// so call <see cref="ConnectAsync"/> or reload the page afterwards. Returns true if the reset succeeded.
+    /// Reset the client: disconnect, and delete the credentials and the offline player. The service stays stopped,
+    /// so reload the page afterwards to start as a new player. Returns true if reset was successful.
     /// </summary>
     public bool Reset()
     {
         try
         {
-            StopConnectionLoop();
+            // Disposing the client saves the offline player, so the blobs are deleted after it.
+            Stop();
 
-            // A missing or inaccessible credentials blob must not fail the reset.
-            try
-            {
-                AtomicBlobStore.TryDeleteBlob(GetCredentialsPath());
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[{GetType().Name}] Credential cleanup skipped: {ex.Message}");
-            }
+            // In offline mode the player lives in the saved offline state, so deleting only the credentials would
+            // bring the old player back.
+            TryDeleteBlob(GetCredentialsPath(), "Credential");
+            TryDeleteBlob(DefaultOfflineServer.GetPersistedStatePath(), "Offline state");
 
             _connectionStatus = ConnectionStatus.Disconnected;
-            _errorMessage = null;
-            _hasEverConnected = false;
-            ClearSessionTrouble();
-            ClearLinkHealth();
+            _connectionLost = null;
             NotifyStateChanged();
 
             Console.WriteLine($"[{GetType().Name}] Reset complete");
@@ -332,280 +258,225 @@ public abstract class MetaplayClientServiceBase<TPlayerModel> : IMetaplayClientS
         }
     }
 
+    /// <summary>Delete one blob. A missing or inaccessible blob must not fail the reset.</summary>
+    private void TryDeleteBlob(string path, string what)
+    {
+        try
+        {
+            AtomicBlobStore.TryDeleteBlob(path);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[{GetType().Name}] {what} cleanup skipped: {ex.Message}");
+        }
+    }
+
     /// <summary>
-    /// Returns the path of the credentials blob. In the browser, the path is a key into the SDK's
-    /// <c>AtomicBlobStore</c>, which stores the blob in <c>localStorage</c>.
+    /// Get the path to the credentials blob. On the browser this is a key into the localStorage blob store
+    /// rather than a file system path.
     /// </summary>
     protected virtual string GetCredentialsPath()
     {
-        // The SDK integration that owns this path is internal, so the deprecated accessor is the only public way
-        // to read it.
-        #pragma warning disable CS0618
-        return Path.Combine(MetaplaySDK.PersistentDataPath, "MetaplayCredentials.dat");
-        #pragma warning restore CS0618
+        string dataPath = IntegrationRegistry.Get<IGameEngineIntegration>().PersistentDataPath;
+        return Path.Combine(dataPath, "MetaplayCredentials.dat");
     }
 
     /// <summary>
-    /// Runs the SDK frame loop on the browser thread. WebAssembly is single-threaded, so instead of the SDK's
-    /// thread-based frame loop, this method awaits a delay between frames. The await lets the WebSocket
-    /// transport's continuations and the connection loop run. Frames cannot overlap on one thread, so no
-    /// re-entrancy guard is needed.
+    /// The work of each frame, between the SDK's frame start and end: the game's own (<see cref="OnFrame"/>), then the
+    /// service's.
     /// </summary>
-    private async Task RunFramePumpAsync()
+    private void RunFrame()
     {
-        while (_framePumpRunning)
+        // A game handler that throws does not stop the service's work; BrowserFrameLoop logs the exception.
+        try
         {
+            OnFrame?.Invoke();
+        }
+        finally
+        {
+            bool connected = _connectionStatus == ConnectionStatus.Connected;
+            bool unhealthy = connected && MetaplaySDK.Connection?.State is Connected { IsHealthy: false };
+            bool healthChanged = unhealthy != IsUnhealthy;
+            IsUnhealthy = unhealthy;
+
+            if (healthChanged || (connected && (RenderEveryFrame || _renderRequested)))
+                NotifyStateChanged();
+        }
+    }
+
+    /// <summary>
+    /// Connect, run the session until it ends, wait before reconnecting, and repeat until the service is stopped. The
+    /// connection only makes progress while frames run, so the loop and the frames interleave on the browser thread.
+    /// </summary>
+    private async Task RunConnectionLoopAsync()
+    {
+        while (!_stopped)
+        {
+            ConnectionLostEvent? connectionLost;
             try
             {
-                FrameLoop.RunFrame();
-
-                UpdateLinkHealth();
-
-                if (_connectionStatus == ConnectionStatus.Connected)
-                {
-                    NotifyStateChanged();
-                }
-                else
-                {
-                    // Without a live session nothing else raises OnStateChanged, so raise it when the shell's
-                    // content changes.
-                    NotifyTroubleChangedIfNeeded();
-                }
+                connectionLost = await RunSessionAsync();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Ignore errors from a single frame, for example during shutdown or a reconnect.
+                // Nothing observes this loop, so an exception escaping it would end connecting for good, silently. It
+                // ends the session instead, which the player can reconnect after.
+                Console.WriteLine($"[{GetType().Name}] Session failed: {ex}");
+                connectionLost = ConnectionLostEvent.FromConnectionError(
+                    new TerminalError.ClientSideConnectionError(ex, nameof(RunSessionAsync)),
+                    ConnectionStatistics.ForNewSession());
             }
 
-            await Task.Delay(UpdateIntervalMs);
+            if (connectionLost == null || _stopped)
+                return;
+
+            await WaitBeforeReconnectAsync(connectionLost);
         }
     }
 
     /// <summary>
-    /// Updates <see cref="_linkStalled"/> from the SDK connection's health. When the socket closes during a
-    /// session, the SDK keeps the connection in the <c>Connected</c> state while it tries to resume the session.
-    /// Player actions in that time do not reach the server, so the shell must show it before the session ends.
-    /// <para>
-    /// The SDK's QoS monitor clears <c>Connected.IsHealthy</c> when the transport is detached, when the
-    /// connection is lost after the handshake, and while a session resume has no answer.
-    /// </para>
+    /// Connect and run one session until it ends. Returns why it ended, or null when the service was stopped.
     /// </summary>
-    private void UpdateLinkHealth()
+    private async Task<ConnectionLostEvent?> RunSessionAsync()
     {
-        if (!_hasEverConnected)
-            return;
-
-        Metaplay.Core.Session.ConnectionState? sdkState = MetaplaySDK.Connection?.State;
-        if (sdkState is Connected connected && connected.IsHealthy)
-        {
-            ClearLinkHealth();
-            return;
-        }
-
-        _linkUnhealthySince ??= DateTime.UtcNow;
-        _linkStalled = DateTime.UtcNow - _linkUnhealthySince.Value >= LinkStallGrace;
-    }
-
-    /// <summary>Raises <see cref="OnStateChanged"/> when <see cref="Trouble"/>'s kind or quiet flag changed.</summary>
-    private void NotifyTroubleChangedIfNeeded()
-    {
-        ConnectionTrouble trouble = Trouble;
-        if (trouble.Kind == _notifiedTroubleKind && trouble.IsQuiet == _notifiedTroubleQuiet)
-            return;
-
-        _notifiedTroubleKind = trouble.Kind;
-        _notifiedTroubleQuiet = trouble.IsQuiet;
-        NotifyStateChanged();
-    }
-
-    /// <summary>
-    /// Connects, waits for the session to end, then reconnects with exponential backoff. The connection only
-    /// makes progress while the frame pump runs, and both loops run on the browser thread.
-    /// </summary>
-    private async Task RunConnectionLoopAsync(int generation)
-    {
+        MetaplaySession session;
         try
         {
-            while (_framePumpRunning && generation == _connectionLoopGeneration)
-            {
-                MetaplaySession session;
-                try
-                {
-                    session = await _client!.ConnectAsync();
-                }
-                catch (FailedToStartSessionException ex)
-                {
-                    Console.WriteLine($"[{GetType().Name}] Failed to start session: {ex.Failure.TechnicalError?.GetType().Name} - {ex.Failure.EnglishLocalizedReason}");
-                    if (await WaitToReconnectAfterLossAsync(ex.Failure))
-                        continue;
-                    return;
-                }
-                catch (OperationCanceledException)
-                {
-                    // Reset or Dispose disposed the client.
-                    return;
-                }
+            session = await _client!.ConnectAsync();
+        }
+        catch (FailedToStartSessionException ex)
+        {
+            Console.WriteLine($"[{GetType().Name}] Failed to start session: {ex.Failure.TechnicalError?.GetType().Name} - {ex.Failure.EnglishLocalizedReason}");
+            return ex.Failure;
+        }
+        catch (OperationCanceledException)
+        {
+            // The client was disposed (Reset), so there is nothing left to connect.
+            return null;
+        }
 
-                _session = session;
+        _session = session;
 
-                try
-                {
-                    OnSessionStarted(session);
-                    session.SessionStartComplete();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[{GetType().Name}] Session start failed: {ex.Message}");
-                    ConnectionLostEvent startFailure = session.SessionStartFailed(ex);
-                    if (await WaitToReconnectAfterLossAsync(startFailure))
-                        continue;
-                    return;
-                }
+        try
+        {
+            OnSessionStarted(session);
+            session.SessionStartComplete();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[{GetType().Name}] Session start failed: {ex.Message}");
+            return session.SessionStartFailed(ex);
+        }
 
-                _connectionStatus = ConnectionStatus.Connected;
-                _errorMessage = null;
-                _reconnectAttempts = 0;
-                _hasEverConnected = true;
-                ClearSessionTrouble();
-                ClearLinkHealth();
-                NotifyStateChanged();
+        _connectionStatus = ConnectionStatus.Connected;
+        NotifyStateChanged();
+        long connectedAt = Stopwatch.GetTimestamp();
 
-                ConnectionLostEvent connectionLost;
-                try
-                {
-                    connectionLost = await session.WaitForSessionEndAsync();
-                }
-                catch (OperationCanceledException)
-                {
-                    OnSessionEnded();
-                    return;
-                }
+        ConnectionLostEvent connectionLost;
+        try
+        {
+            connectionLost = await session.WaitForSessionEndAsync();
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
 
-                OnSessionEnded();
+        // A session lost soon after connecting, such as to an action that throws for this player, continues the
+        // reconnects in a row.
+        if (Stopwatch.GetElapsedTime(connectedAt) >= StableSessionDuration)
+            _autoReconnects = 0;
 
-                Console.WriteLine($"[{GetType().Name}] Session ended: {connectionLost.TechnicalError?.GetType().Name} - {connectionLost.EnglishLocalizedReason}");
-                if (!await WaitToReconnectAfterLossAsync(connectionLost))
-                    return;
-            }
+        Console.WriteLine($"[{GetType().Name}] Session ended: {connectionLost.TechnicalError?.GetType().Name} - {connectionLost.EnglishLocalizedReason}");
+        OnSessionEnded(connectionLost);
+        return connectionLost;
+    }
+
+    /// <summary>
+    /// Wait before the next connection: a moment when the client reconnects on its own
+    /// (<see cref="ShouldReconnectAutomatically"/>, at most <see cref="MaxAutoReconnects"/> times in a row), or
+    /// otherwise until the player reconnects (<see cref="Reconnect"/>), with the loss in <see cref="ConnectionLost"/>
+    /// meanwhile.
+    /// </summary>
+    private async Task WaitBeforeReconnectAsync(ConnectionLostEvent connectionLost)
+    {
+        if (ShouldReconnectAutomatically(connectionLost) && _autoReconnects < MaxAutoReconnects)
+        {
+            int delayMs = AutoReconnectDelayMs << Math.Min(_autoReconnects, 5);
+            _autoReconnects++;
+            Console.WriteLine($"[{GetType().Name}] Reconnecting in {delayMs}ms");
+            _connectionStatus = ConnectionStatus.Connecting;
+            NotifyStateChanged();
+            await Task.Delay(delayMs);
+            return;
+        }
+
+        Console.WriteLine($"[{GetType().Name}] Waiting for the player to reconnect ({connectionLost.Reason})");
+        _connectionStatus = ConnectionStatus.Error;
+        _connectionLost = connectionLost;
+        NotifyStateChanged();
+
+        TaskCompletionSource reconnectSignal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _reconnectSignal = reconnectSignal;
+        try
+        {
+            await reconnectSignal.Task;
         }
         finally
         {
-            if (generation == _connectionLoopGeneration)
-                _connectionLoopActive = false;
-        }
-    }
-
-    /// <summary>
-    /// Classifies a connection loss and, when the client may retry, waits for the backoff delay.
-    /// Returns whether the connection loop should connect again.
-    /// </summary>
-    private async Task<bool> WaitToReconnectAfterLossAsync(ConnectionLostEvent connectionLost)
-    {
-        ConnectionTroubleKind troubleKind = ConnectionTroublePolicy.Classify(connectionLost);
-
-        // The client does not retry a session superseded by another tab or a terminal error
-        // (ConnectionTroublePolicy.MayRetryAutomatically). The loop stops until the player retries.
-        if (!ConnectionTroublePolicy.MayRetryAutomatically(connectionLost))
-        {
-            Console.WriteLine($"[{GetType().Name}] Not reconnecting: {troubleKind}, {connectionLost.TechnicalError?.GetType().Name ?? "no technical error"}");
-            _connectionStatus = ConnectionStatus.Error;
-            _errorMessage = connectionLost.EnglishLocalizedReason;
-            _reconnectAttempts = 0;
-            SetSessionTrouble(troubleKind, isRetrying: false);
-            return false;
+            _reconnectSignal = null;
         }
 
-        if (_reconnectAttempts >= MaxReconnectAttempts)
-        {
-            Console.WriteLine($"[{GetType().Name}] Max reconnect attempts reached, giving up");
-            _connectionStatus = ConnectionStatus.Error;
-            _errorMessage = "Failed to reconnect after multiple attempts";
-            SetSessionTrouble(troubleKind, isRetrying: false);
-            return false;
-        }
+        if (_stopped)
+            return;
 
-        int delayMs = Math.Min(BaseReconnectDelayMs * (1 << _reconnectAttempts), MaxReconnectDelayMs);
-        _reconnectAttempts++;
-
-        Console.WriteLine($"[{GetType().Name}] Reconnect attempt {_reconnectAttempts} in {delayMs}ms");
-
+        _autoReconnects = 0;
         _connectionStatus = ConnectionStatus.Connecting;
-        _errorMessage = null;
-        SetSessionTrouble(troubleKind, isRetrying: true);
-
-        await DelayBeforeReconnectAsync(delayMs);
-
-        return _framePumpRunning;
-    }
-
-    /// <summary>
-    /// Waits for the backoff delay, or until <see cref="RetryNow"/> ends it early.
-    /// </summary>
-    private async Task DelayBeforeReconnectAsync(int delayMs)
-    {
-        TaskCompletionSource<bool> skipBackoffSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _skipBackoffSignal = skipBackoffSignal;
-        try
-        {
-            await Task.WhenAny(Task.Delay(delayMs), skipBackoffSignal.Task);
-        }
-        finally
-        {
-            _skipBackoffSignal = null;
-        }
-    }
-
-    /// <summary>Clears the recorded session loss.</summary>
-    private void ClearSessionTrouble()
-    {
-        _sessionTroubleKind = ConnectionTroubleKind.None;
-        _sessionTroubleRetrying = false;
-    }
-
-    /// <summary>Marks the SDK connection as healthy, clearing <see cref="_linkStalled"/> and its timer.</summary>
-    private void ClearLinkHealth()
-    {
-        _linkUnhealthySince = null;
-        _linkStalled = false;
-    }
-
-    /// <summary>Records the last session loss and raises <see cref="OnStateChanged"/>.</summary>
-    private void SetSessionTrouble(ConnectionTroubleKind kind, bool isRetrying)
-    {
-        _sessionTroubleKind = kind;
-        _sessionTroubleRetrying = isRetrying;
-        _notifiedTroubleKind = kind;
-        _notifiedTroubleQuiet = Trouble.IsQuiet;
+        _connectionLost = null;
         NotifyStateChanged();
     }
 
     /// <summary>
-    /// Raises <see cref="OnStateChanged"/>.
+    /// Whether to reconnect after a connection loss without asking the player. The default follows the SDK's
+    /// <see cref="ConnectionLostEvent.AutoReconnectRecommended"/>, which is true for the losses a reconnect quietly
+    /// fixes, such as an admin kick or a server that is starting up.
+    /// </summary>
+    protected virtual bool ShouldReconnectAutomatically(ConnectionLostEvent connectionLost) =>
+        connectionLost.AutoReconnectRecommended;
+
+    /// <summary>
+    /// Notify listeners now that state has changed. For a change a model makes, use <see cref="RequestRender"/>.
     /// </summary>
     protected void NotifyStateChanged()
     {
+        _renderRequested = false;
         OnStateChanged?.Invoke();
     }
 
     /// <summary>
-    /// Stops the frame pump and the connection loop, and disposes the client. Shared by <see cref="Reset"/> and
-    /// <see cref="Dispose"/>.
+    /// Ask for the UI to render again, for the game's model listeners to call on a change to any model it shows. With
+    /// <see cref="RenderEveryFrame"/> false, listeners are told once at the end of the frame, however many requests it
+    /// made, and after the action or tick that made the change has finished; with the default, every frame tells them
+    /// anyway.
     /// </summary>
-    private void StopConnectionLoop()
+    protected void RequestRender()
     {
-        _framePumpRunning = false;
+        _renderRequested = true;
+    }
 
-        // Increment the generation so the running connection loop exits instead of reconnecting.
-        _connectionLoopGeneration++;
-        _connectionLoopActive = false;
-        _skipBackoffSignal?.TrySetResult(true);
-
-        // Disposing the client closes the connection, stops the SDK, and cancels the ConnectAsync or
-        // WaitForSessionEndAsync call that the connection loop is awaiting.
+    /// <summary>
+    /// Stop the service's per-frame work and the connection loop, and dispose the client. Disposing the client closes
+    /// the connection, stops the SDK, and cancels the client's ConnectAsync or WaitForSessionEndAsync that the loop is
+    /// awaiting.
+    /// </summary>
+    private void Stop()
+    {
+        _stopped = true;
+        _reconnectSignal?.TrySetResult();
         _client?.Dispose();
         _client = null;
         _session = null;
     }
 
-    public void Dispose() => StopConnectionLoop();
+    public void Dispose() => Stop();
 }

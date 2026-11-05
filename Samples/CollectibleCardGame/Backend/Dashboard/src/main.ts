@@ -1,4 +1,3 @@
-// This file is part of Metaplay SDK which is released under the Metaplay SDK License.
 /*
  * This file is the entry point of the Metaplay SDK's LiveOps Dashboard application.
  *

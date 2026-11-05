@@ -94,10 +94,6 @@ namespace Game.Logic
                 // Only a played card updates the last-activity time. If a snapshot or a reconnect updated it, a
                 // table where nobody plays would look active and its retention would keep being extended.
                 match.ApplyActivity(PlayedAt);
-
-                match.ClientListener.OnCardPlayed(Seat, Card);
-                if (TrickWinnerSeat >= 0)
-                    match.ClientListener.OnTrickResolved(TrickWinnerSeat);
             }
 
             return MetaActionResult.Success;
@@ -150,7 +146,6 @@ namespace Game.Logic
                     List<SeatStanding> standings = MatchRules.ComputeStandings(match.Board.TrickWinnerSeats);
                     match.Board.ApplyStandings(standings);
                     match.ApplyPhase(Phase, EndedAt);
-                    match.ClientListener.OnMatchEnded();
                 }
             }
 
@@ -298,7 +293,6 @@ namespace Game.Logic
             {
                 match.Board.ApplyMoveDeadline(MetaTime.Epoch);
                 match.ApplyPhase(MatchPhase.Abandoned, EndedAt);
-                match.ClientListener.OnMatchEnded();
             }
 
             return MetaActionResult.Success;

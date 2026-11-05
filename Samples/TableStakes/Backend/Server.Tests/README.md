@@ -2,8 +2,8 @@
 
 NUnit tests for decisions that use server-only types, and for checks that need the server assembly loaded. They
 cover the player actor's in-flight request tracking and throttles, seat setup, the tournament season schedule,
-the weekly event seed package, the shipped timing defaults, analytics formatting and the game config build. Logic
-that needs no server type is tested in `Backend/SharedCode.Tests` instead.
+the weekly event seed package, the shipped timing defaults and analytics formatting. Logic that needs no server type
+is tested in `Backend/SharedCode.Tests` instead, and the game config build in `tools/GameConfigGen.Tests`.
 
 ```bash
 dotnet test Backend/Server.Tests/Server.Tests.csproj

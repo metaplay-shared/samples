@@ -1,0 +1,102 @@
+@namespace WebClient.Components
+@using Game.Logic
+@using WebClient.Services
+@inject CollectionService Collection
+
+@* The padlock tap target. One press locks a card when a slot is free; with none free it hands the card to the
+   screen's <see cref="LockSlotPicker"/>, which asks which lock to move rather than refusing the press.
+   Unlocking is the same one press on a locked card.
+
+   The copy says the whole trade in as many words, because a padlock nobody has a legend for is exactly how a
+   player discovers three matches later that their best card stopped growing.
+
+   A card below Global.MinLockRank cannot be locked at all, so the button is disabled and the hint says the rule
+   instead of hiding it, because the card detail is where a player asks why. *@
+
+<div class="lock-affordance">
+    <button type="button"
+            class="ui-button ui-button--small @(IsLocked ? "ui-button--warning" : "ui-button--secondary")"
+            disabled="@(!Owned || !(IsLocked || Lockable))"
+            @onclick="OnPress"
+            data-testid="lock-affordance"
+            data-locked="@IsLocked.ToString().ToLowerInvariant()"
+            data-lockable="@Lockable.ToString().ToLowerInvariant()">
+        @(IsLocked ? "🔒 Unlock" : "🔓 Lock")
+    </button>
+
+    @if (ShowHint)
+    {
+        <p class="lock-affordance__hint" style="color: var(--text-muted);" data-testid="lock-hint">
+            @(IsLocked
+                ? "Locked: safe from the Heist, and done growing."
+                : Lockable
+                    ? "Locking keeps a card safe from the Heist — and stops it gaining ranks."
+                    : $"Rank {Collection.MinLockRank} and above can be locked. There is nothing to freeze yet: the rank floor already keeps this card safe.")
+        </p>
+    }
+
+    @if (_refusal != null)
+    {
+        <p class="refusal-note" style="color: var(--accent-red);" data-testid="lock-refusal">@_refusal</p>
+    }
+</div>
+
+@code {
+    /// <summary> The card the padlock belongs to. </summary>
+    [Parameter, EditorRequired]
+    public CardId CardId { get; set; } = default!;
+
+    /// <summary> Whether to spell out what locking costs. On in the detail view, off on a dense grid. </summary>
+    [Parameter]
+    public bool ShowHint { get; set; }
+
+    /// <summary>
+    /// Raised when the card cannot be locked because every slot is taken. The screen answers by opening its
+    /// <see cref="LockSlotPicker"/>; without a handler the press says so rather than doing nothing.
+    /// </summary>
+    [Parameter]
+    public EventCallback<CardId> OnNeedsSlotChoice { get; set; }
+
+    string? _refusal;
+
+    bool Owned => Collection.Owns(CardId);
+    bool IsLocked => Collection.IsLocked(CardId);
+
+    /// <summary>
+    /// Whether this card's rank clears the threshold — the same question the action asks, from the same
+    /// config. An already-locked card is offered its unlock either way: a lock set before the threshold moved
+    /// must still be undoable.
+    /// </summary>
+    bool Lockable => Owned && Collection.CanLock(CardId);
+
+    async Task OnPress()
+    {
+        _refusal = null;
+
+        if (IsLocked)
+        {
+            _refusal = Collection.Unlock(CardId);
+            return;
+        }
+
+        // An account with no slots at all is not the same as one whose slots are full: there is no lock to
+        // move, so asking which one would open an empty picker with nothing to press.
+        if (Collection.LockSlotCount == 0)
+        {
+            _refusal = "This account has no lock slots yet.";
+            return;
+        }
+
+        int freeSlot = Collection.FirstFreeSlot();
+        if (freeSlot >= 0)
+        {
+            _refusal = Collection.SetLockSlot(freeSlot, CardId);
+            return;
+        }
+
+        if (OnNeedsSlotChoice.HasDelegate)
+            await OnNeedsSlotChoice.InvokeAsync(CardId);
+        else
+            _refusal = "Every lock slot is taken.";
+    }
+}

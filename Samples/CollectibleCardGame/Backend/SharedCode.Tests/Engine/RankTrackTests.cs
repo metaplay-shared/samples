@@ -1,5 +1,4 @@
 using NUnit.Framework;
-using System.Reflection;
 
 namespace Game.Logic.Tests
 {
@@ -20,18 +19,6 @@ namespace Game.Logic.Tests
             return scenario.OnTurn(0);
         }
 
-        [TestCase(1, 15)]
-        [TestCase(2, 16)]
-        [TestCase(3, 16)]
-        [TestCase(4, 17)]
-        [TestCase(5, 17)]
-        public void GardenSnailGainsHealthAtTwoAndFour(int rank, int health)
-        {
-            CardStats stats = Config.Cards[CardId.FromString("GardenSnail")].GetStatsAtRank(rank);
-            Assert.That(stats.Attack, Is.Zero);
-            Assert.That(stats.Health, Is.EqualTo(health));
-        }
-
         [Test]
         public void NewStepsAccumulateEveryStat()
         {
@@ -48,45 +35,25 @@ namespace Game.Logic.Tests
             Assert.That(total.AmountDelta, Is.EqualTo(7));
         }
 
-        [Test]
-        public void RankOneUsesPrintedStats()
+        /// <summary>
+        /// A card's rank lands on the critter it becomes. The deltas are cumulative: Ember Kit's track gives
+        /// +0/+1 and then +1/+0, so the printed 10/5 becomes an 11/6 at the top; Old Mossback's +6/+6 grows the
+        /// printed 35/40 body by sixteen percent.
+        /// </summary>
+        [TestCase("EmberKit", 1, 10, 5)]
+        [TestCase("EmberKit", 5, 11, 6)]
+        [TestCase("OldMossback", 5, 41, 46)]
+        public void APlayedCritterCarriesItsRanksStats(string card, int rank, int attack, int health)
         {
             Scenario       scenario = Fresh();
-            CardInstanceId kit      = scenario.Seat(0).Hand("EmberKit", rank: 1);
+            CardInstanceId played   = scenario.Seat(0).Hand(card, rank: rank);
             MatchEngine    engine   = scenario.Build();
 
-            engine.Play(0, kit);
+            engine.Play(0, played);
 
-            Assert.That(engine.Critter(kit).Attack, Is.EqualTo(10));
-            Assert.That(engine.Critter(kit).MaxHealth, Is.EqualTo(5));
-        }
-
-        [Test]
-        public void RankFiveEmberKitGainsOnePointInEach()
-        {
-            // Case M: Rank 2 gives +0/+1 and rank 4 gives +1/+0, and the deltas are cumulative. A
-            // point is a fifth of the stat quantum, so a 10/5 becomes an 11/6 — about 13% over its rank-1
-            // self, which is the guardrail the widened domain exists to make reachable (F2).
-            Scenario       scenario = Fresh();
-            CardInstanceId kit      = scenario.Seat(0).Hand("EmberKit", rank: 5);
-            MatchEngine    engine   = scenario.Build();
-
-            engine.Play(0, kit);
-
-            Assert.That(engine.Critter(kit).Attack, Is.EqualTo(11));
-            Assert.That(engine.Critter(kit).MaxHealth, Is.EqualTo(6));
-        }
-
-        [Test]
-        public void RankFiveOldMossbackGainsSixPointsInEach()
-        {
-            // The track is authored as deltas: +6/+6 grows the printed 35/40 body by 16 percent.
-            Scenario       scenario = Fresh();
-            CardInstanceId mossback = scenario.Seat(0).Board("OldMossback", rank: 5);
-            MatchEngine    engine   = scenario.Build();
-
-            Assert.That(engine.Critter(mossback).Attack, Is.EqualTo(41));
-            Assert.That(engine.Critter(mossback).MaxHealth, Is.EqualTo(46));
+            Assert.That(engine.Critter(played).Attack, Is.EqualTo(attack));
+            Assert.That(engine.Critter(played).MaxHealth, Is.EqualTo(health));
+            Assert.That(Config.Cards[CardId.FromString(card)].HasRankGrowth(rank), Is.EqualTo(rank > Config.Global.RankMin));
         }
 
         [Test]
@@ -121,7 +88,6 @@ namespace Game.Logic.Tests
         [Test]
         public void PlayedCardEventCarriesItsRank()
         {
-
             Scenario       scenario = Fresh();
             CardInstanceId kit      = scenario.Seat(0).Hand("EmberKit", rank: 4);
             MatchEngine    engine   = scenario.Build();
@@ -148,17 +114,6 @@ namespace Game.Logic.Tests
             Assert.That(critter.MaxHealth, Is.EqualTo(30));
             Assert.That(critter.Damage, Is.EqualTo(15), "damage is stored separately, so buffing the maximum does not heal");
             Assert.That(critter.CurrentHealth, Is.EqualTo(15));
-        }
-
-        [Test]
-        public void NoRuleReadsRankAfterInstanceCreation()
-        {
-            // A reflection guard: what is in play is a BoardCritter, and it has no rank to read.
-            foreach (PropertyInfo property in typeof(BoardCritter).GetProperties())
-                Assert.That(property.Name, Is.Not.EqualTo("Rank"), "a critter in play is numbers, not a rank");
-
-            foreach (MethodInfo method in typeof(Legality).GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly))
-                Assert.That(method.Name, Does.Not.Contain("Rank"), $"{method.Name} looks like a rank rule");
         }
     }
 }

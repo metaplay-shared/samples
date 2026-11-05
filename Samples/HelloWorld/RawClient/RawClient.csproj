@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\MetaplaySDK\Dotnet\Client\Metaplay.Client.csproj" />
+    <ProjectReference Include="..\MetaplaySDK\Dotnet\Client\Metaplay.Client.csproj" />
   </ItemGroup>
 
   <!-- Compile the shared game logic: the same sources the Unity client uses. -->
@@ -17,5 +17,5 @@
   </ItemGroup>
 
   <!-- The Metaplay analyzers include the source generator used for integration type discovery. -->
-  <Import Project="..\..\..\MetaplaySDK\Backend\Metaplay.Analyzers.targets" />
+  <Import Project="..\MetaplaySDK\Backend\Metaplay.Analyzers.targets" />
 </Project>

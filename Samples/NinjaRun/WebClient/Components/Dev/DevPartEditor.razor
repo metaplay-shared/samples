@@ -16,7 +16,7 @@
 @* The developer tools' own styles, loaded with the page rather than with the game, which never uses them. *@
 <link rel="stylesheet" href="css/dev-tools.css" />
 
-<GameConnectionGate>
+<StartupSplash IsReady="MetaplayService.PlayerModel != null">
     <div class="dev-parts-page" data-testid="dev-parts">
         <div class="dev-parts-header">
             <a class="dev-back" href="" data-testid="dev-back">‹ Menu</a>
@@ -87,14 +87,16 @@
                             <span>Zoom</span>
                             <input type="range" data-testid="dev-parts-zoom" aria-label="Zoom, pixels per meter"
                                    min="@MinPxPerMetre" max="@MaxPxPerMetre" step="1"
-                                   value="@_pxPerMetre" @oninput="OnZoomInput" />
+                                   value="@_pxPerMetre" @oninput="OnZoomInput" disabled="@(!_editorReady)" />
                             <span class="dev-parts-zoom-value" data-testid="dev-parts-zoom-value">@_pxPerMetre px/m</span>
                         </label>
-                        <button type="button" class="dev-button" data-testid="dev-parts-fit" @onclick="OnFit">Fit part</button>
+                        <button type="button" class="dev-button" data-testid="dev-parts-fit" @onclick="OnFit" disabled="@(!_editorReady)">Fit part</button>
                         <button type="button" class="dev-button" data-testid="dev-parts-play-ghost-effects"
+                                disabled="@(!_editorReady)"
                                 title="Play the ghost poof at the part's end torii and the warp-in under its start torii"
                                 @onclick="OnPlayGhostEffects">Play ghost effects</button>
                         <button type="button" class="dev-button" data-testid="dev-parts-play-pass-by"
+                                disabled="@(!_editorReady)"
                                 title="Play every decoration's pass-by animation once, as a run plays it when the runner reaches it"
                                 @onclick="OnPlayPassBy">Play pass-by</button>
                         <button type="button" class="dev-button" data-testid="dev-parts-practice" disabled="@(!CanPlay)"
@@ -185,6 +187,7 @@
                                        @bind="_spaceAmount" @bind:after="OnSpaceFieldChanged" />
                             </label>
                             <button type="button" class="dev-button @(_tool == SpaceTool ? "dev-button-primary" : "")" data-testid="dev-editor-space-pick"
+                                    disabled="@(!_editorReady)"
                                     aria-pressed="@(_tool == SpaceTool ? "true" : "false")"
                                     title="Click the canvas to set where the space goes"
                                     @onclick="() => ToggleTool(SpaceTool)">Pick on canvas</button>
@@ -241,7 +244,7 @@
             </div>
         }
     </div>
-</GameConnectionGate>
+</StartupSplash>
 
 @code {
     private const string GroundKind = "ground";
@@ -320,6 +323,7 @@
 
     private bool _restored;
     private bool _attached;
+    private bool _editorReady;
 
     /// <summary>The draft's rows or the selection changed in a way the overlay has not been handed yet.</summary>
     private bool _syncPending;
@@ -395,10 +399,26 @@
             _attached = true;
             try
             {
-                _editorModule  = await JS.InvokeAsync<IJSObjectReference>("import", "./js/coursePartEditor.js");
+                IJSObjectReference module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/coursePartEditor.js");
+
+                // The page can be left while a call is under way, and leaving it detaches the module. A module
+                // imported after that is this call's to dispose.
+                if (_disposed)
+                {
+                    await module.DisposeAsync();
+                    return;
+                }
+
+                _editorModule  = module;
                 _selfReference = DotNetObjectReference.Create(this);
-                await _editorModule.InvokeVoidAsync("attach", _previewCanvas, _overlayCanvas, _selfReference, AssetBaseUrl, _pxPerMetre);
-                _decorationKinds = await _editorModule.InvokeAsync<List<DecorationKindChoice>>("decorationKinds") ?? new List<DecorationKindChoice>();
+                await module.InvokeVoidAsync("attach", _previewCanvas, _overlayCanvas, _selfReference, AssetPaths.Art, _pxPerMetre);
+                if (_disposed)
+                    return;
+
+                _decorationKinds = await module.InvokeAsync<List<DecorationKindChoice>>("decorationKinds") ?? new List<DecorationKindChoice>();
+                if (_disposed)
+                    return;
+
                 if (string.IsNullOrEmpty(_placeKind) && _decorationKinds.Count > 0)
                     _placeKind = _decorationKinds[0].Id;
                 StateHasChanged();
@@ -413,12 +433,6 @@
                 _editorModule = null;
                 return;
             }
-
-            if (_disposed)
-            {
-                await DetachAsync();
-                return;
-            }
         }
 
         await FlushEditorAsync();
@@ -427,7 +441,8 @@
     /// <summary>Hand the overlay the draft's rows and the selection, and the renderer the draft composed alone, when either is behind.</summary>
     private async Task FlushEditorAsync()
     {
-        if (_editorModule == null || _review == null)
+        IJSObjectReference module = _editorModule;
+        if (module == null || _review == null)
             return;
 
         try
@@ -436,20 +451,28 @@
             {
                 _syncPending = false;
                 _gapsPending = false;
-                await _editorModule.InvokeVoidAsync("setDraft", new CoursePartEditorView(_draft, _review, _selection.Kind, SelectedIndex, _spaceX, _spaceAmount));
+                await module.InvokeVoidAsync("setDraft", new CoursePartEditorView(_draft, _review, _selection.Kind, SelectedIndex, _spaceX, _spaceAmount));
             }
             else if (_gapsPending)
             {
                 _gapsPending = false;
-                await _editorModule.InvokeVoidAsync("setGaps", CoursePartEditorGap.Of(_review));
+                await module.InvokeVoidAsync("setGaps", CoursePartEditorGap.Of(_review));
             }
 
-            if (_coursePending)
+            // Leaving the page during the call above detached the module.
+            if (_coursePending && !_disposed)
             {
                 _coursePending = false;
                 // A draft that breaks a rule composes into nothing, so the last sound draft stays drawn under it.
                 if (_review.Course != null)
-                    await _editorModule.InvokeVoidAsync("setCourse", TimeTrialCourseView.FromCourse(_review.Course, altitudeBand: _draft.AltitudeBand));
+                    await module.InvokeVoidAsync("setCourse", TimeTrialCourseView.FromCourse(_review.Course, altitudeBand: _draft.AltitudeBand));
+            }
+
+            // Canvas controls need the attached overlay, its draft and the preview renderer.
+            if (!_editorReady && !_disposed)
+            {
+                _editorReady = true;
+                StateHasChanged();
             }
         }
         catch (JSDisconnectedException)
@@ -652,7 +675,7 @@
                     }
                 </select>
                 <button type="button" class="dev-button @(_tool == DecorationTool ? "dev-button-primary" : "")" data-testid="dev-editor-place-decoration"
-                        aria-pressed="@(_tool == DecorationTool ? "true" : "false")" disabled="@(string.IsNullOrEmpty(_placeKind))"
+                        aria-pressed="@(_tool == DecorationTool ? "true" : "false")" disabled="@(!_editorReady || string.IsNullOrEmpty(_placeKind))"
                         title="Each click on the ground stands one there"
                         @onclick="() => ToggleTool(DecorationTool)">Place</button>
             </div>
@@ -712,6 +735,7 @@
                         title="Hang a vine where it first fits the part's rules"
                         @onclick="AddVine">Add</button>
                 <button type="button" class="dev-button @(_tool == VineTool ? "dev-button-primary" : "")" data-testid="dev-editor-place-vine"
+                        disabled="@(!_editorReady)"
                         aria-pressed="@(_tool == VineTool ? "true" : "false")"
                         title="Each click on the canvas hangs a vine there"
                         @onclick="() => ToggleTool(VineTool)">Place</button>

@@ -4,20 +4,16 @@ using System.Text.Json;
 namespace WebClient.Tests;
 
 /// <summary>
-/// E2E tests for what dresses a climb's hands-off seconds, driven through <c>?env=offline</c> so they need only
+/// E2E tests for what dresses a climb's hands-off seconds, driven through <c>?offline</c> so they need only
 /// the web client: the renderer plants the kekkai fence along the slope and strings it, reaching the bottom
 /// torii starts the bamboo shadow's sweep across the view, the sweep is over before the gate, and a new run
 /// starts with nothing sweeping. The renderer is driven directly with a course carrying one climb, the way the
 /// snapshots of a run drive it.
 /// </summary>
-[Parallelizable(ParallelScope.Self)]
 [TestFixture]
-public class ClimbDressingOfflineModeTests : GamePageTest
+public class ClimbDressingOfflineModeTests : OfflinePageTest
 {
-    private static readonly string BaseUrl =
-        (Environment.GetEnvironmentVariable("WEBCLIENT_BASE_URL") ?? "http://localhost:5290").TrimEnd('/');
-
-    private static readonly string OfflineUrl = BaseUrl + "/?env=offline";
+    private static readonly string OfflineUrl = ClientUrl(query: "offline");
 
     [Test]
     public async Task ReachingTheBottomTorii_SweepsTheShadowAcrossTheSlope()

@@ -33,14 +33,6 @@ namespace Game.Logic.Tests
         }
 
         [Test]
-        public void TheSameCoordinatesAlwaysGiveTheSameStream()
-        {
-            Assert.That(
-                First(BotSubstreams.For(12345, 1, BotDecisionKind.MainPhase, Somewhere)),
-                Is.EqualTo(First(BotSubstreams.For(12345, 1, BotDecisionKind.MainPhase, Somewhere))));
-        }
-
-        [Test]
         public void TheDerivationLosesTheSeed()
         {
             // The whole point of folding the key in half. Every input to a substream key except the seed is

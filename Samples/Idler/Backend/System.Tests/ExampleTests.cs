@@ -1,5 +1,3 @@
-// This file is part of Metaplay SDK which is released under the Metaplay SDK License.
-
 using Metaplay.Cloud.Application;
 using Metaplay.System.Tests;
 using Microsoft.Playwright.NUnit;

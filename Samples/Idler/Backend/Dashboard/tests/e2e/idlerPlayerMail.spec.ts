@@ -1,4 +1,3 @@
-// This file is part of Metaplay SDK which is released under the Metaplay SDK License.
 import { test, expect, clickMButton } from '@metaplay/playwright-config'
 
 test.describe('Idler Specific Player Mail', () => {

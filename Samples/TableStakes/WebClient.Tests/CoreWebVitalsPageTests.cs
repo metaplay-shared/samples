@@ -10,8 +10,8 @@ namespace WebClient.Tests;
 /// <para>
 /// CLS excludes shifts within <see cref="InputShiftWindowMs"/> of a discrete input, so the tests do not see the
 /// reflow of a sheet as it opens. They do see a later shift, such as content landing after its frame or an image
-/// sized after it loads. <see cref="HubNavigationAndASheetStayWithinGoodCls"/> runs under <c>?env=offline</c>
-/// (<c>docs/web-client.md</c>, "Offline mode"). A reward claim needs the live server.
+/// sized after it loads. <see cref="HubNavigationAndASheetStayWithinGoodCls"/> runs under <c>?offline</c>
+/// (<c>docs/web-client.md</c>, "Offline mode").
 /// </para>
 /// </summary>
 [TestFixture]
@@ -121,7 +121,7 @@ public class CoreWebVitalsPageTests : PlaywrightPageTest
     {
         await Page.AddInitScriptAsync(CollectorScript);
 
-        await Page.GotoAsync(ClientUrl("/events", "env=offline"));
+        await Page.GotoAsync(ClientUrl("/events", "offline"));
         await WaitForLiveSessionAsync();
         await WaitForLateShiftsAsync(); // let the boot's shifts finish before the reset
         await ResetVitalsAsync();
@@ -147,8 +147,8 @@ public class CoreWebVitalsPageTests : PlaywrightPageTest
 
     /// <summary>
     /// A daily reward claim, through the reward reveal and the balance animation that follows it, the longest
-    /// animated sequence the shell draws. It needs the live server: the reveal leaves its granting stage only when
-    /// the server's grant commits on this client's timeline, and offline mode has no handler for the claim request.
+    /// animated sequence the shell draws. The reveal leaves its granting stage only when the grant commits on this
+    /// client's timeline.
     /// It can run in parallel with other fixtures because it never taps PLAY, so it does not enter the matchmaking
     /// queue (see <see cref="LiveServerMatchmakingTests"/>), and each test gets a fresh guest account.
     /// </summary>

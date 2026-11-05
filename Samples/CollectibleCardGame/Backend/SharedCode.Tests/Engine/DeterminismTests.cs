@@ -117,10 +117,7 @@ namespace Game.Logic.Tests
             ScriptRecorder recorder = new ScriptRecorder(Seed);
             MatchEngine    engine   = MatchEngine.Create(Setup(Seed, MatchTimings.Instant));
 
-            // The deal's own event is not one of the counted 538 and never was: the driver reads the model's
-            // history, which the deal writes into, where the old harness handed the deal a sink that threw it
-            // away. Clearing here keeps the number counting exactly the events it has always counted, so it
-            // stays a tripwire rather than becoming a new number for a new reason.
+            // Clear() excludes the deal's own event from the count.
             engine.Clear();
             Drive(engine, recorder);
 
@@ -138,10 +135,8 @@ namespace Game.Logic.Tests
         [Test]
         public void TheGoldenGameIsPublicEqualOnAFollower()
         {
-            // The replacement for the golden game under a failing publisher, and it exercises the same thing
-            // that one did — the whole game through the other path — for a path that now exists. Every action
-            // of the pinned game runs against a network-masked clone and the two are compared after each one,
-            // so a divergence names the action it came from rather than a hash at the end.
+            // The golden game, mirrored action by action onto a network-masked follower. The two are compared
+            // after each action, so a divergence names the action it came from rather than a hash at the end.
             const ulong Seed = 12345;
 
             ScriptRecorder recorder = new ScriptRecorder(Seed);

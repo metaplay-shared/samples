@@ -4,7 +4,7 @@
    Mute switch
    The same small speaker button in the same corner of the portrait area on the menu and over the stage,
    so opening a run never moves it. Both views are full-height positioned boxes inside that area, so one
-   set of offsets puts the button in the same place in each. It floats clear of the top bar, beside the
+   set of offsets puts the button in the same place in each. It floats clear of the debug bar, beside the
    segment callout, and takes its own taps so pressing it is never also a jump.
    --------------------------------------------------------------------------- */
 .mute-toggle,

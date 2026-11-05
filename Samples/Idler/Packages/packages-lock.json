@@ -9,28 +9,6 @@
       },
       "hash": "ef803e190e901473e398bc92dde3522b9c8338e2"
     },
-    "com.google.external-dependency-manager": {
-      "version": "file:com.google.external-dependency-manager-1.2.188.tgz",
-      "depth": 0,
-      "source": "local-tarball",
-      "dependencies": {}
-    },
-    "com.google.firebase.app": {
-      "version": "file:com.google.firebase.app-12.8.0.tgz",
-      "depth": 0,
-      "source": "local-tarball",
-      "dependencies": {
-        "com.google.external-dependency-manager": "1.2.185"
-      }
-    },
-    "com.google.firebase.messaging": {
-      "version": "file:com.google.firebase.messaging-12.8.0.tgz",
-      "depth": 0,
-      "source": "local-tarball",
-      "dependencies": {
-        "com.google.firebase.app": "12.8.0"
-      }
-    },
     "com.rlabrecque.steamworks.net": {
       "version": "https://github.com/rlabrecque/Steamworks.NET.git?path=/com.rlabrecque.steamworks.net#2025.164.1",
       "depth": 0,
@@ -88,6 +66,15 @@
       "source": "registry",
       "dependencies": {
         "com.unity.test-framework": "1.1.33"
+      },
+      "url": "https://packages.unity.com"
+    },
+    "com.unity.inputsystem": {
+      "version": "1.20.0",
+      "depth": 0,
+      "source": "registry",
+      "dependencies": {
+        "com.unity.modules.uielements": "1.0.0"
       },
       "url": "https://packages.unity.com"
     },
@@ -166,7 +153,7 @@
       }
     },
     "io.metaplay.unitysdk": {
-      "version": "file:../../../MetaplaySDK/Client",
+      "version": "file:../MetaplaySDK/Client",
       "depth": 0,
       "source": "local",
       "dependencies": {
@@ -177,6 +164,12 @@
       }
     },
     "com.unity.modules.androidjni": {
+      "version": "1.0.0",
+      "depth": 0,
+      "source": "builtin",
+      "dependencies": {}
+    },
+    "com.unity.modules.audio": {
       "version": "1.0.0",
       "depth": 0,
       "source": "builtin",

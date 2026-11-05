@@ -1,4 +1,3 @@
-// This file is part of Metaplay SDK which is released under the Metaplay SDK License.
 import type { App } from 'vue'
 
 // Import the integration API.
@@ -54,6 +53,21 @@ export function GameSpecificPlugin(_app: App): void {
         $type: 'Game.Logic.ResolvedWalletBundle',
         getDisplayContent: (purchase: any): string[] =>
           (purchase.contents?.amounts ?? []).map((amount: any): string => `${amount.amount} ${amount.currency}`),
+      },
+    ])
+
+    // The offer rewards (SharedCode/Offers/Offers.cs), shown wherever the dashboard lists an offer's rewards. Both
+    // carry a RewardBundle, whose amounts are in its private _amounts field.
+    const describeBundle = (bundle: any): string =>
+      (bundle?._amounts ?? []).map((amount: any): string => `${amount.amount} ${amount.currency}`).join(', ')
+    initializationApi.addPlayerRewards([
+      {
+        $type: 'Game.Logic.WalletOfferReward',
+        getDisplayValue: (reward: any): string => describeBundle(reward.contents),
+      },
+      {
+        $type: 'Game.Logic.DemoOfferReward',
+        getDisplayValue: (reward: any): string => describeBundle(reward.contents),
       },
     ])
 

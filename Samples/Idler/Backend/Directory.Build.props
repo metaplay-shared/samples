@@ -1,6 +1,6 @@
 <Project>
  <PropertyGroup>
-   <MetaplaySDKPath>$(MSBuildThisFileDirectory)../../../MetaplaySDK</MetaplaySDKPath>
+   <MetaplaySDKPath>$(MSBuildThisFileDirectory)../MetaplaySDK</MetaplaySDKPath>
    <SharedCodePath>$(MSBuildThisFileDirectory)../Assets/SharedCode</SharedCodePath>
    <MetaplayClientPath>$(MetaplaySDKPath)/Client</MetaplayClientPath>
    <MetaplayServerPath>$(MetaplaySDKPath)/Backend</MetaplayServerPath>

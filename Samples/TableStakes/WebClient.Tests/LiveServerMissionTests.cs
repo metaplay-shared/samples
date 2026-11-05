@@ -43,6 +43,9 @@ public class LiveServerMissionTests : PlaywrightPageTest
         await PlayWholeHandAsync();
         await LeaveTheResultsAsync();
 
+        // Leaving lands on Home, where the player's name is shown, to look the player up on the server later.
+        string playerName = await ReadPlayerNameAsync();
+
         // ---- The mission moved, and it moved on the server ----
         // Navigate through the Events hub instead of loading the page. The progress shown is the server's either
         // way, because the server records the match with the PlayerRecordMatchResult server action, which reaches
@@ -68,7 +71,10 @@ public class LiveServerMissionTests : PlaywrightPageTest
         Assert.That(await ReadBalanceAsync("coins"), Is.EqualTo(coinsBefore + 100), "the balance did not move by the reward");
 
         // ---- The reward is paid once. A reload rebuilds the client from the server's copy of the player, so
-        //      the page shows committed state instead of the client's prediction.
+        //      the page shows committed state instead of the client's prediction. The claim is a client action,
+        //      which the page shows before the client has sent it, so the reload waits until the server has
+        //      committed it.
+        await WaitForServerToHaveEventAsync(playerName, "PlayerEventMissionRewardClaimed");
         await ReloadOnStackAsync(Page);
         await Expect(DailyMission("Play 3 games")).ToContainTextAsync("1 / 3", new() { Timeout = BootTimeoutMs });
 

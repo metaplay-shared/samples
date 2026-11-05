@@ -1,6 +1,7 @@
 using Game.Logic;
 using Game.Server.Community;
 using Metaplay.Cloud.Entity;
+using Metaplay.Cloud.RuntimeOptions;
 using System;
 using System.Threading.Tasks;
 
@@ -28,7 +29,7 @@ public sealed partial class PlayerActor
     {
         if (subscriber != TryGetSession() || DateTime.UtcNow < _nextCommunityRequest)
             return;
-        _nextCommunityRequest = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        _nextCommunityRequest = DateTime.UtcNow + RuntimeOptionsRegistry.Instance.GetCurrent<CommunityOptions>().RequestInterval;
         try
         {
             PublishLeaderboardEntry();

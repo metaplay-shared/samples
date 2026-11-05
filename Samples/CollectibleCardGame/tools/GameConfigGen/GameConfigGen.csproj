@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Offline game config build. Reads the CSV sheets in GameConfigSource/ and writes both archives:
+    Backend/Server/GameConfig/StaticGameConfig.mpa (the one the server boots from) and
+    WebClient/wwwroot/Assets/SharedGameConfig.mpa (the client's built-in copy). It does not publish them to a
+    server: that is done from the LiveOps Dashboard. See Program.cs for the commands.
+
+    References Backend/SharedCode rather than the client build in SharedCode/ because the config builder lives
+    in Metaplay.Cloud, the server-side SDK assembly. A game whose config validation reaches into server-only
+    integrations - a name vocabulary checked against the server's PlayerRequirementsValidator, say - has to
+    reference Backend/Server instead, or the build judges content by rules the server does not enforce.
+
+    Usage: run this project from the repo root. See README.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <LangVersion>Latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <Version>0.1.0.0</Version>
+    <!-- Run with the caller's working directory (the repo root) so the default output paths land where the
+         user expects, rather than under the project directory. -->
+    <RunWorkingDirectory>$(MSBuildStartupDirectory)</RunWorkingDirectory>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Backend\SharedCode\SharedCode.csproj" />
+  </ItemGroup>
+
+</Project>

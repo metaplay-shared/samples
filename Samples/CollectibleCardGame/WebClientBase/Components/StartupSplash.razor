@@ -1,0 +1,35 @@
+@* What a page shows until the first session has given it a player to draw. After that the page stays on screen,
+   and connection trouble is ConnectionOverlay's to show (mounted in App.razor), including a first connection that
+   fails. *@
+
+@if (IsReady)
+{
+    @ChildContent
+}
+else
+{
+    <div class="mp-startup" role="status" data-testid="startup-splash">
+        <div class="mp-spinner" aria-hidden="true"></div>
+        <p>@Message</p>
+    </div>
+}
+
+@code {
+    /// <summary>
+    /// Whether the page has what it needs to draw its content, typically that the player model is not null.
+    /// </summary>
+    [Parameter]
+    public bool IsReady { get; set; }
+
+    /// <summary>
+    /// Content to display once ready.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// Message to show under the spinner. Default: "Connecting to game server..."
+    /// </summary>
+    [Parameter]
+    public string Message { get; set; } = "Connecting to game server...";
+}

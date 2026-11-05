@@ -1,5 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    Unit tests of the logic only the server runs, in Backend/Server, such as the seating and the wheel-spin throttle.
+    It starts no server.
+  -->
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>Latest</LangVersion>
@@ -20,9 +25,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Server\Server.csproj" />
-    <!-- The config build tool, for the test that checks that GameConfigGen refuses to write an archive when the
-         SDK build reported an error. -->
-    <ProjectReference Include="..\..\tools\GameConfigGen\GameConfigGen.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The Metaplay test set-up, shared with SharedCode.Tests rather than copied. -->
+    <Compile Include="..\SharedCode.Tests\SetupFixture.cs" Link="Shared\SetupFixture.cs" />
   </ItemGroup>
 
   <!-- AnalyticsContractTests is compiled in from SharedCode.Tests rather than referenced. The test checks the

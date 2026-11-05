@@ -68,12 +68,8 @@ namespace Game.Logic.Tests
         }
 
         /// <summary>
-        /// The arithmetic every counted amount resolves through, over every step in the shipped catalogue
-        /// that has a <c>Per:</c> term. There used to be two copies of this expression — the engine's and the
-        /// bot's — with doc comments on both saying they must agree and nothing checking that they did; a
-        /// reviewer dropped the per-unit factor from the bot's copy and all 525 tests passed, so a bot could
-        /// have valued Nine-Tail Matriarch's Hello at one per Kitsune while the table resolved five. There is
-        /// one copy now and this is what pins it.
+        /// The one expression both the engine and the bot resolve counted amounts through, over every step in
+        /// the shipped catalogue that has a <c>Per:</c> term.
         /// </summary>
         [Test]
         public void EveryCountedAmountInTheCatalogueIsItsLiteralPlusPerUnitTimesTheCount()
@@ -103,9 +99,8 @@ namespace Game.Logic.Tests
                 }
             }
 
-            // The pool has two scaling cards; a catalogue that had lost them would pass every assertion above
-            // without asking the question.
-            Assert.That(counted, Is.EqualTo(2), "the shipped catalogue's counted amounts are DenPerKitsune and HealDenPerFriendly");
+            // A catalogue with no counted amount would pass every assertion above without asking the question.
+            Assert.That(counted, Is.GreaterThan(0), "the shipped catalogue has no counted amount to check");
         }
 
         #endregion

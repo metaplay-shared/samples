@@ -1,6 +1,4 @@
-using Metaplay.Core;
 using Metaplay.Server;
-using System;
 using System.Threading.Tasks;
 
 namespace Game.Server
@@ -10,6 +8,10 @@ namespace Game.Server
     /// </summary>
     class ServerMain : ServerMainBase
     {
+        public ServerMain()
+        {
+        }
+
         static async Task<int> Main(string[] cmdLineArgs)
         {
             using ServerMain program = new ServerMain();

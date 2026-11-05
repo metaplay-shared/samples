@@ -37,32 +37,23 @@ namespace Game.Logic.Tests
         }
 
         [Test]
-        public void ConfigControlsTheIntervalAndPracticeEligibility()
+        public void PlayerDevSetCardGiftProgress_StopsShortOfTheGift()
         {
+            // The development-only shortcut banks matches but never a gift: one real completed match is still
+            // what makes the gift ready.
             PlayerModel player = Player();
-            GlobalConfig global = player.GameConfig.Global;
-            int interval = global.MatchesPerCardGift;
-            bool practice = global.CardGiftIncludesPractice;
-            try
-            {
-                global.MatchesPerCardGift = 2;
-                global.CardGiftIncludesPractice = false;
-                new PlayerApplyMatchResult(MatchAccountOutcome.Win, false, 0, null).Execute(player, true);
-                Assert.That(player.CardGiftProgress, Is.Zero);
-                new PlayerApplyMatchResult(MatchAccountOutcome.Draw, true, 0, null).Execute(player, true);
-                Assert.That(CardGiftPolicy.IsReady(player), Is.False);
-                new PlayerApplyMatchResult(MatchAccountOutcome.Loss, true, 0, null).Execute(player, true);
-                Assert.That(CardGiftPolicy.IsReady(player), Is.True);
-                global.MatchesPerCardGift = 0;
-                Assert.That(CardGiftPolicy.IsReady(player), Is.False);
-                new PlayerApplyMatchResult(MatchAccountOutcome.Win, true, 0, null).Execute(player, true);
-                Assert.That(player.CardGiftProgress, Is.EqualTo(2));
-            }
-            finally
-            {
-                global.MatchesPerCardGift = interval;
-                global.CardGiftIncludesPractice = practice;
-            }
+            int interval = player.GameConfig.Global.MatchesPerCardGift;
+
+            Assert.That(new PlayerDevSetCardGiftProgress(interval - 1).Execute(player, true), Is.EqualTo(MetaActionResult.Success));
+            Assert.That(player.CardGiftProgress, Is.EqualTo(interval - 1));
+            Assert.That(CardGiftPolicy.IsReady(player), Is.False);
+
+            Assert.That(new PlayerDevSetCardGiftProgress(interval).Execute(player, true), Is.EqualTo(ActionResults.InvalidCardGiftProgress));
+            Assert.That(new PlayerDevSetCardGiftProgress(-1).Execute(player, true), Is.EqualTo(ActionResults.InvalidCardGiftProgress));
+            Assert.That(player.CardGiftProgress, Is.EqualTo(interval - 1), "a refused value moves nothing");
+
+            new PlayerApplyMatchResult(MatchAccountOutcome.Loss, false, 0, null).Execute(player, true);
+            Assert.That(CardGiftPolicy.IsReady(player), Is.True);
         }
 
         [Test]

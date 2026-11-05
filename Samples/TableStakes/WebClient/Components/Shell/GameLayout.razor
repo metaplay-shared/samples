@@ -1,4 +1,5 @@
 @inherits LayoutComponentBase
+@inject MetaplayClientService MetaplayService
 
 @* The layout for game routes: no HUD and no navigation. Each route declares its layout (meta routes use
    MetaLayout, game routes use GameLayout), so no screen decides at runtime whether the shell is shown
@@ -10,4 +11,9 @@
     @Body
 </main>
 
-<ConnectionOverlay />
+@code {
+    /// <summary>
+    /// Starts the client service. The layout starts it, not the table page, as MetaLayout does for the meta routes.
+    /// </summary>
+    protected override void OnInitialized() => MetaplayService.Start();
+}

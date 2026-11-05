@@ -1,11 +1,10 @@
-// This file is part of Metaplay SDK which is released under the Metaplay SDK License.
-
 using Game.Logic;
 using Metaplay.Client;
 using Metaplay.Core;
 using Metaplay.Core.Client;
 using Metaplay.Core.Session;
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 
 /// <summary>
@@ -53,7 +52,8 @@ public static class Program
         // Initialize the Metaplay core. The game's integration types (PlayerModel, actions,
         // the environment config provider above, ...) are discovered from this assembly, and
         // the serializer is generated at runtime.
-        MetaplayCore.InitializeForExternalApp("RawClient");
+        MetaplayCore.ClientIntegrationAssemblies = IntegrationAssembly.FindRoots().ToList();
+        MetaplayCore.InitializeForClient(init => init.ConfigureMetaSerialization("RawClient"));
 
         // Create the client. This starts the SDK. The server endpoint and other environment
         // settings come from the RawClientEnvironmentConfigProvider above; client options and

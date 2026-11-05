@@ -8,18 +8,14 @@ namespace WebClient.Tests;
 
 /// <summary>
 /// E2E tests for course decorations and the part editor's add/remove space tool, driven through
-/// <c>?env=offline</c> so they need only the web client. The editor places a decoration on the ground, writes it
+/// <c>?offline</c> so they need only the web client. The editor places a decoration on the ground, writes it
 /// into the part JSON and draws it through the run renderer; the renderer plays a kind's pass-by animation once
 /// when the player's runner reaches it; and the space tool moves everything past its X.
 /// </summary>
-[Parallelizable(ParallelScope.Self)]
 [TestFixture]
-public class CourseDecorationOfflineModeTests : GamePageTest
+public class CourseDecorationOfflineModeTests : OfflinePageTest
 {
-    private static readonly string BaseUrl =
-        (Environment.GetEnvironmentVariable("WEBCLIENT_BASE_URL") ?? "http://localhost:5290").TrimEnd('/');
-
-    private static readonly string OfflineUrl = BaseUrl + "/?env=offline";
+    private static readonly string OfflineUrl = ClientUrl(query: "offline");
 
     /// <summary>rr-smallclimb's first stretch of ground ends here, in meters.</summary>
     private const int SmallClimbFirstEnd = 24;
@@ -236,7 +232,7 @@ public class CourseDecorationOfflineModeTests : GamePageTest
     /// <summary>Open the editor offline on a fresh draft of rr-smallclimb.</summary>
     private async Task OpenOnSmallClimbAsync()
     {
-        await Page.GotoAsync(BaseUrl + "/dev/parts?env=offline&source=rr-smallclimb");
+        await Page.GotoAsync(ClientUrl("/dev/parts", "offline&source=rr-smallclimb"));
 
         await Expect(Page.GetByTestId("dev-parts")).ToBeVisibleAsync(new() { Timeout = 30000 });
         await Expect(Page.GetByTestId("dev-editor-code")).ToHaveValueAsync(new Regex("\"rr-smallclimb\""), new() { Timeout = 30000 });

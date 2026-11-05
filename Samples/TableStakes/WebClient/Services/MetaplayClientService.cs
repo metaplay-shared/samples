@@ -25,14 +25,21 @@ namespace WebClient.Services;
 /// <see cref="MetaplayClientServiceBase{TModel}"/>, and implements the player and match model client listeners so
 /// that model changes re-render the UI.
 /// </summary>
-public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPlayerModelClientListener, IPlayerModelClientListenerCore, IMatchModelClientListener
+public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPlayerModelClientListener, IPlayerModelClientListenerCore
 {
     public MetaplayClientService()
     {
-        // OnStateChanged is raised on every client update, so the demo offer purchase's wait for server
-        // confirmation (see StartDemoOfferPurchase) is checked here instead of on a separate timer.
-        OnStateChanged += ContinueOfferPurchaseIfConfirmed;
+        // The demo offer purchase's wait for server confirmation (see StartDemoOfferPurchase) is checked on every
+        // frame instead of on a separate timer.
+        OnFrame += ContinueOfferPurchaseIfConfirmed;
+        OnStateChanged += RaiseModelEvents;
     }
+
+    /// <summary>
+    /// Whether the game runs in offline mode (<c>?offline</c>), with the session served in the browser instead
+    /// of by a game server. Valid once the client service has started.
+    /// </summary>
+    public bool IsOfflineMode => IEnvironmentConfigProvider.Get().ConnectionEndpointConfig.IsOfflineMode;
 
     /// <summary>
     /// The client side of the match protocol. It lives for the whole app instead of one session, and the SDK
@@ -58,88 +65,43 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
 
     /// <summary>
     /// Creates the Metaplay client with the match and tournament sub-clients, and registers the message
-    /// handlers.
+    /// handlers. The base calls it once, when the service starts.
     /// </summary>
     protected override IMetaplayClient CreateClient()
     {
-        // Use SetClientListeners instead of assigning the listener once, because the SDK applies it to the
-        // current model and to every later model, including after an entity switch or a reconnect.
-        MatchClient.SetClientListeners(model => ((MatchModel)model).ClientListener = this);
+        // The sub-clients' events and the message handlers below run inside the SDK's frame, so they request a
+        // render, which the frame does when it ends, rather than render in the middle of it. ModelUpdated fires on
+        // every timeline advance.
+        MatchClient.ModelUpdated += RequestRender;
+        MatchClient.PhaseChanged += OnMatchPhaseChanged;
+        MatchClient.MoveRefused  += OnMoveRefused;
 
-        // CreateClient runs again after a Reset with the same sub-client instances, so remove each handler before
-        // adding it to avoid duplicates.
-        MatchClient.ModelUpdated          -= NotifyStateChanged;
-        MatchClient.PhaseChanged          -= OnMatchPhaseChanged;
-        MatchClient.HandChanged           -= NotifyStateChanged;
-        MatchClient.MoveRefused           -= OnMoveRefused;
-        MatchClient.TimelineUpdateFailed  -= OnMatchTimelineUpdateFailed;
-
-        MatchClient.ModelUpdated          += NotifyStateChanged;
-        MatchClient.PhaseChanged          += OnMatchPhaseChanged;
-        MatchClient.HandChanged           += NotifyStateChanged;
-        MatchClient.MoveRefused           += OnMoveRefused;
-        MatchClient.TimelineUpdateFailed  += OnMatchTimelineUpdateFailed;
-
-        // A Reset ends the current match, so clear the per-match and per-session state.
-        LastMoveRefusal = null;
-        LastRenameResponse = null;
-        SetMatchmaking(MatchmakingStatus.NotSearching, MetaTime.Epoch);
-
-        TournamentClient.ModelUpdated -= NotifyStateChanged;
-        TournamentClient.PhaseChanged  -= NotifyStateChanged;
-        TournamentClient.ModelUpdated += NotifyStateChanged;
-        TournamentClient.PhaseChanged  += NotifyStateChanged;
-
-        _tournamentJoinAnswer.Abandon();
-        _tournamentClaimAnswer.Abandon();
+        TournamentClient.ModelUpdated += RequestRender;
+        TournamentClient.PhaseChanged += RequestRender;
 
         IMetaplayClient client = MetaplayClient.Create(additionalClients: new IMetaplaySubClient[] { MatchClient, TournamentClient });
 
         // These messages arrive through the connection-level message dispatcher, because the player actor sends
-        // them and the client has no matchmaker entity. The dispatcher exists only after MetaplayClient.Create and
-        // lives across sessions, so ListenOnce removes each listener before adding it to avoid duplicates after a
-        // Reset.
-        ListenOnce<MatchmakingStatusUpdate>(OnMatchmakingStatusUpdate);
-        ListenOnce<PlayerRenameResponse>(OnRenameResponse);
-        ListenOnce<TournamentJoinResponse>(OnTournamentJoinResponse);
-        ListenOnce<TournamentClaimResponse>(OnTournamentClaimResponse);
-        ListenOnce<PlayerDailyRewardClaimResponse>(OnDailyRewardClaimResponse);
-        ListenOnce<PlayerWheelSpinResponse>(OnWheelSpinResponse);
+        // them and the client has no matchmaker entity. The dispatcher exists only after MetaplayClient.Create.
+        MetaplaySDK.MessageDispatcher.AddListener<MatchmakingStatusUpdate>(OnMatchmakingStatusUpdate);
+        MetaplaySDK.MessageDispatcher.AddListener<PlayerRenameResponse>(OnRenameResponse);
+        MetaplaySDK.MessageDispatcher.AddListener<TournamentJoinResponse>(OnTournamentJoinResponse);
+        MetaplaySDK.MessageDispatcher.AddListener<TournamentClaimResponse>(OnTournamentClaimResponse);
+        MetaplaySDK.MessageDispatcher.AddListener<PlayerDailyRewardClaimResponse>(OnDailyRewardClaimResponse);
+        MetaplaySDK.MessageDispatcher.AddListener<PlayerWheelSpinResponse>(OnWheelSpinResponse);
 
         return client;
-    }
-
-    /// <summary>Adds a message listener, first removing it if it is already registered.</summary>
-    static void ListenOnce<TMessage>(MessageHandler<TMessage> handler) where TMessage : MetaMessage
-    {
-        MetaplaySDK.MessageDispatcher.RemoveListener<TMessage>(handler);
-        MetaplaySDK.MessageDispatcher.AddListener<TMessage>(handler);
     }
 
     /// <summary>Sends <paramref name="message"/> to the server from the SDK's main thread.</summary>
     static void SendOnMainThread(MetaMessage message) =>
         MetaplaySDK.RunOnMainThreadAsync(() => MetaplaySDK.MessageDispatcher.SendMessage(message));
 
-    /// <summary>Executes <paramref name="action"/> on the session's player context, or returns null if there is no session.</summary>
-    MetaActionResult? ExecuteInSession(PlayerActionBase action) => Session?.PlayerContext?.ExecuteAction(action);
-
     /// <summary>Sets the matchmaking status and the seat deadline together.</summary>
     void SetMatchmaking(MatchmakingStatus status, MetaTime seatDeadlineAt)
     {
         MatchmakingStatus         = status;
         MatchmakingSeatDeadlineAt = seatDeadlineAt;
-    }
-
-    /// <summary>
-    /// Called when the match timeline diverged from the server's, detected by the match's per-operation checksums.
-    /// Closes the connection with an <see cref="EntityTimelineDesyncConnectionError"/>, so the shell shows a
-    /// re-sync message and reconnects to get a fresh model. The SDK default closes with a generic terminal error,
-    /// which the shell shows as an unreachable server without retrying.
-    /// </summary>
-    private void OnMatchTimelineUpdateFailed(EntityId matchId)
-    {
-        Console.WriteLine($"[{GetType().Name}] The timeline of table {matchId} diverged; closing the session to re-sync");
-        MetaplaySDK.Connection?.CloseWithError(new EntityTimelineDesyncConnectionError(matchId));
     }
 
     #region The profile
@@ -176,7 +138,7 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
     void OnRenameResponse(PlayerRenameResponse response)
     {
         LastRenameResponse = response;
-        NotifyStateChanged();
+        RequestRender();
     }
 
     #endregion
@@ -235,20 +197,20 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
     void OnTournamentJoinResponse(TournamentJoinResponse response)
     {
         _tournamentJoinAnswer.Answer(response.RequestId, response);
-        NotifyStateChanged();
+        RequestRender();
     }
 
     void OnTournamentClaimResponse(TournamentClaimResponse response)
     {
         _tournamentClaimAnswer.Answer(response.RequestId, response);
-        NotifyStateChanged();
+        RequestRender();
     }
 
     /// <summary>
-    /// Completes pending tournament join and claim requests with their fallback responses, because no response will
-    /// arrive.
+    /// Completes pending tournament join and claim requests with their fallback responses, because their responses
+    /// will not arrive. The SDK resuming a session does not end it.
     /// </summary>
-    protected override void OnSessionEnded()
+    protected override void OnSessionEnded(ConnectionLostEvent connectionLost)
     {
         _tournamentJoinAnswer.Abandon();
         _tournamentClaimAnswer.Abandon();
@@ -274,8 +236,9 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
         (Session?.PlayerContext as Metaplay.Core.Client.DefaultPlayerClientContext)?.Journal?.ConsistencyChecksEnabled ?? false;
 
     /// <summary>
-    /// Raised when the daily reward claim action runs on this client's player model, which is when the balance and
-    /// streak change. A reveal started from this event therefore always shows a granted reward.
+    /// Raised after the daily reward claim action has run on this client's player model, which is when the balance
+    /// and streak change, with <see cref="ModelChanged"/> raised before it. A reveal started from this event
+    /// therefore always shows a granted reward.
     /// </summary>
     public event Action? DailyRewardClaimed;
 
@@ -306,7 +269,7 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
             DailyRewardRefused?.Invoke(response.Refusal);
 
         // An accepted claim is handled when the grant action runs, in IPlayerModelClientListener.OnDailyRewardClaimed.
-        NotifyStateChanged();
+        RequestRender();
     }
 
     #endregion
@@ -323,7 +286,7 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
         if (string.IsNullOrEmpty(instanceId))
             return null;
 
-        return ExecuteInSession(new PlayerClaimMissionReward(MissionInstanceId.FromString(instanceId)));
+        return ExecuteAction(new PlayerClaimMissionReward(MissionInstanceId.FromString(instanceId)));
     }
 
     void IPlayerModelClientListener.OnMissionsChanged() => NotifyModelChanged();
@@ -342,7 +305,7 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
         if (string.IsNullOrEmpty(dayId))
             return null;
 
-        return ExecuteInSession(new PlayerClaimFirstWeekReward(FirstWeekDayId.FromString(dayId)));
+        return ExecuteAction(new PlayerClaimFirstWeekReward(FirstWeekDayId.FromString(dayId)));
     }
 
     void IPlayerModelClientListener.OnFirstWeekChanged() => NotifyModelChanged();
@@ -363,7 +326,7 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
         if (!MetaGuid.TryParse(eventId, out MetaGuid parsed, out string _))
             return null;
 
-        return ExecuteInSession(new PlayerClaimWeeklyEventReward(parsed));
+        return ExecuteAction(new PlayerClaimWeeklyEventReward(parsed));
     }
 
     void IPlayerModelClientListener.OnWeeklyEventChanged() => NotifyModelChanged();
@@ -383,7 +346,7 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
     /// </summary>
     public MetaActionResult? SetPersonalizedOffersEnabled(bool enabled)
     {
-        return ExecuteInSession(new PlayerSetPersonalizedOffersEnabled(enabled));
+        return ExecuteAction(new PlayerSetPersonalizedOffersEnabled(enabled));
     }
 
     /// <summary>
@@ -393,7 +356,7 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
     /// </summary>
     public void RefreshOffers()
     {
-        ExecuteInSession(new PlayerRefreshMetaOffers(null));
+        ExecuteAction(new PlayerRefreshMetaOffers(null));
     }
 
     /// <summary>
@@ -437,7 +400,7 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
         if (groupInfo == null)
             return null;
 
-        return ExecuteInSession(new PlayerPurchaseInGameCurrencyMetaOffer(groupInfo, offerInfo, analyticsContext: null));
+        return ExecuteAction(new PlayerPurchaseInGameCurrencyMetaOffer(groupInfo, offerInfo, analyticsContext: null));
     }
 
     #endregion
@@ -454,7 +417,7 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
         if (string.IsNullOrEmpty(cosmeticId))
             return null;
 
-        return ExecuteInSession(new PlayerBuyCosmetic(CosmeticId.FromString(cosmeticId)));
+        return ExecuteAction(new PlayerBuyCosmetic(CosmeticId.FromString(cosmeticId)));
     }
 
     /// <summary>
@@ -465,7 +428,7 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
         if (string.IsNullOrEmpty(cosmeticId))
             return null;
 
-        return ExecuteInSession(new PlayerEquipCosmetic(CosmeticId.FromString(cosmeticId)));
+        return ExecuteAction(new PlayerEquipCosmetic(CosmeticId.FromString(cosmeticId)));
     }
 
     /// <summary>
@@ -477,7 +440,7 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
         if (PlayerModel?.Cosmetics.HasUnacknowledged != true)
             return null;
 
-        return ExecuteInSession(new PlayerAcknowledgeCosmetics());
+        return ExecuteAction(new PlayerAcknowledgeCosmetics());
     }
 
     void IPlayerModelClientListener.OnCosmeticsChanged() => NotifyModelChanged();
@@ -487,8 +450,9 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
     #region The spin wheel
 
     /// <summary>
-    /// Raised when the player's spin wheel state changes on this client's model, such as when a spin's token is
-    /// spent and its prize granted. A reveal started from this event therefore always shows a granted result.
+    /// Raised after the player's spin wheel state has changed on this client's model, such as when a spin's token
+    /// is spent and its prize granted, with <see cref="ModelChanged"/> raised before it. A reveal started from this
+    /// event therefore always shows a granted result.
     /// </summary>
     public event Action? WheelSpinResolved;
 
@@ -527,7 +491,7 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
         if (PlayerModel?.SpinWheel.HasPendingReceipt != true)
             return null;
 
-        return ExecuteInSession(new PlayerAcknowledgeWheelSpin());
+        return ExecuteAction(new PlayerAcknowledgeWheelSpin());
     }
 
     void OnWheelSpinResponse(PlayerWheelSpinResponse response)
@@ -536,13 +500,13 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
             WheelSpinRefused?.Invoke(response.Refusal);
 
         // An accepted spin is handled when the settlement action runs, in IPlayerModelClientListener.OnSpinWheelChanged.
-        NotifyStateChanged();
+        RequestRender();
     }
 
     void IPlayerModelClientListener.OnSpinWheelChanged()
     {
+        _wheelSpinResolved = true;
         NotifyModelChanged();
-        WheelSpinResolved?.Invoke();
     }
 
     #endregion
@@ -559,7 +523,7 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
     /// </summary>
     public void ObserveScreenViewed(ShellScreen screen)
     {
-        ExecuteInSession(new PlayerObserveScreenViewed(screen));
+        ExecuteAction(new PlayerObserveScreenViewed(screen));
     }
 
     /// <summary>
@@ -567,7 +531,7 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
     /// </summary>
     public void ObservePromotedEntrySelected(PromotedEntryPlacement placement, ShellScreen from, ShellScreen destination)
     {
-        ExecuteInSession(new PlayerObservePromotedEntrySelected(placement, from, destination));
+        ExecuteAction(new PlayerObservePromotedEntrySelected(placement, from, destination));
     }
 
     #endregion
@@ -577,8 +541,8 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
     /// <summary>
     /// The player's current match, or null if there is none.
     /// <para>
-    /// Virtual, like <see cref="ConnectAsync"/>, so that a host without a session can return a model it built and
-    /// render the real table page in a chosen state.
+    /// Virtual so that a host without a session can return a model it built and render the real table page in a
+    /// chosen state.
     /// </para>
     /// </summary>
     public virtual MatchModel? Match => MatchClient.Phase == MultiplayerEntityClientPhase.EntityActive ? MatchClient.Model : null;
@@ -664,7 +628,7 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
     {
         SetMatchmaking(update.Status, update.SeatDeadlineAt);
         RestartMatchmakingSilenceTimeout();
-        NotifyStateChanged();
+        RequestRender();
     }
 
     /// <summary>
@@ -703,7 +667,7 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
     void OnMoveRefused(MatchMoveRefused refusal)
     {
         LastMoveRefusal = refusal;
-        NotifyStateChanged();
+        RequestRender();
     }
 
     /// <summary>
@@ -722,7 +686,7 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
             SetMatchmaking(MatchmakingStatus.NotSearching, MetaTime.Epoch);
         }
 
-        NotifyStateChanged();
+        RequestRender();
     }
 
     #endregion
@@ -836,7 +800,7 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
 
     /// <summary>
     /// Continues an offer purchase after the server confirms the pending dynamic content. It is checked on every
-    /// client update because the confirmation is a server action without a listener callback, unlike
+    /// frame because the confirmation is a server action without a listener callback, unlike
     /// <c>InAppPurchaseValidated</c> and <c>InAppPurchaseClaimed</c>.
     /// </summary>
     void ContinueOfferPurchaseIfConfirmed()
@@ -853,12 +817,12 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
         if (productInfo == null)
         {
             DemoPurchase = DemoPurchaseState.Failed;
-            NotifyStateChanged();
+            RequestRender();
             return;
         }
 
         DemoPurchase = DemoPurchaseState.Validating;
-        NotifyStateChanged();
+        RequestRender();
 
         // Use a new transaction id for each attempt. The server refuses a transaction id it has already seen, which
         // is how it rejects a replayed receipt.
@@ -866,7 +830,7 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
 
         // Test setting (docs/testing.md, "Live-server tests"): `?demoReceipt=tampered` signs the receipt incorrectly,
         // so a test can check that the server validates receipts and refuses this one.
-        bool shouldTamperReceipt = TestQuerySettings.TryGet(TestQuerySettings.ReadLocationSearch(), "demoReceipt") == "tampered";
+        bool shouldTamperReceipt = TestQuerySettings.TryGet(TestQuerySettings.StartQuery, "demoReceipt") == "tampered";
 
         MetaplaySDK.RunOnMainThreadAsync(() =>
             RunPurchaseAction(new PlayerInAppPurchased(DemoPurchaseReceipt.CreatePurchaseEvent(productInfo, transactionId, shouldTamperReceipt))));
@@ -874,29 +838,25 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
 
     /// <summary>
     /// Executes one purchase flow action and sets <see cref="DemoPurchase"/> to
-    /// <see cref="DemoPurchaseState.Failed"/> if the action is refused locally.
+    /// <see cref="DemoPurchaseState.Failed"/> if the action is refused locally, or does not run.
     /// <para>
     /// An action can be refused locally, for example for a malformed event, a transaction id that is already
-    /// pending, or the SDK's limit on pending purchases. No listener fires in that case, so without this the Shop
-    /// would wait for the server indefinitely.
+    /// pending, or the SDK's limit on pending purchases. It does not run when there is no session, or when it
+    /// throws. No listener fires in these cases, so without this the Shop would wait for the server indefinitely.
     /// </para>
     /// </summary>
     void RunPurchaseAction(PlayerActionBase action)
     {
-        IPlayerClientContext? context = Session?.PlayerContext;
-        if (context == null)
+        MetaActionResult? result = ExecuteAction(action);
+        if (result?.IsSuccess == true)
             return;
 
-        MetaActionResult result = context.ExecuteAction(action);
-        if (result.IsSuccess)
-            return;
-
-        Console.WriteLine($"[{GetType().Name}] {action.GetType().Name} was refused locally: {result}");
+        Console.WriteLine($"[{GetType().Name}] {action.GetType().Name} was refused locally: {result?.ToString() ?? "no session, or the action threw"}");
 
         if (DemoPurchase is DemoPurchaseState.Preparing or DemoPurchaseState.Validating)
         {
             DemoPurchase = DemoPurchaseState.Failed;
-            NotifyStateChanged();
+            RequestRender();
         }
     }
 
@@ -959,7 +919,7 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
 
         // Test setting: `?demoClaim=skip` leaves a validated purchase unclaimed, as a closed tab would, so a test can
         // check that the next session's FinishPendingInAppPurchases claims it.
-        if (TestQuerySettings.TryGet(TestQuerySettings.ReadLocationSearch(), "demoClaim") == "skip")
+        if (TestQuerySettings.TryGet(TestQuerySettings.StartQuery, "demoClaim") == "skip")
         {
             Console.WriteLine($"[{GetType().Name}] Leaving purchase {ev.TransactionId} unclaimed (demoClaim=skip)");
             return;
@@ -996,7 +956,7 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
             return;
 
         DemoPurchase = state;
-        NotifyStateChanged();
+        RequestRender();
     }
 
     #endregion
@@ -1007,17 +967,50 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
     /// Raised when displayed player model state changes, such as the record, name, a balance or the tournament
     /// state, and when a session starts.
     /// <para>
-    /// Unlike <see cref="MetaplayClientServiceBase{T}.OnStateChanged"/>, which is raised on every client update,
-    /// it is raised only on these changes. <see cref="MetaStateService"/> uses it to rebuild its snapshot.
+    /// Unlike <see cref="MetaplayClientServiceBase{T}.OnStateChanged"/>, which is raised on every frame,
+    /// it is raised only on these changes. <see cref="MetaStateService"/> uses it to rebuild its snapshot. It is
+    /// raised with <c>OnStateChanged</c> after the action or tick that made the change, not from inside it.
     /// </para>
     /// </summary>
     public event Action? ModelChanged;
 
-    /// <summary>Raises <c>OnStateChanged</c> and <see cref="ModelChanged"/>.</summary>
+    /// <summary>Whether a listener reported a model change that <see cref="ModelChanged"/> has not been raised for.</summary>
+    bool _modelChanged;
+
+    /// <summary>Whether <see cref="DailyRewardClaimed"/> and <see cref="WheelSpinResolved"/> are due.</summary>
+    bool _dailyRewardClaimed;
+    bool _wheelSpinResolved;
+
+    /// <summary>Requests a render, with <see cref="ModelChanged"/> raised along with it.</summary>
     private void NotifyModelChanged()
     {
-        NotifyStateChanged();
-        ModelChanged?.Invoke();
+        _modelChanged = true;
+        RequestRender();
+    }
+
+    /// <summary>
+    /// Raises <see cref="ModelChanged"/> when a listener reported a change since it was last raised, and then the
+    /// listeners' own events, whose subscribers read the state that <see cref="ModelChanged"/> rebuilds.
+    /// </summary>
+    void RaiseModelEvents()
+    {
+        if (_modelChanged)
+        {
+            _modelChanged = false;
+            ModelChanged?.Invoke();
+        }
+
+        if (_dailyRewardClaimed)
+        {
+            _dailyRewardClaimed = false;
+            DailyRewardClaimed?.Invoke();
+        }
+
+        if (_wheelSpinResolved)
+        {
+            _wheelSpinResolved = false;
+            WheelSpinResolved?.Invoke();
+        }
     }
 
     void IPlayerModelClientListener.OnRecordChanged() => NotifyModelChanged();
@@ -1027,13 +1020,9 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
 
     void IPlayerModelClientListener.OnDailyRewardClaimed()
     {
+        _dailyRewardClaimed = true;
         NotifyModelChanged();
-        DailyRewardClaimed?.Invoke();
     }
-
-    void IMatchModelClientListener.OnCardPlayed(int seat, Card card) => NotifyStateChanged();
-    void IMatchModelClientListener.OnTrickResolved(int winnerSeat) => NotifyStateChanged();
-    void IMatchModelClientListener.OnMatchEnded() => NotifyStateChanged();
 
     #endregion
 }

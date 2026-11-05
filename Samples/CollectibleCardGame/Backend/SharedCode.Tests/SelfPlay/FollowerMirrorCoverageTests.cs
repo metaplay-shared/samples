@@ -12,14 +12,14 @@ namespace Game.Logic.Tests
     /// The bulk sweep mirrors the actions a game produces when the seats play it, which is most of them and
     /// reads like all of them. It is not all of them: the actions that only exist under a clock — a released
     /// beat, a lapsed mulligan deadline, a reserve extension — never occur at zero timings, and the table's
-    /// own actions are the actor's rather than a seat's, so no seat-driven harness issues one. The first
-    /// version of the refactor mirrored five of the block and the proof statement said "every action".
+    /// own actions are the actor's rather than a seat's, so no seat-driven harness issues one.
     /// </para>
     /// <para>
     /// So the coverage is asserted rather than described. <see cref="FollowerMirror"/> records every action
     /// type any mirror in the run has executed against a follower, and
     /// <see cref="EveryMatchActionInTheBlockHasBeenRunAgainstAFollower"/> requires the whole 5100–5149 block
-    /// to appear in it. A new action cannot join the registry without a mirrored path that runs it.
+    /// to appear in it, driving each of the paths below itself. A new action cannot join the registry without
+    /// a mirrored path that runs it.
     /// </para>
     /// </summary>
     [TestFixture]
@@ -34,8 +34,7 @@ namespace Game.Logic.Tests
         /// <see cref="MatchMulliganResolve"/> exists as an action of its own: when both seats submit, the
         /// resolution happens inside the second <see cref="MatchMulliganSubmit"/>.
         /// </summary>
-        [Test]
-        public void ALapsedMulliganDeadlineIsMirrored()
+        static void ALapsedMulliganDeadlineIsMirrored()
         {
             MatchEngine engine = DealtAtDefaultTimings(seed: 40_001ul);
 
@@ -51,8 +50,7 @@ namespace Game.Logic.Tests
         /// A turn deadline that lapses for a seat which has already acted and still has reserve, which is the
         /// only way <see cref="MatchExtendReserve"/> exists at all: the extension is gated on both.
         /// </summary>
-        [Test]
-        public void AReserveExtensionIsMirrored()
+        static void AReserveExtensionIsMirrored()
         {
             MatchEngine engine = PlayingAtDefaultTimings(seed: 40_002ul);
 
@@ -71,8 +69,7 @@ namespace Game.Logic.Tests
         /// leak once sat inside undetected, because no mirrored path ran it — and it is the one action kept
         /// against a delete list, so it is the one that most needs a mirrored path of its own.
         /// </summary>
-        [Test]
-        public void TheClockPushIsMirrored()
+        static void TheClockPushIsMirrored()
         {
             // A deal walked into its first turn, because an armed deadline is what the push has to move and a
             // Scenario builds a state rather than walking into one.
@@ -92,11 +89,9 @@ namespace Game.Logic.Tests
 
         /// <summary>
         /// The seven actions the actor issues about the table rather than about the game. They are public in
-        /// full and every one of them is checksummed, so a follower runs each of them too — and until this
-        /// fixture existed, none of them had ever been run against one.
+        /// full and every one of them is checksummed, so a follower runs each of them too.
         /// </summary>
-        [Test]
-        public void EveryTableActionIsMirrored()
+        static void EveryTableActionIsMirrored()
         {
             MatchEngine engine = DealtAtDefaultTimings(seed: 40_004ul);
 
@@ -112,8 +107,7 @@ namespace Game.Logic.Tests
                 Assert.That(FollowerMirror.HasApplied(action.GetType()), Is.True, $"{action.GetType().Name} never reached a follower");
         }
 
-        [Test]
-        public void DeveloperShortcutIsMirrored()
+        static void DeveloperShortcutIsMirrored()
         {
             MatchEngine engine = MatchEngine.Create(new MatchSetup(40009, Config, MatchTimings.Default,
                 TestDecks.Standard(Config), TestDecks.Alternate(Config)));
@@ -165,8 +159,7 @@ namespace Game.Logic.Tests
         /// played game cannot promise is that <em>this</em> run reached an attack or a peek, and a coverage
         /// ratchet that depends on a seed's luck is a ratchet that fails on somebody else's Tuesday.
         /// </summary>
-        [Test]
-        public void EveryActionASeatCanTakeIsMirrored()
+        static void EveryActionASeatCanTakeIsMirrored()
         {
             // A mulligan submitted by one seat, which is also the deal's first submittable action.
             MatchEngine dealt = DealtAtDefaultTimings(seed: 40_005ul);

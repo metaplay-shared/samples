@@ -36,8 +36,7 @@ namespace Game.Logic.Tests
                 Assert.That(result.Cause, Is.EqualTo(MatchEndCause.DeveloperWin));
                 Assert.That(match.Pacing.DeadlineAt, Is.Null);
                 Assert.That(MatchHeistPolicy.PhaseRuns(match.Stakes, record, action.Cards0), Is.True);
-                // The guard against a replay lives in ServerPrepare now: the action itself no longer
-                // re-asks, because a follower re-running it has already been validated by the leader.
+                // A second ServerPrepare refuses the replay.
                 Assert.That(action.ServerPrepare(match).IsSuccess, Is.False);
             });
         }

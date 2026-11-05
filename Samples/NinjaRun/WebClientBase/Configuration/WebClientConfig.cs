@@ -1,3 +1,3 @@
 namespace WebClientBase.Configuration;
 
-public record WebClientConfig(string AppTitle, ThemeColors Theme);
+public record WebClientConfig(string AppTitle, string? LogoEmoji, ThemeColors Theme);

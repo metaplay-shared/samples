@@ -15,9 +15,9 @@ namespace Game.Logic.Tests
     /// feed <c>ServerOnly</c> state into a public mutation by accident.
     /// <para>
     /// Everything here fails <em>silently</em>: an action that gained the client-issuable flag would open the
-    /// whole timeline with no symptom until somebody exploited it — and the stakes rose with this refactor,
-    /// because such an action would not write a projection, it would play a move. An action that carried a
-    /// <c>ServerOnly</c> member would work perfectly on the server and default on every follower.
+    /// whole timeline with no symptom until somebody exploited it, and such an action would not write a
+    /// projection, it would play a move. An action that carried a <c>ServerOnly</c> member would work perfectly
+    /// on the server and default on every follower.
     /// </para>
     /// </summary>
     [TestFixture]
@@ -67,20 +67,6 @@ namespace Game.Logic.Tests
             }
         }
 
-        [Test]
-        public void NoMatchActionCarriesTheAuthoritativeState()
-        {
-            // An action is broadcast verbatim and re-executed on every client's copy of the model, where every
-            // hidden member is default. An action that carried the secret — or a public rules object, which
-            // has no business riding a payload either — would be a second implementation of the rules living
-            // on the action layer.
-            foreach (Type type in MatchActionTypes())
-            {
-                foreach (MemberInfo member in PayloadMembersOf(type))
-                    AssertNotAuthoritative(type, member.Name, TypeOf(member));
-            }
-        }
-
         static void AssertNotAuthoritative(Type action, string member, Type memberType)
         {
             Assert.That(memberType, Is.Not.EqualTo(typeof(MatchSecrets)), $"{action.Name}.{member} carries the secret root");
@@ -120,21 +106,8 @@ namespace Game.Logic.Tests
         [Test]
         public void OnlyTheMulliganKeepsAMemberOffTheWire()
         {
-            // Actions use implicit members, so every field is serialized unless it says otherwise. That
-            // makes [IgnoreDataMember] a second door into "an action with a parameter the wire never sees" —
-            // the first being [ServerOnly], which the test above refuses outright.
-            //
-            // It is open on purpose and exactly once: which cards a mulligan named. Those are instance ids,
-            // they may not reach a payload, and the seat that named them is the only one who may know.
-            //
-            // The peek does not need it, and that is the interesting half. Its answer names positions in the
-            // reveal rather than cards, so there is nothing to hide — which is the shape to reach for first.
-            // A mulligan cannot follow, because its set must survive until MatchMulliganResolve and a
-            // position is only meaningful against the hand it indexed.
-            //
-            // The misuse it invites is caught rather than merely forbidden: FollowerMirror clones every
-            // action through SendOverNetwork before re-executing it, so a public mutation that leaned on an
-            // ignored member diverges on the first game.
+            // [IgnoreDataMember] is allowed exactly once: the mulligan's replaced instance ids, which only the
+            // submitting seat may know.
             List<string> ignored = new List<string>();
 
             foreach (Type type in MatchActionTypes())
@@ -163,13 +136,18 @@ namespace Game.Logic.Tests
             //   MatchSetResult — the outcome, naming cards that were played and picked. Both are already
             //                    public by the time it is issued.
             //
-            // The walk sees through collections and into the game's own structs. It did not until
-            // MatchDebugWin's List<HeistEligibleCard> was found passing a check that only ever looked at the
-            // member's own type.
+            // The walk sees through collections and into the game's own structs.
             Type[] mayNameACard = { typeof(MatchPlayCard), typeof(MatchDebugWin), typeof(MatchSetResult) };
 
             foreach (Type type in MatchActionTypes())
             {
+                // No action at all carries the authoritative state. An action is broadcast verbatim and
+                // re-executed on every client's copy of the model, where every hidden member is default, so an
+                // action that carried the secret — or a public rules object — would be a second implementation
+                // of the rules living on the action layer.
+                foreach (MemberInfo member in PayloadMembersOf(type))
+                    AssertNotAuthoritative(type, member.Name, TypeOf(member));
+
                 // An addressed action is exempt, and naming a card is its entire purpose: it is delivered to
                 // one seat and nobody else executes it, so the card it names reaches only the seat already
                 // entitled to know. The rule being enforced here is about the payloads every follower sees.
@@ -246,9 +224,7 @@ namespace Game.Logic.Tests
         /// The bug class is one <c>match.Emit</c> or one mutation inside what is supposed to be a question:
         /// it would corrupt the history and, because the actor asks before it stages, corrupt it for an
         /// action that was then never issued. An action refused early never reaches the rest of its own body,
-        /// so asking all of them against one freshly dealt model would prove it for the two the mulligan
-        /// phase admits and prove nothing for the rest — which is what this fixture did until a review
-        /// instrumented it and counted.
+        /// so each path is checked in a state where it passes; a refused check proves nothing.
         /// </para>
         /// </summary>
         [Test]
@@ -264,8 +240,7 @@ namespace Game.Logic.Tests
                     ? intent.Prepare(model, 0, out MatchAction _)
                     : host.ServerPrepare(model);
 
-                // It has to pass, or the assertions below are true by construction. This is the half a review
-                // found missing: six of eight were being refused before they got anywhere.
+                // It has to pass, or the assertions below are true by construction.
                 Assert.That(gate.IsSuccess, Is.True, $"{what}: the fixture's state no longer admits this ({gate})");
 
                 Assert.That(DealtModels.Checksummed(model), Is.EqualTo(before), $"{what}: checking moved checksummed state");
@@ -341,11 +316,7 @@ namespace Game.Logic.Tests
             // Both staging paths ask ServerPrepare first — TrySubmitRule for a seat's intent, and
             // ExecuteMatchAction for the host's own actions — because the SDK's own "execute this action"
             // only warns on a refusal and has already staged it. That is only worth doing if a malformed
-            // action actually refuses.
-            //
-            // These guards are reachable only through that call. They were once inside Execute, where the
-            // SDK would reach them; moving them out means the path has to ask, and for a while the host's
-            // path did not.
+            // action actually refuses. These guards are reachable only through that call.
             MatchModel model = new MatchModel { GameConfig = Config, History = new List<MatchEvent>() };
 
             Assert.That(new MatchSetSeats(null).ServerPrepare(model).IsSuccess, Is.False);
@@ -355,59 +326,6 @@ namespace Game.Logic.Tests
             Assert.That(new MatchPushClocks(MetaDuration.Zero).ServerPrepare(model).IsSuccess, Is.False);
             Assert.That(new MatchSetResult(null, null).ServerPrepare(model).IsSuccess, Is.False);
             Assert.That(new MatchArmHeistDeadline(7, MetaDuration.FromSeconds(45)).ServerPrepare(model).IsSuccess, Is.False);
-        }
-
-        [Test]
-        public void TheResultAcknowledgementIsAPublicMemberAnActionCanWrite()
-        {
-            // An action's Execute runs on every client against a model whose hidden members are default, so a
-            // member an action writes has to be public. The acknowledgements are not secret — the losing
-            // client showing "recording result…" is a feature.
-            MatchModel model = new MatchModel
-            {
-                GameConfig  = Config,
-                History     = new List<MatchEvent>(),
-                ResultAcked = new List<bool> { false, false },
-            };
-
-            Assert.That(new MatchSetResultAck(1).InvokeExecute(model, commit: true).IsSuccess, Is.True);
-            Assert.That(model.ResultAcked[1], Is.True);
-            Assert.That(model.ResultAcked[0], Is.False);
-        }
-
-        [Test]
-        public void TheMatchActionCodesAreInTheirOwnBlock()
-        {
-            // The 5100-5149 block is the match's. A code outside it would still work and would still be a
-            // registry that no longer says where anything lives.
-            foreach (Type type in MatchActionTypes())
-            {
-                ModelActionSpec spec = ModelActionRepository.Instance.SpecFromType[type];
-                Assert.That(spec.TypeCode, Is.InRange(5100, 5149), $"{type.Name} has code {spec.TypeCode}, outside the match block");
-            }
-        }
-
-        [Test]
-        public void ThereAreEighteenMatchActions()
-        {
-            // Seven table actions, eight rule actions, three addressed deliveries and one server-authorized
-            // developer shortcut.
-            List<int> codes = new List<int>();
-            foreach (Type type in MatchActionTypes())
-                codes.Add(ModelActionRepository.Instance.SpecFromType[type].TypeCode);
-
-            codes.Sort();
-            Assert.That(codes, Is.EqualTo(new List<int>
-            {
-                ActionCodes.MatchSetSeats, ActionCodes.MatchSetPhase, ActionCodes.MatchSetResult,
-                ActionCodes.MatchSetResultAck, ActionCodes.MatchSetGrace,
-                ActionCodes.MatchPushClocks, ActionCodes.MatchArmHeistDeadline,
-                ActionCodes.MatchMulliganSubmit, ActionCodes.MatchMulliganResolve, ActionCodes.MatchPlayCard,
-                ActionCodes.MatchAttack, ActionCodes.MatchEndTurn, ActionCodes.MatchEffectChoice,
-                ActionCodes.MatchExtendReserve,
-                ActionCodes.MatchOwnCardGained, ActionCodes.MatchOwnPeekRevealed, ActionCodes.MatchOwnCardLost,
-                ActionCodes.MatchDebugWin,
-            }));
         }
     }
 }

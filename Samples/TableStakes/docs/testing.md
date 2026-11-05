@@ -12,6 +12,7 @@ rules that keep tests deterministic. The commands to run each layer and the harn
 |---|---|---|
 | Shared-code unit tests | `Backend/SharedCode.Tests` | Nothing |
 | Server unit tests | `Backend/Server.Tests` | Nothing |
+| Game config build tests | `tools/GameConfigGen.Tests` | Nothing |
 | Pure client tests | `WebClient.Tests` | Nothing |
 | Render tests (bUnit) | `WebClient.Tests` | Nothing |
 | E2E tests (Playwright) | `WebClient.Tests` | Chromium, the web client, and a game server for most fixtures |
@@ -37,21 +38,29 @@ puts the server under traffic that no test produces.
 `Backend/SharedCode.Tests` runs against the server's build of `SharedCode/`. Its game config is built in code
 ([`TestGameConfig.cs`](../Backend/SharedCode.Tests/TestGameConfig.cs)), not read from the archives. This layer
 covers the match rules and turn flow, the bot and matchmaking policies, the player model with every live-service
-feature, game config parsing and validation, and the analytics contract.
+feature, game config parsing and validation, and the analytics contract. The test host
+([`TestMatchHost.cs`](../Backend/SharedCode.Tests/TestMatchHost.cs)) replays every match action it publishes on a
+client's copy of the model and fails when the checksums differ, so every turn-flow test also checks that no action
+reads server-only state.
 
 ### Server unit tests
 
 `Backend/Server.Tests` holds pure decisions that use a server-only type, such as the player actor's in-flight claim
-tracking, and checks that need the server assembly loaded, such as the comparison of the committed config archives with
-the sheets ([`game-config.md`](game-config.md#checking-the-committed-archives)). Logic that needs no server type belongs
-in `SharedCode/` and the layer above.
+tracking, and checks that need the server assembly loaded. Logic that needs no server type belongs in `SharedCode/` and
+the layer above. It reads nothing outside `Backend/`, because `metaplay test integration` runs it in an image that holds
+only `Backend/` and `SharedCode/`.
+
+### Game config build tests
+
+`tools/GameConfigGen.Tests` builds the sheets in `GameConfigSource/` and compares the result with the committed archives
+([`game-config.md`](game-config.md#checking-the-committed-archives)). It is separate from `Backend/Server.Tests` because
+it reads the sheets, the committed client archive and the build tool, which are outside `Backend/`.
 
 ### Pure client tests
 
 A `net10.0` test project cannot reference the `net10.0-browser` projects `WebClient` and `WebClientBase`, so
 `WebClient.Tests` compiles their sources in (see [`WebClient.Tests.csproj`](../WebClient.Tests/WebClient.Tests.csproj)).
-The pure tests cover the meta shell's policies and fixtures ([`meta-shell.md`](meta-shell.md)) and the connection
-trouble policy.
+The pure tests cover the meta shell's policies and fixtures ([`meta-shell.md`](meta-shell.md)).
 
 ### Render tests
 
@@ -67,61 +76,35 @@ assertions belong in this layer, so one that fails in the E2E suite moves here.
 
 ### E2E tests
 
-Every browser fixture derives from [`PlaywrightPageTest`](../WebClient.Tests/PlaywrightPageTest.cs), which derives
-from Playwright's `PageTest`. Fixtures that exercise only the client run against offline mode and need only the web
-client. The rest need a live server. The suite covers what needs a real browser (computed CSS, contrast, layout, focus
-order, animation timing, refresh and restore) and what the server decides (matchmaking, bot fill, reconnects,
-purchases, and each feature's actions).
+Every browser fixture derives from [`GamePageTest`](../WebClient.Tests/GamePageTest.cs), which derives from
+Playwright's `PageTest`, mostly through [`PlaywrightPageTest`](../WebClient.Tests/PlaywrightPageTest.cs), which adds
+this game's helpers. Fixtures that exercise only the client run against offline mode and need only the web client.
+They call `GamePageTest.ExpectNoGameServerConnections`, which fails a test whose page connected to the game server. The rest need a live server. The suite covers what needs a real browser (computed CSS, contrast,
+layout, focus order, animation timing, refresh and restore) and what the server decides (matchmaking, bot fill,
+reconnects, purchases, and each feature's actions). [`CloudHostingTests`](../WebClient.Tests/CloudHostingTests.cs)
+serve the client under a cloud host name and check that it connects to the server its endpoints file names, and only
+to that ([how the client finds its game server](https://github.com/metaplay-shared/blazor-starter-project/blob/main/docs/publishing.md#how-the-client-finds-its-game-server)).
 
 ## The E2E harness
 
-The default ports belong to the main checkout. A second stack on the defaults would fail to bind, or take the ports so
-that browser tabs on the main checkout's client talk to a feature branch. The direct transport's UDP port fails
-silently: it binds with `SO_REUSEADDR`, so two local servers both bind it and only one receives datagrams. So a
-worktree runs the suite through [`tools/run-e2e.sh`](../tools/run-e2e.sh). It wraps the harness,
-[`tools/run-e2e.py`](../tools/run-e2e.py), which refuses to run in the main checkout.
-
-A run builds the server, the web client and the test project in one build, starts a server and a client on free ports
-with a fresh database, runs the suite, and stops them. A port that another process takes before the server binds it
-is retried with new ports.
-
-**Tests find the stack through environment variables** that the harness sets and `PlaywrightPageTest` reads. The
-client reads its server ports from the page URL at boot, and in-app navigation drops them. Build every URL with
-`ClientUrl(route, query)` and reload with `ReloadOnStackAsync(page)` instead of Playwright's `ReloadAsync`. A URL
-built by hand boots a client that connects to whatever holds the default ports.
+The browser tests run through the Blazor starter project's E2E harness, [`run_e2e.py`](../run_e2e.py), configured
+by [`e2e.toml`](../e2e.toml). The starter project's [testing guide](https://github.com/metaplay-shared/blazor-starter-project/blob/main/docs/testing.md#the-e2e-harness) describes
+it: free ports, the `E2E_*` variables, admission and worker sizing, trimmed mode, parallel test cases, and the checks
+around the tests. The client reads its server ports from the page URL at boot, and in-app navigation drops them, so
+build every URL with `ClientUrl(route, query)` and reload with `ReloadOnStackAsync(page)` instead of Playwright's
+`ReloadAsync`.
 
 **Pacing.** The harness shortens a few server windows on the command line, such as the bot think delay, the trick
 pause and the matchmaking fill wait. No fixture asserts their values. A fixture that has to wait out the fill wait
-reads the value the harness exports to the tests (`PlaywrightPageTest.FillWaitMs`) and sizes its wait from it. So
-shortening them does not change what a fixture proves. Windows that a fixture measures itself against keep their
+reads the value from the server arguments the harness exports to the tests (`PlaywrightPageTest.FillWaitMs`) and
+sizes its wait from it. So shortening them does not change what a fixture proves. Windows that a fixture measures itself against keep their
 shipped values: the move deadline, the grace windows and the join window. Two guards enforce this.
-`SANCTIONED_PACING_KEYS` in `run-e2e.py` lists the options the harness may shorten, and the harness exits with an
-error if it sets any other. `ShippedTimingDefaultsTests` pins the shipped defaults, so a changed default fails there
-instead of silently changing what a fixture measures. To shorten another window, first export its value to the tests
-the same way, and size the fixture from it. The suite passes at either pacing.
-
-**Admission and workers.** The harness limits how many runs are active on one host at once, because a cold WASM boot
-starved of CPU fails with "An unhandled error has occurred". It sizes the NUnit worker count from the host's cores and
-the number of active runs. Concurrent runs belong in different worktrees, because runs from one worktree share build
-output.
-
-**Trimmed mode** publishes the client and serves the published files, so it tests a Release, IL-trimmed build
-([`web-client.md`](web-client.md#the-published-client)). A failure there can come from either.
+`server.testArgsAllowed` in `e2e.toml` lists the options the harness may shorten, and the harness exits with an
+error if `server.testArgs` sets any other. `ShippedTimingDefaultsTests` pins the shipped defaults, so a changed
+default fails there instead of silently changing what a fixture measures. To shorten another window, first have the
+fixture read its value from `E2E_SERVER_ARGS` the same way, and size the fixture from it. The suite passes at either pacing.
 
 ## How the E2E suite runs
-
-### Parallel execution
-
-The suite runs test cases in parallel, not only fixtures, with a new fixture instance per test case, because
-`PageTest` keeps its page, context and browser in instance fields. A `[OneTimeSetUp]` must therefore be `static`.
-
-### Checks around every test
-
-- **Client identity.** [`ServedClientBuildCheck`](../WebClient.Tests/ServedClientBuildCheck.cs) compares the served
-  client with the one this tree built, and fails the fixture on a mismatch, so a test never runs against an old or
-  foreign client.
-- **Client errors.** A teardown fails a passing test if Blazor's error bar is showing, because the app stops rendering
-  once it throws. For a failed test it prints the client's console errors, page exceptions and failed requests.
 
 ### Locks for shared server resources
 

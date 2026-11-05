@@ -36,7 +36,7 @@ public abstract class BunitPageTest : Bunit.TestContext
         Services.AddScoped<MetaStateService>(sp =>
             _metaState = new MetaStateService(sp.GetRequiredService<NavigationManager>(), sp.GetRequiredService<NoSessionClientService>()));
         Services.AddScoped<WalletBurstService>(sp =>
-            _walletBurst = new WalletBurstService(sp.GetRequiredService<NavigationManager>()));
+            _walletBurst = new WalletBurstService());
 
         string query = scenario is null ? "" : $"?meta={scenario}";
         FakeNavigationManager nav = (FakeNavigationManager)Services.GetRequiredService<NavigationManager>();

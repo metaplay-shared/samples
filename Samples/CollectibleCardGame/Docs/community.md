@@ -8,7 +8,8 @@ The activity strip counts online players, ranked queue tickets and connected hum
 Practice and the Heist phase count as matches; finished tables and bot opponents do not. A disconnected seat covered
 by a bot does not count until its owner reconnects. Counts are sampled, not a transactionally consistent partition:
 online uses the SDK's cluster-wide concurrent-player estimate, which can lag a disconnect by about a minute. The
-client refreshes every ten seconds; queue/online reads are cached server-side for five seconds. A stale or failed
+client refreshes every ten seconds; queue/online reads are cached server-side for five seconds, and a player's
+requests are spaced at least five seconds apart (both are `Community:` runtime options). A stale or failed
 response shows an unavailable state rather than an invented zero. Offline mode offers neither feature.
 
 ## Server ownership
@@ -35,6 +36,6 @@ or ranked result. Neither collection ownership nor ranked player records depend 
 ## Validation
 
 `Backend/Server.Tests/CommunityTests.cs` covers ordering, ties, own position beyond the displayed page, falling ratings,
-duplicate/stale updates and population lease expiry. `Client.Tests/CommunityTests.cs` owns an isolated server and
+duplicate/stale updates and population lease expiry. `WebClient.Tests/CommunityTests.cs` owns an isolated server and
 SQLite directory and drives two browser accounts through queue entry/cancellation, a ranked bot match, its result and
 a server restart. The ranked account remains offline after restart so the observer must read the persisted ladder.

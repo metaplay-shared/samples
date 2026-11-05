@@ -6,7 +6,7 @@
 
 @* The animation of claimed currency flying from the reward icons to the HUD balances, the last step of the
    shared reward flow (docs/meta-shell.md, "The shared reward flow"). It is drawn once per claim, above
-   everything except the connection shell.
+   everything except WebClientBase's connection dialog.
 
    WalletBurstPlan decides the sprites and their timing, and wallet-burst.js measures the screen positions, so
    this component only renders. Sprites animate only transform and opacity, so the browser needs no layout.

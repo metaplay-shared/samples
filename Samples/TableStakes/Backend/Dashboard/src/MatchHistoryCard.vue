@@ -9,28 +9,30 @@ MListCard(
   :error="playerError"
   data-testid="player-match-history-card"
   )
-  template(#item="{ item: match }")
-    MListItem {{ match.matchId }}
-      template(#top-right)
-        MBadge(
-          v-if="match.isWin"
-          variant="success"
-          ) Win
-        MBadge(
-          v-else
-          variant="neutral"
-          ) Place {{ match.position + 1 }}
+  template(#default="{ entries }")
+    MItemList(:entries="entries")
+      template(#item="{ item: match }")
+        MListItem {{ match.matchId }}
+          template(#top-right)
+            MBadge(
+              v-if="match.isWin"
+              variant="success"
+              ) Win
+            MBadge(
+              v-else
+              variant="neutral"
+              ) Place {{ match.position + 1 }}
 
-      template(#bottom-left)
-        | {{ match.tricksWon }} tricks · {{ match.humanOpponents }} human opponents
-        | · ended #[MDateTime(:instant="DateTime.fromISO(match.endedAt)")]
+          template(#bottom-left)
+            | {{ match.tricksWon }} tricks · {{ match.humanOpponents }} human opponents
+            | · ended #[MDateTime(:instant="DateTime.fromISO(match.endedAt)")]
 
-      template(#bottom-right)
-        MBadge(
-          v-if="!match.finishedByPlayer"
-          variant="warning"
-          tooltip="The game ended without the player at the table."
-          ) Abandoned
+          template(#bottom-right)
+            MBadge(
+              v-if="!match.finishedByPlayer"
+              variant="warning"
+              tooltip="The game ended without the player at the table."
+              ) Abandoned
 </template>
 
 <script lang="ts" setup>
@@ -38,8 +40,7 @@ import { DateTime } from 'luxon'
 import { computed } from 'vue'
 
 import { getSinglePlayerSubscriptionOptions } from '@metaplay/core'
-import { MBadge, MDateTime, MListItem } from '@metaplay/meta-ui-next'
-import { MListCard, makeListCardBuilder } from '@metaplay/meta-ui-next/unstable'
+import { MBadge, MDateTime, MListItem, MItemList, MListCard, makeListCardBuilder } from '@metaplay/meta-ui-next'
 import { useSubscription } from '@metaplay/subscriptions'
 
 const props = defineProps<{

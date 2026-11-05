@@ -74,6 +74,14 @@ namespace Game.Server.Match
         [MetaDescription("How much a bot action's delay may vary above its floor.")]
         public TimeSpan BotActionDelayJitter { get; private set; } = TimeSpan.FromMilliseconds(600);
 
+        // ---- development only ----
+
+        [MetaDescription("Development only: the seed every table is dealt from instead of a cryptographic one, so a test suite plays the same game on every run. Set with Match:FixedBotSeed. Zero draws a seed per table.")]
+        public ulong FixedDealSeed { get; private set; } = 0;
+
+        [MetaDescription("Development only: the bot seed every table gets beside Match:FixedDealSeed. Zero draws a seed per table.")]
+        public ulong FixedBotSeed { get; private set; } = 0;
+
         // ---- the Heist ----
 
         [MetaDescription("How long a present winner has to make the Heist pick.")]
@@ -95,6 +103,16 @@ namespace Game.Server.Match
         {
             if (PresentationAllowance < TimeSpan.Zero || PresentationAllowance > TimeSpan.FromSeconds(10))
                 throw new InvalidOperationException("Match:PresentationAllowance must be between zero and ten seconds.");
+
+            if (FixedDealSeed != 0 || FixedBotSeed != 0)
+            {
+                if (FixedDealSeed == 0 || FixedBotSeed == 0)
+                    throw new InvalidOperationException("Set Match:FixedDealSeed and Match:FixedBotSeed together: either one drawn per table still varies the game.");
+
+                // A fixed deal is no secret, so it must never reach a server real players use.
+                if (!IsLocalEnvironment && !IsDevelopmentEnvironment)
+                    throw new InvalidOperationException("Match:FixedDealSeed and Match:FixedBotSeed are only allowed in a local or development environment.");
+            }
 
             if (StrikesBeforeCover < 0)
             {

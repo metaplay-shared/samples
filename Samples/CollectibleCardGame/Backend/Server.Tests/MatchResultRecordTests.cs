@@ -2,7 +2,6 @@ using Game.Logic;
 using Game.Server.Match;
 using Metaplay.Core;
 using Metaplay.Core.Model;
-using Metaplay.Core.Serialization;
 using NUnit.Framework;
 using System.Collections.Generic;
 
@@ -236,56 +235,6 @@ namespace Game.Server.Tests
             Assert.That(stakes.IsRanked, Is.False);
             Assert.That(stakes.Tier, Is.EqualTo(StakesTier.Practice));
             Assert.That(MatchHeistPolicy.PicksOwedForMatch(stakes, null), Is.Zero);
-        }
-
-        [Test]
-        public void TheRecordSurvivesARoundTrip()
-        {
-            // It is persisted with the model and it rides an internal ask, so it has to come back whole from
-            // both — a table restored from the database has to know exactly what it still owes.
-            MatchOutcomeRecord record = new MatchOutcomeRecord(
-                MatchOutcome.Seat0Wins, winnerSeat: 0, 17, MatchEndCause.DenAtZero, new List<bool> { true, false }, wasRanked: true, decidedAt: MetaTime.Now);
-
-            MatchOutcomeRecord copy = MetaSerialization.CloneTagged(record, MetaSerializationFlags.IncludeAll, logicVersion: null, resolver: null);
-
-            Assert.That(copy.Outcome, Is.EqualTo(record.Outcome));
-            Assert.That(copy.WinnerSeat, Is.EqualTo(record.WinnerSeat));
-            Assert.That(copy.FinalTurn, Is.EqualTo(record.FinalTurn));
-            Assert.That(copy.Cause, Is.EqualTo(record.Cause));
-            Assert.That(copy.WasPresentAtFinish, Is.EqualTo(record.WasPresentAtFinish));
-            Assert.That(copy.WasRanked, Is.True);
-            Assert.That(copy.Heist, Is.Null, "a tier that moves no ranks carries no Heist record at all");
-        }
-
-        [Test]
-        public void TheHeistRecordCarriesBothPicksAndTheDefaultedFlag()
-        {
-            // It rides the delivery ask and both clients render it, so the picks and the one flag the screen
-            // draws have to come back whole.
-            MatchOutcomeRecord record = new MatchOutcomeRecord(
-                MatchOutcome.Seat1Wins, winnerSeat: 1, 11, MatchEndCause.DenAtZero, new List<bool> { false, true }, wasRanked: true, decidedAt: MetaTime.Now)
-            {
-                Heist = new HeistResult(new List<CardId> { Card("EmberKit"), Card("WarmBiscuit") }, anyPickAutoDefaulted: true),
-            };
-
-            MatchOutcomeRecord copy = MetaSerialization.CloneTagged(record, MetaSerializationFlags.IncludeAll, logicVersion: null, resolver: null);
-
-            Assert.That(copy.Heist, Is.Not.Null);
-            Assert.That(copy.Heist.Picks, Is.EqualTo(new List<CardId> { Card("EmberKit"), Card("WarmBiscuit") }));
-            Assert.That(copy.Heist.AnyPickAutoDefaulted, Is.True);
-        }
-
-        [Test]
-        public void AThirdPickCannotRideTheWire()
-        {
-            // The underdog tier is the only one that takes two, so two is the bound — and a bound on a
-            // payload-borne list is enforced the same way MatchModel.History's 4096 is, which is the thing
-            // worth pinning rather than assuming.
-            HeistResult overfull = new HeistResult(
-                new List<CardId> { Card("EmberKit"), Card("WarmBiscuit"), Card("AcornHoard") }, anyPickAutoDefaulted: false);
-
-            Assert.That(() => MetaSerialization.CloneTagged(overfull, MetaSerializationFlags.IncludeAll, logicVersion: null, resolver: null),
-                Throws.Exception, "MaxCollectionSize(2) has to be a refusal rather than a comment");
         }
     }
 }

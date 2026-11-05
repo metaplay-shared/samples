@@ -7,16 +7,23 @@ forms a table, how bots fill empty seats, how cancel and timeouts work, what the
 matchmaker is not used. The match that matchmaking creates is described in [`match.md`](match.md).
 
 The server side is [`MatchmakerActor`](../Backend/Server/Matchmaking/MatchmakerActor.cs) and the player's side is in
-[`PlayerActor`](../Backend/Server/Player/PlayerActor.cs). The decisions are pure functions in
-[`MatchmakingPolicy`](../SharedCode/Matchmaking/MatchmakingPolicy.cs), tested without an actor.
+[`PlayerActor`](../Backend/Server/Player/PlayerActor.cs). The decisions are pure functions, tested without an actor:
+[`MatchmakingPolicy`](../SharedCode/Matchmaking/MatchmakingPolicy.cs) decides when to form a table,
+[`FormationOutcomePolicy`](../SharedCode/Matchmaking/FormationOutcomePolicy.cs) decides what each player of a
+formation is owed, and [`MatchmakingSearchPolicy`](../SharedCode/Matchmaking/MatchmakingSearchPolicy.cs) is the
+player's side of a search.
 
 ## The matchmaker entity
 
 `MatchmakerActor` is a single service entity for the whole cluster. Its queue is in memory only and is not saved, so a
 restart loses every entry. The players' own search timeouts return those players to the menu ([Timeouts](#timeouts)).
 
-The matchmaker handles one message at a time, and each handler runs to completion before the next one starts. A
-formation therefore finishes before any other arrival, cancel or timer is handled.
+A formation waits on other entities: the seat reservations and the table's setup. The matchmaker runs that wait as a
+task with the SDK's `ContinueTaskOnActorContext`, so it keeps handling arrivals, cancels and timers in the meantime,
+and one unresponsive player or slow table setup holds up only its own formation. The task reads no matchmaker state.
+Its result comes back as a message, and the matchmaker applies it in the same one-at-a-time message handling as
+everything else, so only that handling changes the queue. A fixed number of formations may be in flight at once.
+At that limit, the queue waits for one to finish.
 
 ## Queue and fill wait
 
@@ -37,11 +44,15 @@ The matchmaker takes the waiters off the queue before it waits on anything, so a
 formation finds no entry and does nothing. It then reserves a seat with every waiter's player actor, creates the table
 if at least one player accepted, and tells each seated player which table they are at.
 
-The reservation requests go out together, because the matchmaker is a single actor. Asked one at a time, each
-unresponsive player would hold up every other tap, cancel and timer.
+The reservation requests go out together, so a formation waits at most one ask timeout for its answers.
 
-If the active game config has fewer bot names than seats, the waiters go back to the head of the queue and the
-matchmaker tries again shortly. A config the build accepted always has enough names ([`bots.md`](bots.md#names)).
+A player is in at most one formation at a time, so every seat release or assignment their actor receives is from the
+formation it answered. A player who cancels during a formation and taps Play again has the new entry held until that
+formation finishes. It is then queued, unless the formation seated them. A player who cancels during a formation
+and does not tap Play again is not returned to the queue if the mint fails.
+
+If the active game config has fewer bot names than seats, no formation starts, the waiters stay in the queue, and
+the matchmaker tries again shortly. A config the build accepted always has enough names ([`bots.md`](bots.md#names)).
 
 ### Seat reservation
 
@@ -67,7 +78,8 @@ create a second table for the same formation. A table left behind this way has n
 holds nobody up.
 
 If the mint fails, every waiter who accepted or did not answer goes back to the head of the queue with their original
-enqueue time, and the matchmaker tries again shortly.
+enqueue time. No formation starts for a short delay after that, whatever wakes the queue, because the returned waiters
+are past their fill wait and an immediate retry would fail the same way.
 
 The table is created before any seat is assigned, so a player is never pointed at a table that does not exist.
 
@@ -109,7 +121,9 @@ The [`MatchmakingOptions`](../Backend/Server/Matchmaking/MatchmakingOptions.cs) 
 while the step it guards is still running: the fill wait is shorter than the longest a formation may take (the
 reservation ask timeout plus the mint ask timeout), which is shorter than the reservation timeout, which is shorter
 than the search timeout. If the reservation timeout were shorter than a worst-case formation, a player could be told
-the search failed and then be seated a moment later.
+the search failed and then be seated a moment later. These bounds hold while the matchmaker is below its limit of
+formations in flight and not waiting out a failed mint. Beyond that, a player can wait longer than the fill wait for
+their reservation, and the search timeout returns them to the menu.
 
 ## What the client sees
 

@@ -11,38 +11,39 @@ MListCard(
   :error="cosmeticsError ?? playerError"
   data-testid="player-cosmetics-card"
   )
-  template(#item="{ item: cosmetic }")
-    MListItem {{ cosmetic.displayName }}
-      template(#badge)
-        MBadge(variant="primary") {{ cosmetic.kind }}
+  template(#default="{ entries }")
+    MItemList(:entries="entries")
+      template(#item="{ item: cosmetic }")
+        MListItem {{ cosmetic.displayName }}
+          template(#badge)
+            MBadge(variant="primary") {{ cosmetic.kind }}
 
-      template(#top-right)
-        MBadge(
-          v-if="cosmetic.isEquipped"
-          variant="success"
-          ) Equipped
-        MBadge(
-          v-else-if="cosmetic.isUnacknowledged"
-          variant="warning"
-          tooltip="Granted but not yet seen in the game."
-          ) New
+          template(#top-right)
+            MBadge(
+              v-if="cosmetic.isEquipped"
+              variant="success"
+              ) Equipped
+            MBadge(
+              v-else-if="cosmetic.isUnacknowledged"
+              variant="warning"
+              tooltip="Granted but not yet seen in the game."
+              ) New
 
-      template(#bottom-left) {{ cosmetic.id }}
+          template(#bottom-left) {{ cosmetic.id }}
 
-      template(#bottom-right)
-        span(v-if="cosmetic.price") {{ cosmetic.price }}
-        span(
-          v-else
-          class="tw-italic tw-text-neutral-400"
-          ) Not purchasable
+          template(#bottom-right)
+            span(v-if="cosmetic.price") {{ cosmetic.price }}
+            span(
+              v-else
+              class="tw-italic tw-text-neutral-400"
+              ) Not purchasable
 </template>
 
 <script lang="ts" setup>
 import { computed } from 'vue'
 
 import { getGameDataByLibrarySubscriptionOptions, getSinglePlayerSubscriptionOptions } from '@metaplay/core'
-import { MBadge, MListItem } from '@metaplay/meta-ui-next'
-import { MListCard, makeListCardBuilder } from '@metaplay/meta-ui-next/unstable'
+import { MBadge, MListItem, MItemList, MListCard, makeListCardBuilder } from '@metaplay/meta-ui-next'
 import { useSubscription } from '@metaplay/subscriptions'
 
 const props = defineProps<{

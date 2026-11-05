@@ -1,21 +1,20 @@
 using System.Globalization;
-using WebClientBase.Utilities;
 
 namespace WebClient.Integration;
 
 /// <summary>
-/// Parses test settings from the page's query string, such as <c>moveDeadlineMs</c> or <c>botThinkMs</c>. Tests
-/// use them to shorten timers instead of waiting for them (<c>docs/testing.md</c>, "Forcing timers"). All callers
-/// parse through this class so that every setting is read with the same rules.
+/// Parses test settings from a query string, such as <c>moveDeadlineMs</c> or <c>botThinkMs</c>. Tests use them to
+/// shorten timers instead of waiting for them (<c>docs/testing.md</c>, "Forcing timers"). All callers parse through
+/// this class so that every setting is read with the same rules.
 /// <para>
-/// Callers pass the query string in because they get it from different places: the offline server reads
-/// <c>location.search</c> through JSInterop, and components read their <c>NavigationManager</c>.
+/// Callers read the settings from the query the page was loaded with (<see cref="StartQuery"/>), so a setting holds
+/// on every screen the test reaches by in-app navigation.
 /// </para>
 /// </summary>
 public static class TestQuerySettings
 {
-    /// <summary>The browser's current query string, or null off the browser.</summary>
-    public static string ReadLocationSearch() => QueryParameters.ReadLocationSearch();
+    /// <summary>The query string the page was loaded with (<see cref="QueryParameters.AtStart"/>).</summary>
+    public static string StartQuery => QueryParameters.AtStart;
 
     /// <summary>The raw value of <paramref name="key"/> in <paramref name="query"/>, or null if it is absent.</summary>
     public static string TryGet(string query, string key) => QueryParameters.Get(query, key);

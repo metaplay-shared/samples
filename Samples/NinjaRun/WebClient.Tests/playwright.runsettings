@@ -10,6 +10,7 @@
       <SlowMo>500</SlowMo>
       -->
     </LaunchOptions>
+    <!-- How long an Expect assertion retries before it fails, when the assertion sets no Timeout of its own -->
     <ExpectTimeout>5000</ExpectTimeout>
   </Playwright>
 </RunSettings>

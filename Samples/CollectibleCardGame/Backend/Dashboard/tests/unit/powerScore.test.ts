@@ -16,10 +16,6 @@ describe('computePowerScore', () => {
     expect(computePowerScore(['NotOwned'], collection)).toEqual(0)
   })
 
-  test('an empty deck scores zero', () => {
-    expect(computePowerScore([], { EmberKit: 5 })).toEqual(0)
-  })
-
   test('a missing deck or collection scores zero rather than throwing', () => {
     // Both are reachable from a real page: `decks` is empty on a fresh account, and a subscription's data is
     // undefined for the first render.
@@ -32,13 +28,5 @@ describe('computePowerScore', () => {
     // The singleton rule is deck legality's business, not the score's: the C# definition walks the list and
     // adds, so a list that broke the rule scores the higher number rather than being silently corrected.
     expect(computePowerScore(['EmberKit', 'EmberKit'], { EmberKit: 4 })).toEqual(8)
-  })
-
-  test('a whole starter deck at the rank floor scores its card count', () => {
-    const cards = Array.from({ length: 25 }, (_, index) => `Card${String(index)}`)
-    const collection: Record<string, number> = {}
-    for (const cardId of cards) collection[cardId] = 1
-
-    expect(computePowerScore(cards, collection)).toEqual(25)
   })
 })

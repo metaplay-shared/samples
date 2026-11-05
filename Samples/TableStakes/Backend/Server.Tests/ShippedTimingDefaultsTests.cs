@@ -12,8 +12,8 @@ namespace Game.Server.Tests
     /// <para>
     /// E2E tests that depend on a default duration hard-code it or derive a bound from it, because they cannot read
     /// it from the server. If a default changed, those tests would silently test something else, so these tests
-    /// fail instead. The E2E harness may shorten only the durations in <c>SANCTIONED_PACING_KEYS</c>
-    /// (<c>tools/run-e2e.py</c>), and a duration checked here must not be on that list.
+    /// fail instead. The E2E harness may shorten only the durations in <c>server.testArgsAllowed</c>
+    /// (<c>e2e.toml</c>), and a duration checked here must not be on that list.
     /// </para>
     /// </summary>
     [TestFixture]

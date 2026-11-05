@@ -68,7 +68,7 @@ namespace Game.BotClient
 
         BotClientState State { get; set; } = BotClientState.Connecting;
 
-        /// <summary>Random source for this bot's profile, card choice and think delay.</summary>
+        /// <summary>Random source for this bot's profile, card choice, think delay and search cancels.</summary>
         readonly RandomPCG _rng = RandomPCG.CreateNew();
 
         /// <summary>
@@ -215,6 +215,16 @@ namespace Game.BotClient
             {
                 _log.Warning("No table after {Timeout} of searching; asking again.", SearchTimeout);
                 EnterState(BotClientState.AtTheMenu, MetaDuration.Zero);
+                return;
+            }
+
+            // Occasionally cancel. It is the cheap way to put load on the race between a cancel and a formation.
+            // A refused cancel is harmless: the table still arrives, and the menu state picks it up.
+            if (_rng.NextInt(1000) < 5)
+            {
+                _log.Debug("Cancelling the search.");
+                SendToServer(new MatchmakingCancelRequest());
+                EnterState(BotClientState.AtTheMenu, PauseBeforeNextSearch);
             }
         }
 

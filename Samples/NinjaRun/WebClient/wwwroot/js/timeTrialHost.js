@@ -172,6 +172,7 @@ export async function startPreview(canvas, course, assetBaseUrl, options) {
     }
 
     state.renderer = renderer;
+    renderer?.setPixelsPerMetre?.(state.pxPerMetre);
     renderer?.resize?.();
 
     const draw = () => {

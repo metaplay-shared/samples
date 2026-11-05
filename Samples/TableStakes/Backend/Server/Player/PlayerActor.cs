@@ -39,12 +39,6 @@ namespace Game.Server.Player
         }
 
         /// <summary>
-        /// The specialized SharedGameConfig (with any A/B experiment overrides) for this player. Available only
-        /// after PostLoad, so not in the constructor, Initialize, InitializePersisted or PostLoad.
-        /// </summary>
-        private SharedGameConfig SharedGameConfig => (SharedGameConfig)_specializedGameConfig.SharedConfig;
-
-        /// <summary>
         /// The name the SDK gives a new model. It is only the <b>fallback</b> name. The displayed name is drawn
         /// from the game config, which is not available this early, so the model's initializer draws it and uses
         /// this name if it cannot (<c>docs/player.md</c>, "Generated names"). The name is derived from the entity
@@ -556,7 +550,7 @@ namespace Game.Server.Player
             _renameThrottle = _renameThrottle.AfterRequestAt(now);
 
             DisplayNameRefusal refusal = DisplayNamePolicy.ValidateRename(
-                request.NewName, Model.PlayerName, Model.LastRenamedAt, now, BotConfig.ReservedNames(SharedGameConfig));
+                request.NewName, Model.PlayerName, Model.LastRenamedAt, now, BotConfig.ReservedNames(Model.GameConfig));
 
             if (refusal != DisplayNameRefusal.None)
             {
@@ -646,7 +640,7 @@ namespace Game.Server.Player
 
             PlayerLocalTime    localNow = DailyRewardPolicy.LocalTimeOf(Model, now);
             DailyRewardOutlook outlook  = DailyRewardPolicy.OutlookAt(
-                Model.DailyReward, SharedGameConfig.Global, DailyRewardPolicy.ActiveTable(SharedGameConfig), localNow);
+                Model.DailyReward, Model.GameConfig.Global, DailyRewardPolicy.ActiveTable(Model.GameConfig), localNow);
 
             if (!outlook.IsClaimable)
             {
@@ -739,7 +733,7 @@ namespace Game.Server.Player
             }
             _wheelSpinThrottle = _wheelSpinThrottle.AfterRequestAt(now);
 
-            SpinWheelOutlook outlook = SpinWheelPolicy.OutlookFor(Model.SpinWheel, Model.Wallet, SharedGameConfig, request.ExpectedOrdinal);
+            SpinWheelOutlook outlook = SpinWheelPolicy.OutlookFor(Model.SpinWheel, Model.Wallet, Model.GameConfig, request.ExpectedOrdinal);
 
             if (!outlook.CanSpin)
             {
@@ -787,30 +781,15 @@ namespace Game.Server.Player
         #region Matchmaking
 
         /// <summary>
-        /// The player's matchmaking state. It is kept on the actor, not in the model, because it describes an
-        /// in-memory queue entry in the matchmaker. A persisted "searching" flag could outlive that entry and leave
-        /// the player on a searching screen that nothing would ever end.
+        /// The player's search phase. Its transitions are <see cref="MatchmakingSearchPolicy.Step"/>, which this
+        /// region feeds with events and whose steps it carries out.
         /// <para>
-        /// Both waiting states have a timeout that returns the player to the menu, because this actor cannot see
+        /// Both waiting phases have a timeout that returns the player to the menu, because this actor cannot see
         /// what it is waiting for: a queue entry in the matchmaker's memory, or a table the matchmaker is
         /// creating. Neither timeout fires when matchmaking works normally.
         /// </para>
         /// </summary>
-        enum MatchmakingState
-        {
-            /// <summary>Not looking for a table.</summary>
-            Idle = 0,
-
-            /// <summary>In the matchmaker's queue, and free to cancel.</summary>
-            Searching = 1,
-
-            /// <summary>
-            /// Committed to a seat at a table being created. A cancel is refused in this state.
-            /// </summary>
-            Reserved = 2,
-        }
-
-        MatchmakingState _matchmakingState = MatchmakingState.Idle;
+        MatchmakingSearchPhase _searchPhase = MatchmakingSearchPhase.Idle;
 
         /// <summary>
         /// When this player pressed Play, or <see cref="MetaTime.Epoch"/> when they are not searching. The
@@ -837,13 +816,6 @@ namespace Game.Server.Player
         static MatchmakingOptions MatchmakingOptions => RuntimeOptionsRegistry.Instance.GetCurrent<MatchmakingOptions>();
 
         /// <summary>
-        /// Whether the player has both a session and a connected client. A session alone is not enough: it stays
-        /// alive for <c>Session:SessionLingerDuration</c> after the connection closes, which is much longer than
-        /// the fill wait, so a player who closed the tab right after pressing Play still has a session.
-        /// </summary>
-        bool IsPlayerHere => TryGetSession() != null && Model.IsClientConnected;
-
-        /// <summary>
         /// Handles the player pressing Play by adding them to the matchmaker's queue.
         /// <para>
         /// One queue entry per player is enforced here and again in the matchmaker. Both cases happen in normal
@@ -855,87 +827,54 @@ namespace Game.Server.Player
         void HandleMatchmakingEnterRequest(MatchmakingEnterRequest _)
         {
             if (Model.CurrentMatchId.IsValid)
-            {
                 _log.Warning("Refused matchmaking: this player is already at table {MatchId}.", Model.CurrentMatchId);
-                SendToClient(StatusUpdate(MatchmakingStatus.Unavailable));
-                return;
-            }
 
-            if (_matchmakingState != MatchmakingState.Idle)
-            {
-                // A repeated request, not a second entry. Answer with the current status, in case the client lost
-                // the first answer.
-                SendToClient(StatusUpdate(ToClientStatus(_matchmakingState)));
-                return;
-            }
-
-            _matchmakingState  = MatchmakingState.Searching;
-            _searchStartedAt   = MetaTime.Now;
-            _seatingDeadlineAt = _searchStartedAt + MatchmakingOptions.FillWaitDuration;
-            ArmSearchTimeout();
-            CastMessage(MatchmakerActor.SingletonId, new MatchmakerEnterQueueMessage(Model.BuildPublicIdentity()));
-            SendToClient(StatusUpdate(MatchmakingStatus.Searching));
+            StepSearch(MatchmakingSearchEvent.PlayPressed);
         }
 
         /// <summary>
         /// Handles the player cancelling the search. A cancel that arrives after this actor committed to a seat is
         /// <b>refused</b>: the answer is <see cref="MatchmakingStatus.SeatReserved"/> and the table assignment follows.
-        /// Because this actor alone decides, and the seat reservation is the commit point, the player ends up
-        /// either cancelled or seated, never both and never neither.
         /// </summary>
         [MessageHandler]
         void HandleMatchmakingCancelRequest(MatchmakingCancelRequest _)
         {
-            if (_matchmakingState == MatchmakingState.Reserved)
-            {
+            if (_searchPhase == MatchmakingSearchPhase.Reserved)
                 _log.Info("Refused a cancel: this player's seat at a forming table is already committed.");
-                SendToClient(StatusUpdate(MatchmakingStatus.SeatReserved));
-                return;
-            }
 
-            LeaveQueue();
-            SendToClient(StatusUpdate(MatchmakingStatus.NotSearching));
+            StepSearch(MatchmakingSearchEvent.CancelPressed);
         }
 
         /// <summary>
         /// Answers the matchmaker's request to reserve a seat at a table it is about to create. Accepting commits
-        /// the player: after that a cancel is refused, and the player leaves the Reserved state only when the
+        /// the player: after that a cancel is refused, and the player leaves the Reserved phase only when the
         /// table assignment arrives, the seat is released, or the reservation times out.
         /// <para>
-        /// The actor declines if no client is <b>connected</b>, not only if there is no session, for the reason
-        /// given on <see cref="IsPlayerHere"/>. Declining keeps a table from being created with a seat nobody
-        /// occupies, or at all when no player in the formation is connected.
+        /// The actor declines if no client is <b>connected</b>, not only if there is no session
+        /// (<see cref="MatchmakingSearchFacts.IsClientConnected"/>). Declining keeps a table from being created with
+        /// a seat nobody occupies, or at all when no player in the formation is connected.
         /// </para>
         /// </summary>
         [EntityAskHandler]
         MatchmakerReserveSeatResponse HandleReserveSeatRequest(MatchmakerReserveSeatRequest _)
         {
-            SeatReservationAnswer answer = MatchmakingPolicy.AnswerSeatReservation(
-                isSearching:       _matchmakingState == MatchmakingState.Searching,
-                isAtTable:         Model.CurrentMatchId.IsValid,
-                hasSession:        TryGetSession() != null,
-                isClientConnected: Model.IsClientConnected);
+            MatchmakingSearchStep step = StepSearch(MatchmakingSearchEvent.SeatOffered);
 
-            switch (answer)
+            switch (step.SeatAnswer)
             {
-                case SeatReservationAnswer.NotSearching:
-                    return MatchmakerReserveSeatResponse.Decline();
+                case SeatReservationAnswer.Take:
+                    return MatchmakerReserveSeatResponse.Accept(Model.BuildPublicIdentity());
 
                 case SeatReservationAnswer.AlreadyAtTable:
                     _log.Warning("Declining a seat: this player is already at table {MatchId}.", Model.CurrentMatchId);
-                    EndSearch();
-                    return MatchmakerReserveSeatResponse.Decline();
+                    break;
 
                 case SeatReservationAnswer.NotLive:
                     _log.Info("Declining a seat: nobody is on the other end of this player's connection.");
-                    EndSearch();
-                    return MatchmakerReserveSeatResponse.Decline();
+                    break;
             }
 
-            _matchmakingState = MatchmakingState.Reserved;
-            ArmReservationTimeout();
-            SendToClient(StatusUpdate(MatchmakingStatus.SeatReserved));
-            return MatchmakerReserveSeatResponse.Accept(Model.BuildPublicIdentity());
+            return MatchmakerReserveSeatResponse.Decline();
         }
 
         /// <summary>
@@ -945,20 +884,17 @@ namespace Game.Server.Player
         [MessageHandler]
         async Task HandleSeatAssigned(MatchmakerSeatAssignedMessage message)
         {
-            if (Model.CurrentMatchId.IsValid)
+            MatchmakingSearchStep step = StepSearch(MatchmakingSearchEvent.SeatAssigned);
+
+            if (step.TableAnswer == MatchmakingTableAnswer.Decline)
             {
-                // The reservation timed out, the player queued again and was seated elsewhere, and this older
-                // assignment arrived late. Accepting it would lose the table the player is at. The older table
-                // still holds the seat, covers it with a bot, and sends its result here, so remember it as declined
-                // and do not record its result, because the player never saw the game.
+                // The older table still holds the seat, covers it with a bot, and sends its result here, so
+                // remember it as declined and do not record its result, because the player never saw the game.
                 _log.Warning("Declining a seat at table {MatchId}: this player is already at table {CurrentMatchId}.", message.MatchId, Model.CurrentMatchId);
                 MatchHistoryRules.NoteDeclined(Model.DeclinedMatches, message.MatchId);
                 await PersistStateIntermediate();
                 return;
             }
-
-            _matchmakingState = MatchmakingState.Idle;
-            _matchmakingTimeoutGeneration++;
 
             Model.CurrentMatchId = message.MatchId;
             AddEntityAssociation(CreateMatchAssociation(message.MatchId), removeOnSessionEnd: true);
@@ -989,112 +925,96 @@ namespace Game.Server.Player
         [MessageHandler]
         void HandleSeatReleased(MatchmakerSeatReleasedMessage message)
         {
-            if (_matchmakingState != MatchmakingState.Reserved)
-                return;
+            MatchmakingSearchStep step = StepSearch(MatchmakingSearchEvent.SeatReleased, isStillQueued: message.IsStillQueued);
 
-            if (!IsPlayerHere)
-            {
-                // The player left while the seat was committed, a state that OnOwnerSessionEnded does not handle.
-                // Returning to searching would keep an absent player at the head of the queue, and nothing would
-                // remove the entry later, because the session has already ended. Leave the queue instead.
+            if (step.ToQueue == MatchmakingQueueMessage.LeaveQueue)
                 _log.Info("A released seat belongs to a player who is no longer here. Leaving the queue.");
-                EndSearch();
-                CastMessage(MatchmakerActor.SingletonId, new MatchmakerLeaveQueueMessage(_entityId));
-                return;
-            }
-
-            if (!message.IsStillQueued)
-            {
-                EndSearch();
-                SendToClient(StatusUpdate(MatchmakingStatus.Unavailable));
-                return;
-            }
-
-            _matchmakingState  = MatchmakingState.Searching;
-            _seatingDeadlineAt = MetaTime.Now + MatchmakingOptions.FillWaitDuration;
-            ArmSearchTimeout();
-            SendToClient(StatusUpdate(MatchmakingStatus.Searching));
         }
 
         /// <summary>
-        /// Schedules the search timeout. The queue is in the matchmaker's memory, so a matchmaker restart (a crash
-        /// or a rolling deploy) drops every entry and nothing adds them back. Without this timeout, those players
-        /// would stay on the searching screen forever. It also covers a lost queue message.
+        /// Called when the player's session ended. A searching player is removed from the queue here, rather than
+        /// only being declined at formation time, so the queue does not collect entries for players who left.
         /// </summary>
-        void ArmSearchTimeout() => ArmMatchmakingTimeout(MatchmakingState.Searching, MatchmakingOptions.SearchTimeout);
-
-        /// <summary>
-        /// Ends the search without a seat: this player declined one, or a released seat left nothing to wait for.
-        /// Reports the wait like every other search end, and increments <see cref="_matchmakingTimeoutGeneration"/>
-        /// so the scheduled timeout does nothing.
-        /// </summary>
-        void EndSearch()
+        protected override void OnOwnerSessionEnded(EntitySubscriber subscriber, bool wasKicked)
         {
-            _matchmakingState = MatchmakingState.Idle;
-            _matchmakingTimeoutGeneration++;
-            TryReportSearchEnded(wasSeated: false, humansGathered: 0);
+            base.OnOwnerSessionEnded(subscriber, wasKicked);
+            StepSearch(MatchmakingSearchEvent.SessionEnded);
+        }
+
+        /// <summary>Runs one step of <see cref="MatchmakingSearchPolicy"/> for <paramref name="ev"/> and carries it out.</summary>
+        MatchmakingSearchStep StepSearch(MatchmakingSearchEvent ev, bool isStillQueued = false)
+        {
+            MatchmakingSearchFacts facts = new MatchmakingSearchFacts(
+                isAtTable:         Model.CurrentMatchId.IsValid,
+                hasSession:        TryGetSession() != null,
+                isClientConnected: Model.IsClientConnected,
+                isStillQueued:     isStillQueued);
+
+            MatchmakingSearchStep step = MatchmakingSearchPolicy.Step(_searchPhase, ev, facts);
+
+            _searchPhase = step.Phase;
+
+            if (step.StartsSearch)
+                _searchStartedAt = MetaTime.Now;
+
+            switch (step.Timeout)
+            {
+                case MatchmakingSearchTimeout.ArmSearch:
+                    _seatingDeadlineAt = MetaTime.Now + MatchmakingOptions.FillWaitDuration;
+                    ArmMatchmakingTimeout(MatchmakingSearchEvent.SearchTimedOut, MatchmakingOptions.SearchTimeout);
+                    break;
+
+                case MatchmakingSearchTimeout.ArmReservation:
+                    ArmMatchmakingTimeout(MatchmakingSearchEvent.ReservationTimedOut, MatchmakingOptions.SeatReservationTimeout);
+                    break;
+
+                case MatchmakingSearchTimeout.Disarm:
+                    _matchmakingTimeoutGeneration++;
+                    break;
+            }
+
+            if (step.EndsUnseated)
+                TryReportSearchEnded(wasSeated: false, humansGathered: 0);
+
+            switch (step.ToQueue)
+            {
+                case MatchmakingQueueMessage.EnterQueue:
+                    CastMessage(MatchmakerActor.SingletonId, new MatchmakerEnterQueueMessage(Model.BuildPublicIdentity()));
+                    break;
+
+                case MatchmakingQueueMessage.LeaveQueue:
+                    CastMessage(MatchmakerActor.SingletonId, new MatchmakerLeaveQueueMessage(_entityId));
+                    break;
+            }
+
+            if (step.Reply.HasValue)
+                SendToClient(StatusUpdate(step.Reply.Value));
+
+            return step;
         }
 
         /// <summary>
-        /// Schedules the reservation timeout, for a committed seat whose table never arrives. It covers a
-        /// matchmaker that stopped between the reservation and creating the table, which would otherwise leave
-        /// a committed player waiting forever without a way to cancel.
+        /// Schedules a timeout that delivers <paramref name="timeoutEvent"/>. The search timeout covers a queue
+        /// entry that a matchmaker restart or a lost message removed. The reservation timeout covers a matchmaker
+        /// that stopped between the reservation and creating the table. Each is longer than the step it covers
+        /// (see <see cref="Game.Server.Matchmaking.MatchmakingOptions"/>), so it does not fire when matchmaking
+        /// works normally.
         /// </summary>
-        void ArmReservationTimeout() => ArmMatchmakingTimeout(MatchmakingState.Reserved, MatchmakingOptions.SeatReservationTimeout);
-
-        /// <summary>
-        /// Schedules a timeout for <paramref name="state"/> that returns the player to the menu. Each timeout is
-        /// longer than the step it covers (see <see cref="Game.Server.Matchmaking.MatchmakingOptions"/>), so it
-        /// does not fire when matchmaking works normally.
-        /// </summary>
-        void ArmMatchmakingTimeout(MatchmakingState state, TimeSpan timeout)
+        void ArmMatchmakingTimeout(MatchmakingSearchEvent timeoutEvent, TimeSpan timeout)
         {
             _matchmakingTimeoutGeneration++;
             int generation = _matchmakingTimeoutGeneration;
 
             ScheduleExecuteOnActorContext(timeout, () =>
             {
-                if (_matchmakingTimeoutGeneration != generation || _matchmakingState != state)
+                if (_matchmakingTimeoutGeneration != generation)
                     return;
 
-                _log.Warning("Matchmaking timed out while {State}. Putting this player back on the menu.", state);
-
-                // Leave the queue before changing the state, because LeaveQueue acts only while the state is
-                // Searching. If the matchmaker is still running (the timeout was caused by a lost message, not a
-                // restart), it removes the stale entry instead of seating this player.
-                LeaveQueue();
-
-                _matchmakingState = MatchmakingState.Idle;
-                TryReportSearchEnded(wasSeated: false, humansGathered: 0);
-                SendToClient(StatusUpdate(MatchmakingStatus.Unavailable));
+                MatchmakingSearchPhase before = _searchPhase;
+                MatchmakingSearchStep  step   = StepSearch(timeoutEvent);
+                if (step.Phase != before)
+                    _log.Warning("Matchmaking timed out while {State}. Putting this player back on the menu.", before);
             });
-        }
-
-        /// <summary>
-        /// Called when the player's session ended. A searching player is removed from the queue here, rather than
-        /// only being declined at formation time, so the queue does not collect entries for players who left.
-        /// <para>
-        /// A player with a committed seat is left as is. The table is being created with that seat, and the
-        /// pointer set when the assignment arrives re-attaches the player when they return.
-        /// </para>
-        /// </summary>
-        protected override void OnOwnerSessionEnded(EntitySubscriber subscriber, bool wasKicked)
-        {
-            base.OnOwnerSessionEnded(subscriber, wasKicked);
-
-            if (_matchmakingState == MatchmakingState.Searching)
-                LeaveQueue();
-        }
-
-        /// <summary>Leaves the queue if this player is searching. Does nothing in any other state.</summary>
-        void LeaveQueue()
-        {
-            if (_matchmakingState != MatchmakingState.Searching)
-                return;
-
-            _matchmakingState = MatchmakingState.Idle;
-            TryReportSearchEnded(wasSeated: false, humansGathered: 0);
-            CastMessage(MatchmakerActor.SingletonId, new MatchmakerLeaveQueueMessage(_entityId));
         }
 
         /// <summary>How long this player has been searching, or zero if they are not.</summary>
@@ -1128,13 +1048,6 @@ namespace Game.Server.Player
             status == MatchmakingStatus.Searching
                 ? new MatchmakingStatusUpdate(status, _seatingDeadlineAt)
                 : new MatchmakingStatusUpdate(status);
-
-        static MatchmakingStatus ToClientStatus(MatchmakingState state) => state switch
-        {
-            MatchmakingState.Searching => MatchmakingStatus.Searching,
-            MatchmakingState.Reserved  => MatchmakingStatus.SeatReserved,
-            _                          => MatchmakingStatus.NotSearching,
-        };
 
         #endregion
     }

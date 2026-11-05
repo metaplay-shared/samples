@@ -41,7 +41,7 @@
 {
     <div class="ts-notable">
         <p class="ts-notable__text">You are not at a table.</p>
-        <a class="pnl__key btn-glossy" href="@EnvironmentLink.Href(Navigation, MetaRoutes.Home)">Back to menu</a>
+        <a class="pnl__key btn-glossy" href="@MetaRoutes.Home">Back to menu</a>
     </div>
 }
 else if (Match == null)
@@ -271,7 +271,6 @@ else if (Match == null)
             <span data-testid="tricks-resolved">@Board.TrickWinnerSeats.Count</span>
             <span data-testid="own-seat">@Match.OwnSeat</span>
             <span data-testid="own-hand-count">@OwnHand.Count</span>
-            <span data-testid="own-hand-index">@Match.OwnHandDeliveredAtPlayIndex</span>
             <span data-testid="hand-locked">@(HandIsLocked ? "true" : "false")</span>
             <span data-testid="deadline-in-force">@(Board.HasMoveDeadline ? "true" : "false")</span>
             <span data-testid="own-occupancy">@OwnOccupancy</span>
@@ -311,17 +310,9 @@ else if (Match == null)
     /// <summary>How far up, in pixels, a card must be dragged for the release to count as a play.</summary>
     private const double DragPlayThresholdPx = 48.0;
 
-    /// <summary>
-    /// How often the table checks whether it must re-render. The match model does not tick, so its model time
-    /// does not advance, and the beat and the ring are computed from the wall clock against absolute timestamps.
-    /// </summary>
-    private static readonly TimeSpan RepaintInterval = TimeSpan.FromMilliseconds(100);
-
     #endregion
 
     #region The frame
-
-    private RepaintTicker? _repaintTicker;
 
     /// <summary>
     /// The match channel activation count at the last render, or -1 before the first render.
@@ -801,7 +792,7 @@ else if (Match == null)
         MatchMoveRefused? refusal = MetaplayService.LastMoveRefusal;
         bool refused = refusal != null && refusal.PlayIndex == _liftedAtPlayIndex;
 
-        // Unusual cases that must still unlock the hand: a hand correction removed the card, or the match ended.
+        // Unusual cases that must still unlock the hand: the card left the hand some other way, or the match ended.
         // ObserveTable has already read this render's hand.
         bool noLongerHeld = !_ownHand.Contains(_liftedCard.Value);
         bool matchOver    = match.Phase != MatchPhase.Playing;
@@ -961,31 +952,27 @@ else if (Match == null)
 
     #region Lifecycle
 
+    /// <summary>
+    /// Subscribes to the client service, which raises <c>OnStateChanged</c> on every frame while connected. The
+    /// beat, the ring and the timeouts count down against absolute timestamps with no model update as they
+    /// progress, so the table renders on every frame.
+    /// </summary>
     protected override void OnInitialized()
     {
         MetaplayService.OnStateChanged += OnStateChanged;
         _beatDuration       = ReadDurationFromQuery("beatMs", DefaultBeatDuration);
         _trumpIntroDuration = ReadDurationFromQuery("trumpIntroMs", DefaultTrumpIntroDuration);
-
-        // Also repaint on a timer, because the beat and the ring count down against absolute timestamps and no
-        // model update fires as they progress.
-        _repaintTicker = RepaintTicker.Start(RepaintInterval, NeedsClockRepaint, () => InvokeAsync(StateHasChanged));
     }
 
     /// <summary>
-    /// Reads an animation duration override in milliseconds from the query string, or returns
-    /// <paramref name="shipped"/>. These are client animation durations, so this page reads them itself, using
-    /// the same query string as the host timing overrides.
+    /// Reads an animation duration override in milliseconds from the query the page was loaded with, or returns
+    /// <paramref name="shipped"/>. These are client animation durations, so this page reads them itself, from the
+    /// same query as the host timing overrides.
     /// </summary>
     private MetaDuration ReadDurationFromQuery(string key, MetaDuration shipped)
     {
-        int? milliseconds = TestQuerySettings.TryGetInt(new Uri(Navigation.Uri).Query, key);
+        int? milliseconds = TestQuerySettings.TryGetInt(TestQuerySettings.StartQuery, key);
         return milliseconds.HasValue ? MetaDuration.FromMilliseconds(milliseconds.Value) : shipped;
-    }
-
-    protected override async Task OnInitializedAsync()
-    {
-        await MetaplayService.ConnectAsync();
     }
 
     /// <summary>
@@ -997,47 +984,7 @@ else if (Match == null)
     protected override void OnAfterRender(bool firstRender)
     {
         if (SessionIsUp && MetaplayService.HasNoTable)
-            EnvironmentLink.NavigateTo(Navigation, MetaRoutes.Home);
-    }
-
-    /// <summary>
-    /// Whether anything on screen depends on the wall clock. When nothing does, for example while waiting for
-    /// a bot with no deadline or after the game ends, the timer skips the render until the next host update.
-    /// <para>
-    /// It reads the clock itself instead of using <c>_now</c>, because <c>_now</c> is updated only by a
-    /// render and this decides whether to render. It uses authoritative time, the clock all the compared
-    /// timestamps are in. The device clock differs from it by the server offset, which could leave a beat
-    /// that never ends.
-    /// </para>
-    /// </summary>
-    private bool NeedsClockRepaint()
-    {
-        MatchModel? match = Match;
-        if (match == null)
-            return false;
-
-        // A running beat is also what withholds the end phase, so repainting here guarantees the results
-        // overlay eventually opens.
-        if (MatchTableTime.IsBeatPlaying(_beatStartedAt, _beatEndsAt, AuthoritativeTime.Now))
-            return true;
-
-        // The trump intro word. Only the timer removes it, because no host update marks its end.
-        if (AuthoritativeTime.Now.Timestamp < _trumpIntroEndsAt)
-            return true;
-
-        // The "+1 point!" label, for the same reason as the trump intro.
-        if (PointIsShowing)
-            return true;
-
-        // A lifted card waiting for an answer. If the answer is lost, only the timer can reach
-        // LiftAnswerTimeout and unlock the hand.
-        if (_liftedCard.HasValue)
-            return true;
-
-        MatchBoard board = match.Board;
-        if (board.TurnPhase == MatchTurnPhase.ResolvingTrick)
-            return true;
-        return board.TurnPhase == MatchTurnPhase.AwaitingMove && board.HasMoveDeadline;
+            Navigation.NavigateTo(MetaRoutes.Home);
     }
 
     private void OnStateChanged() => InvokeAsync(StateHasChanged);
@@ -1079,7 +1026,6 @@ else if (Match == null)
     public void Dispose()
     {
         MetaplayService.OnStateChanged -= OnStateChanged;
-        _repaintTicker?.Dispose();
     }
 
     #endregion

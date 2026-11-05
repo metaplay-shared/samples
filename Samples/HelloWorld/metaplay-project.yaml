@@ -1,11 +1,11 @@
 # Configure schema to use.
-# yaml-language-server: $schema=../../MetaplaySDK/projectConfigSchema.json
-$schema: "../../MetaplaySDK/projectConfigSchema.json"
+# yaml-language-server: $schema=MetaplaySDK/projectConfigSchema.json
+$schema: "MetaplaySDK/projectConfigSchema.json"
 
 # Configure project.
 projectID: sample-project-helloworld
-buildRootDir: ../..
-sdkRootDir: ../../MetaplaySDK
+buildRootDir: .
+sdkRootDir: MetaplaySDK
 backendDir: Backend
 sharedCodeDir: Assets/SharedCode
 unityProjectDir: .
@@ -14,7 +14,7 @@ unityProjectDir: .
 dotnetRuntimeVersion: "10.0"
 
 # Specify Helm chart versions to use for server and bot deployments.
-serverChartVersion: 0.10.0
+serverChartVersion: 0.12.0
 botClientChartVersion: 0.4.2
 
 # Customize Metaplay features used in the game.

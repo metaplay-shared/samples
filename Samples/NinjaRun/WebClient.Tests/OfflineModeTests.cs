@@ -6,26 +6,89 @@ using System.Text.RegularExpressions;
 namespace WebClient.Tests;
 
 /// <summary>
-/// E2E tests for offline mode, selected with <c>?env=offline</c>: the session runs against the in-process
+/// E2E tests for offline mode, selected with <c>?offline</c>: the session runs against the in-process
 /// offline server, against the built-in game config archive. Unlike <see cref="HomePageTests"/> these need
 /// only the WebClient server running.
 /// <para>
-/// Offline state persists in IndexedDB, so these rely on each test getting a fresh browser context (which
+/// Offline state persists in localStorage, so these rely on each test getting a fresh browser context (which
 /// Playwright's <c>PageTest</c> provides) to start from a clean player.
 /// </para>
 /// </summary>
-[Parallelizable(ParallelScope.Self)]
 [TestFixture]
-public class OfflineModeTests : GamePageTest
+public class OfflineModeTests : OfflinePageTest
 {
-    // The WebClient server to drive (see WebClient/Properties/launchSettings.json). Set WEBCLIENT_BASE_URL
-    // to point a run at another instance, which is what a second checkout on an offset port needs.
     /// <summary>Offline practice on the map named in the published config.</summary>
-    private static readonly string OfflineUrl =
-        (Environment.GetEnvironmentVariable("WEBCLIENT_BASE_URL") ?? "http://localhost:5290").TrimEnd('/') + "/?env=offline";
+    private static readonly string OfflineUrl = ClientUrl(query: "offline");
 
     /// <summary>Long enough for a practice run with no input at all to reach the finish.</summary>
     private const int RunTimeoutMs = 90_000;
+
+    [Test]
+    public async Task OfflineMode_StartsSession_WithNoGameServer()
+    {
+        await Page.GotoAsync(OfflineUrl);
+
+        // The debug bar reports a started session the same way it does online. Exact match so it doesn't also
+        // match the hidden Blazor "Browser Disconnected" reconnect banner.
+        await Expect(Page.GetByText("Connected", new() { Exact = true })).ToBeVisibleAsync(new() { Timeout = 30000 });
+        await Expect(Page.GetByRole(AriaRole.Button, new() { Name = "Start run" })).ToBeEnabledAsync();
+    }
+
+    /// <summary>
+    /// Reset deletes the offline player along with the credentials, and the reload goes to the start page with the
+    /// query the page was loaded with, so the client comes back offline with a new player, also from a page reached by
+    /// in-app navigation, whose address has no query. The course tools' Orb grant is what tells the two players apart:
+    /// the offline server gives every player the same id.
+    /// </summary>
+    [Test]
+    public async Task OfflineMode_Reset_StartsAFreshPlayer_StillOffline()
+    {
+        await Page.GotoAsync(OfflineUrl);
+        await Page.GetByTestId("open-dev-courses").ClickAsync();
+        await GrantOrbsAsync();
+
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Reset" }).ClickAsync();
+
+        await Expect(Page.GetByRole(AriaRole.Button, new() { Name = "Start run" })).ToBeEnabledAsync(new() { Timeout = 30000 });
+        Assert.That(Page.Url, Is.EqualTo(OfflineUrl));
+        await Page.GetByTestId("open-dev-courses").ClickAsync();
+        await Expect(Page.GetByTestId("dev-orb-balance")).ToHaveTextAsync("0", new() { Timeout = 30000 });
+    }
+
+    /// <summary>
+    /// <c>?course=</c> points offline practice at a map of its own in place of the published practice map. It is read
+    /// as the client starts, so a visit to the course tools, whose address leaves it out, does not lose it.
+    /// </summary>
+    [Test]
+    public async Task OfflineMode_TheCourseInTheUrl_IsTheMapPracticeOpens()
+    {
+        const string MapId = "rr-lowland+rr-smallclimb+rr-spikesteps";
+        await Page.GotoAsync(ClientUrl(query: "offline&course=" + MapId));
+        await Page.GetByTestId("open-dev-courses").ClickAsync();
+        await Expect(Page.GetByTestId("dev-courses")).ToBeVisibleAsync(new() { Timeout = 30000 });
+        await Page.GetByTestId("dev-back").ClickAsync();
+
+        ILocator startRun = Page.GetByRole(AriaRole.Button, new() { Name = "Start run" });
+        await Expect(startRun).ToBeEnabledAsync(new() { Timeout = 30000 });
+        await startRun.ClickAsync();
+
+        ILocator canvas = Page.GetByTestId("time-trial-canvas");
+        await Expect(canvas).ToBeVisibleAsync(new() { Timeout = 15000 });
+        await Expect(canvas).ToHaveAttributeAsync("data-course-id", MapId);
+    }
+
+    /// <summary>The offline player is saved in the browser, so a reload brings it back as it was.</summary>
+    [Test]
+    public async Task OfflineMode_Reload_KeepsThePlayer()
+    {
+        await Page.GotoAsync(ClientUrl("/dev/courses", "offline"));
+        ILocator balance = await GrantOrbsAsync();
+        string orbs = await balance.InnerTextAsync();
+
+        await Page.ReloadAsync();
+
+        await Expect(balance).ToHaveTextAsync(orbs, new() { Timeout = 30000 });
+    }
 
     [Test]
     public async Task OfflineMode_MenuTransition_CoversBothViewChanges()
@@ -298,9 +361,11 @@ public class OfflineModeTests : GamePageTest
     /// The menu is the title, the medallion and the run button. A fresh player has no Name Tag, no Skill and
     /// no Orbs, so the medallion carries no name plaque, an empty slot and an empty ring, and its label names
     /// no one. Until the first run is finished the medallion opens nothing and carries no charm; after it,
-    /// the medallion opens and the charm reads zero, since practice pays nothing.
+    /// the medallion opens and the charm reads zero, since practice pays nothing. A press on the medallion
+    /// then shrinks it without moving it.
     /// </summary>
     [Test]
+    [RunTimeScale(RunTimeScaleAttribute.Fastest)]
     public async Task OfflineMode_Menu_ShowsTheTitleTheMedallionAndTheRunButton()
     {
         await Page.GotoAsync(OfflineUrl);
@@ -345,21 +410,9 @@ public class OfflineModeTests : GamePageTest
         await Expect(medallion).ToHaveAttributeAsync("aria-label", "Customize ninja. Equipped: none. 0 orbs.");
         await Expect(balance).ToHaveTextAsync("0");
         await Expect(balance).ToHaveAttributeAsync("data-orbs-in-flight", "0");
-    }
 
-    /// <summary>
-    /// Pressing the medallion shrinks it in place: the press scale never replaces the transform that centres
-    /// it, so it does not leap sideways while held or on release.
-    /// </summary>
-    [Test]
-    public async Task OfflineMode_PressingTheMedallion_KeepsItCentred()
-    {
-        await Page.GotoAsync(OfflineUrl);
-        await CompleteAPracticeRunAsync();
-
-        ILocator medallion = Page.GetByTestId("open-skills");
-        await Expect(medallion).ToBeEnabledAsync(new() { Timeout = 30000 });
-
+        // Pressing the medallion shrinks it in place: the press scale never replaces the transform that
+        // centres it, so it does not leap sideways while held or on release.
         LocatorBoundingBoxResult? resting = await medallion.BoundingBoxAsync();
         Assert.That(resting, Is.Not.Null);
         float restingCentreX = resting!.X + resting.Width / 2;
@@ -391,9 +444,11 @@ public class OfflineModeTests : GamePageTest
     /// The medallion opens the customize view through the same curtain a run is entered through: the menu
     /// stays up while the curtain covers it, the customize view is swapped in behind the cover, and Back
     /// returns the same way. A fresh offline player has no Orbs and nothing bought, so the whole tree is shown
-    /// with only the root open to buy, and the name field only shows the anonymous name.
+    /// with only the root open to buy, and the name field only shows the anonymous name. The detail card lists
+    /// each Skill's effects as benefits and penalties.
     /// </summary>
     [Test]
+    [RunTimeScale(RunTimeScaleAttribute.Fastest)]
     public async Task OfflineMode_TheMedallion_OpensTheCustomizeViewThroughTheCurtain()
     {
         await Page.GotoAsync(OfflineUrl);
@@ -450,42 +505,13 @@ public class OfflineModeTests : GamePageTest
         await Expect(action).ToHaveAttributeAsync("aria-label", new Regex(" is locked$"));
         await Expect(action).ToBeDisabledAsync();
 
-        await Page.GetByRole(AriaRole.Button, new() { Name = "Back to main screen" }).ClickAsync();
-        await Expect(transition).ToHaveAttributeAsync("data-transition-state", "covering");
-        await Expect(customize).ToBeVisibleAsync();
-        await WaitForTransitionStateAsync("covered");
-        await Expect(transition).ToHaveAttributeAsync("data-transition-state", "hidden");
-        await Expect(menu).ToBeVisibleAsync();
-        await Expect(customize).ToHaveCountAsync(0);
-        await Expect(medallion).ToBeEnabledAsync();
-    }
-
-    /// <summary>
-    /// The detail card lists a Skill's trade one effect per line: a benefit and its stat word, then each
-    /// penalty and its stat word, with the Skill's name under them. The Name Tag moves no stat, so its card
-    /// asks for a name instead and lists nothing.
-    /// </summary>
-    [Test]
-    public async Task OfflineMode_TheSkillCard_ListsEachEffectAsABenefitOrAPenalty()
-    {
-        await Page.GotoAsync(OfflineUrl);
-        await CompleteAPracticeRunAsync();
-
-        ILocator medallion = Page.GetByTestId("open-skills");
-        ILocator customize = Page.GetByTestId("customize-view");
-        await Expect(medallion).ToBeEnabledAsync(new() { Timeout = 30000 });
-        await medallion.ClickAsync();
-        await WaitForTransitionStateAsync("covered");
-        await Expect(Page.GetByTestId("screen-transition")).ToHaveAttributeAsync("data-transition-state", "hidden");
-        await Expect(customize).ToBeVisibleAsync();
-
+        // The detail card lists a Skill's trade one effect per line: a benefit and its stat word, then each
+        // penalty and its stat word, with the Skill's name under them. A tier-3 node: one benefit, one penalty.
         ILocator card = Page.GetByTestId("skill-detail");
         ILocator effects = card.GetByTestId("skill-effect");
         ILocator benefits = card.Locator("[data-testid='skill-effect'][data-direction='benefit']");
         ILocator penalties = card.Locator("[data-testid='skill-effect'][data-direction='penalty']");
         ILocator detailName = card.Locator(".skill-detail-name");
-
-        // A tier-3 node: one benefit, one penalty.
         await Page.Locator("[data-testid='skill-node'][data-skill-id='swift-step']").ClickAsync();
         await Expect(effects).ToHaveCountAsync(2);
         await Expect(benefits).ToHaveCountAsync(1);
@@ -501,18 +527,30 @@ public class OfflineModeTests : GamePageTest
         await Expect(penalties).ToHaveCountAsync(2);
         await Expect(detailName).ToHaveCountAsync(0);
 
-        // The root moves nothing.
-        await Page.Locator("[data-testid='skill-node'][data-skill-id='name-tag']").ClickAsync();
+        // The Name Tag moves no stat, so its card asks for a name instead and lists nothing.
+        await Page.Locator($"[data-testid='skill-node'][data-skill-id='{rootId}']").ClickAsync();
         await Expect(card.GetByTestId("skill-detail-effect")).ToHaveTextAsync("Name your ninja");
         await Expect(effects).ToHaveCountAsync(0);
+
+        await Page.GetByRole(AriaRole.Button, new() { Name = "Back to main screen" }).ClickAsync();
+        await Expect(transition).ToHaveAttributeAsync("data-transition-state", "covering");
+        await Expect(customize).ToBeVisibleAsync();
+        await WaitForTransitionStateAsync("covered");
+        await Expect(transition).ToHaveAttributeAsync("data-transition-state", "hidden");
+        await Expect(menu).ToBeVisibleAsync();
+        await Expect(customize).ToHaveCountAsync(0);
+        await Expect(medallion).ToBeEnabledAsync();
     }
 
     /// <summary>
     /// A practice run is raced against nobody, so no segment is placed and nothing is called out as the
-    /// runner reaches each climb or the finish line.
+    /// runner reaches each climb or the finish line. Crossing the finish line does not stop the runner: it
+    /// keeps running on past the line, under no input, for a beat before the score screen takes the run's
+    /// place, and is never drawn standing still there.
     /// </summary>
     [Test]
-    public async Task OfflineMode_APracticeRun_NeverCallsOutASegmentRank()
+    [RunTimeScale(RunTimeScaleAttribute.Fastest)]
+    public async Task OfflineMode_APracticeRun_CallsOutNoSegmentRankAndRunsOnPastTheFinishLine()
     {
         await Page.GotoAsync(OfflineUrl);
 
@@ -520,48 +558,21 @@ public class OfflineModeTests : GamePageTest
         await Expect(startRun).ToBeVisibleAsync(new() { Timeout = 30000 });
         await startRun.ClickAsync();
         await Expect(Page.GetByTestId("time-trial-canvas")).ToBeVisibleAsync(new() { Timeout = 15000 });
+        await ReturnToRealTimeAtTheFinishLineAsync();
 
+        // A callout is up for a moment and the run-out is drawn frame by frame, so the page samples both on
+        // every animation frame.
         await Page.EvaluateAsync(
             """
             () => {
                 window.__sawSegmentRank = false;
-                window.__segmentRankSampler = window.setInterval(() => {
+                window.__runOut = [];
+                window.__runSampling = true;
+                const sample = () => {
+                    if (!window.__runSampling)
+                        return;
                     if (document.querySelector('[data-testid="segment-rank"]'))
                         window.__sawSegmentRank = true;
-                }, 16);
-            }
-            """);
-
-        await Expect(Page.GetByTestId("run-status")).ToContainTextAsync("Practice", new() { Timeout = RunTimeoutMs });
-
-        bool sawSegmentRank = await Page.EvaluateAsync<bool>(
-            "() => { window.clearInterval(window.__segmentRankSampler); return window.__sawSegmentRank; }");
-        Assert.That(sawSegmentRank, Is.False, "a practice run called out a segment rank");
-    }
-
-    /// <summary>
-    /// Crossing the finish line does not stop the runner: it keeps running on past the line, under no input,
-    /// for a beat before the score screen takes the run's place, and is never drawn standing still there.
-    /// </summary>
-    [Test]
-    public async Task OfflineMode_AfterTheFinishLine_TheRunnerRunsOnBeforeTheScoreScreen()
-    {
-        await Page.GotoAsync(OfflineUrl);
-
-        ILocator startRun = Page.GetByRole(AriaRole.Button, new() { Name = "Start run" });
-        await Expect(startRun).ToBeVisibleAsync(new() { Timeout = 30000 });
-        await startRun.ClickAsync();
-        await Expect(Page.GetByTestId("time-trial-canvas")).ToBeVisibleAsync(new() { Timeout = 15000 });
-
-        // The run-out is drawn frame by frame, so the page samples the canvas on every animation frame.
-        await Page.EvaluateAsync(
-            """
-            () => {
-                window.__runOut = [];
-                window.__runOutSampling = true;
-                const sample = () => {
-                    if (!window.__runOutSampling)
-                        return;
                     const canvas = document.querySelector('[data-testid="time-trial-canvas"]');
                     const result = document.querySelector('[data-testid="run-result"]');
                     if (canvas && !result && canvas.dataset.finished === 'true') {
@@ -577,11 +588,14 @@ public class OfflineModeTests : GamePageTest
             """);
 
         await Expect(Page.GetByTestId("run-result")).ToBeVisibleAsync(new() { Timeout = RunTimeoutMs });
+        await Expect(Page.GetByTestId("run-status")).ToContainTextAsync("Practice");
 
-        string sampled = await Page.EvaluateAsync<string>(
-            "() => { window.__runOutSampling = false; return JSON.stringify(window.__runOut); }");
-        RunOutSample[] frames = System.Text.Json.JsonSerializer.Deserialize<RunOutSample[]>(sampled)!;
+        await Page.EvaluateAsync("() => { window.__runSampling = false; }");
+        bool sawSegmentRank = await Page.EvaluateAsync<bool>("() => window.__sawSegmentRank");
+        Assert.That(sawSegmentRank, Is.False, "a practice run called out a segment rank");
 
+        RunOutSample[] frames = System.Text.Json.JsonSerializer.Deserialize<RunOutSample[]>(
+            await Page.EvaluateAsync<string>("() => JSON.stringify(window.__runOut)"))!;
         Assert.That(frames.Length, Is.GreaterThan(1), "no run-out was drawn after the finish line");
         Assert.That(frames[^1].x - frames[0].x, Is.GreaterThan(2.0),
             $"the runner covered only {frames[^1].x - frames[0].x:0.00} m past the finish line before the score screen");
@@ -687,10 +701,6 @@ public class OfflineModeTests : GamePageTest
     }
 
     /// <summary>
-    /// Play one practice run to the finish without pressing anything and dismiss its score screen: what a
-    /// fresh offline player has to do before the medallion opens.
-    /// </summary>
-    /// <summary>
     /// Wait until the medallion's transform has settled: no transition running, and the scale below its resting
     /// one while pressed or back on it once released.
     /// </summary>
@@ -709,6 +719,23 @@ public class OfflineModeTests : GamePageTest
             new() { Timeout = 5000 });
     }
 
+    /// <summary>
+    /// Grant Orbs from the course tools page, and return the balance the page shows, once it shows them.
+    /// </summary>
+    private async Task<ILocator> GrantOrbsAsync()
+    {
+        ILocator balance = Page.GetByTestId("dev-orb-balance");
+        await Expect(balance).ToHaveTextAsync("0", new() { Timeout = 30000 });
+        await Page.GetByTestId("dev-grant-orbs").ClickAsync();
+        await Expect(balance).Not.ToHaveTextAsync("0");
+        return balance;
+    }
+
+    /// <summary>
+    /// Play one practice run to the finish without pressing anything and dismiss its score screen: what a
+    /// fresh offline player has to do before the medallion opens. Practice pays nothing, so the dismissal
+    /// flies no Orbs.
+    /// </summary>
     private async Task CompleteAPracticeRunAsync()
     {
         ILocator startRun = Page.GetByRole(AriaRole.Button, new() { Name = "Start run" });
@@ -719,37 +746,7 @@ public class OfflineModeTests : GamePageTest
         await Expect(Page.GetByTestId("run-status")).ToContainTextAsync("Practice", new() { Timeout = RunTimeoutMs });
         await Expect(Page.GetByTestId("screen-transition")).ToHaveAttributeAsync("data-transition-state", "hidden");
 
-        await Page.GetByTestId("run-result").ClickAsync();
-        await Expect(Page.GetByTestId("main-menu")).ToBeVisibleAsync(new() { Timeout = 15000 });
-        await Expect(Page.GetByTestId("screen-transition")).ToHaveAttributeAsync("data-transition-state", "hidden");
-    }
-
-    /// <summary>
-    /// Wait for the screen transition to report <paramref name="state"/>. The fully covered beat is shorter
-    /// than an assertion's retry interval, so this polls in the page on every animation frame.
-    /// </summary>
-    private Task WaitForTransitionStateAsync(string state)
-        => Page.WaitForFunctionAsync(
-            "state => document.querySelector('[data-testid=\"screen-transition\"]')?.dataset.transitionState === state",
-            state,
-            new() { Timeout = 15000 });
-
-    /// <summary>
-    /// Practice pays nothing, so dismissing its score screen flies no Orbs and leaves the balance where it
-    /// was.
-    /// </summary>
-    [Test]
-    public async Task OfflineMode_DismissingAPracticeScoreScreen_FliesNoOrbs()
-    {
-        await Page.GotoAsync(OfflineUrl);
-
-        ILocator startRun = Page.GetByRole(AriaRole.Button, new() { Name = "Start run" });
-        await Expect(startRun).ToBeVisibleAsync(new() { Timeout = 30000 });
-        await startRun.ClickAsync();
-
-        await Expect(Page.GetByTestId("run-status")).ToContainTextAsync("Practice", new() { Timeout = RunTimeoutMs });
-        await Expect(Page.GetByTestId("screen-transition")).ToHaveAttributeAsync("data-transition-state", "hidden");
-
+        // The flight is too quick to poll across the wire, so the page samples it.
         await Page.EvaluateAsync(
             """
             () => {
@@ -768,11 +765,17 @@ public class OfflineModeTests : GamePageTest
         bool sawFlyingOrb = await Page.EvaluateAsync<bool>(
             "() => { window.clearInterval(window.__flyingOrbSampler); return window.__sawFlyingOrb; }");
         Assert.That(sawFlyingOrb, Is.False, "a practice run flew Orbs");
-
-        ILocator balance = Page.GetByTestId("orb-balance");
-        await Expect(balance).ToHaveTextAsync("0");
-        await Expect(balance).ToHaveAttributeAsync("data-orbs-in-flight", "0");
     }
+
+    /// <summary>
+    /// Wait for the screen transition to report <paramref name="state"/>. The fully covered beat is shorter
+    /// than an assertion's retry interval, so this polls in the page on every animation frame.
+    /// </summary>
+    private Task WaitForTransitionStateAsync(string state)
+        => Page.WaitForFunctionAsync(
+            "state => document.querySelector('[data-testid=\"screen-transition\"]')?.dataset.transitionState === state",
+            state,
+            new() { Timeout = 15000 });
 
     [Test]
     public async Task OfflineMode_PracticeMapHangsTheWaterfallBridgeInItsFirstPart()

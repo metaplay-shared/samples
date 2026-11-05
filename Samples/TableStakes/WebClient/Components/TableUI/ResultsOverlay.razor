@@ -3,7 +3,6 @@
 @using Metaplay.Core
 @using WebClient.Components.Meta
 @using WebClient.Meta
-@inject NavigationManager Navigation
 
 @* The results overlay on the finished table, shown after the last trick has moved to its winner
    (docs/player.md, "Results screen"). It shows the full standings and, only for a tie, the tie-break rule
@@ -73,7 +72,7 @@
            point on Home and its error and waiting states are handled in one place. *@
     </ChildContent>
     <Actions>
-        <a class="pnl__key btn-glossy" data-testid="results-leave" href="@EnvironmentLink.Href(Navigation, MetaRoutes.Home)">Back to menu</a>
+        <a class="pnl__key btn-glossy" data-testid="results-leave" href="@MetaRoutes.Home">Back to menu</a>
     </Actions>
 </ModalPanel>
 

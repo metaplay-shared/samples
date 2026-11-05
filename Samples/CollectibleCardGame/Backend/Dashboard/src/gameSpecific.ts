@@ -1,4 +1,3 @@
-// This file is part of Metaplay SDK which is released under the Metaplay SDK License.
 import type { App } from 'vue'
 
 // Import the integration API.

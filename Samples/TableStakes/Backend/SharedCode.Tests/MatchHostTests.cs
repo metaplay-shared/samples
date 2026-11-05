@@ -30,7 +30,7 @@ namespace Game.Logic.Tests
             Card       card  = model.Engine.GetLegalPlays(0)[0];
 
             Assert.That(
-                MatchHost.TrySubmitMove(model, MatchTestDeals.Seat0PlayerId, 0, model.Board.PlayIndex, card, MatchTestDeals.T0, TestMatchHostEnvironments.Refusing),
+                MatchHost.TrySubmitMove(model, MatchTestDeals.Seat0PlayerId, model.Board.PlayIndex, card, MatchTestDeals.T0, TestMatchHostEnvironments.Refusing),
                 Is.EqualTo(MoveRefusalReason.NotPublished), "the submitter is told the move was not played");
 
             Assert.That(model.Engine.PlayIndex, Is.EqualTo(0), "the engine played a card the board never saw");
@@ -41,7 +41,7 @@ namespace Game.Logic.Tests
             // The same move succeeds through a publishing host, which shows the refusal above came from the
             // failed publish and not from an illegal move.
             Assert.That(
-                MatchHost.TrySubmitMove(model, MatchTestDeals.Seat0PlayerId, 0, model.Board.PlayIndex, card, MatchTestDeals.T0, new TestMatchHost(model, Seed)),
+                MatchHost.TrySubmitMove(model, MatchTestDeals.Seat0PlayerId, model.Board.PlayIndex, card, MatchTestDeals.T0, new TestMatchHost(model, Seed)),
                 Is.EqualTo(MoveRefusalReason.None));
             Assert.That(model.Engine.PlayIndex, Is.EqualTo(1));
             Assert.That(model.Board.PlayIndex, Is.EqualTo(1));

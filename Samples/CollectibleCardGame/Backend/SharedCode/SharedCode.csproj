@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- The same tree the client-side GameLogic.csproj (living inside SharedCode/) compiles as a normal project;
+    <!-- The same tree the client-side SharedCode.Client.csproj (living inside SharedCode/) compiles as a normal project;
          its bin/obj must be excluded here since default-glob exclusions only cover this project's own. -->
     <Compile Include="$(SharedCodePath)\**\*.cs"
              Exclude="$(SharedCodePath)\bin\**;$(SharedCodePath)\obj\**"
@@ -16,13 +16,10 @@
 
   <ItemGroup>
     <ProjectReference Include="$(MetaplayServerPath)\Cloud\Metaplay.Cloud.csproj" />
-    <ProjectReference Include="$(MetaplayServerPath)\CodeAnalyzers\Metaplay.CodeAnalyzers.csproj">
-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-      <OutputItemType>Analyzer</OutputItemType>
-    </ProjectReference>
-    <ProjectReference Include="$(MetaplayServerPath)\CodeAnalyzers.Shared\Metaplay.CodeAnalyzers.Shared.csproj">
-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-      <OutputItemType>Analyzer</OutputItemType>
-    </ProjectReference>
   </ItemGroup>
+  <ItemGroup>
+    <!-- The tests inspect the match's hidden half, which is internal to this assembly. -->
+    <InternalsVisibleTo Include="SharedCode.Tests" />
+  </ItemGroup>
+
 </Project>

@@ -169,36 +169,81 @@ namespace Game.Logic.Tests
             Assert.That(engine.Rules.Seat(0).UnseenPool, Is.EqualTo(engine.DeriveUnseenPool(0)));
         }
 
-        [Test]
-        public void DrawingDoesNotChangeTheUnseenPool()
+        /// <summary>
+        /// A step that makes no card public leaves the unseen pool as it was, apart from the card it played. A
+        /// draw or a mulligan moves cards between deck and hand; a bounce returns a card that has been seen, and
+        /// the pool shrinks monotonically; a peek reveals cards to one player, which moves them nowhere and does
+        /// not make them public.
+        /// </summary>
+        [TestCase("draw")]
+        [TestCase("mulligan")]
+        [TestCase("bounce")]
+        [TestCase("peek")]
+        public void AStepThatRevealsNothingLeavesTheUnseenPoolAlone(string step)
         {
-            Scenario scenario = new Scenario(Config);
-            scenario.Seat(0).DeckOf(6, "BusyBeaver");
-            scenario.Seat(1).DeckOf(6);
-            MatchEngine engine = scenario.OnTurn(0).Build();
+            MatchEngine engine;
+            string      played = null;
+            Scenario    scenario = new Scenario(Config);
+
+            switch (step)
+            {
+                case "draw":
+                    scenario.Seat(0).DeckOf(6, "BusyBeaver");
+                    scenario.Seat(1).DeckOf(6);
+                    engine = scenario.OnTurn(0).Build();
+                    break;
+                case "mulligan":
+                    engine = MatchEngine.Create(new MatchSetup(5, Config, MatchTimings.Instant, TestDecks.Standard(Config), TestDecks.Alternate(Config)));
+                    break;
+                case "bounce":
+                    scenario.Seat(0).Hand("Undertow");
+                    scenario.Seat(0).Board("PondFrog");
+                    scenario.Seat(0).Mana(9, 9).DeckOf(4);
+                    scenario.Seat(1).DeckOf(4);
+                    engine = scenario.OnTurn(0).Build();
+                    played = "Undertow";
+                    break;
+                default:
+                    scenario.Seat(0).Hand("PebbleCollector"); // Hello: look at 3, keep 1
+                    scenario.Seat(0).Deck("StrayGoat");
+                    scenario.Seat(0).Deck("GreyOwl");
+                    scenario.Seat(0).Deck("OldBadger");
+                    scenario.Seat(0).DeckOf(3);
+                    scenario.Seat(0).Mana(9, 9);
+                    scenario.Seat(1).DeckOf(4);
+                    engine = scenario.OnTurn(0).Build();
+                    played = "PebbleCollector";
+                    break;
+            }
 
             List<CardId> before = new List<CardId>(engine.Rules.Seat(0).UnseenPool);
-            engine.PassTurn();
-            engine.PassTurn();
 
-            Assert.That(engine.Rules.Seat(0).UnseenPool, Is.EqualTo(before), "a card moving between deck and hand is not becoming public");
-        }
+            switch (step)
+            {
+                case "draw":
+                    engine.PassTurn();
+                    engine.PassTurn();
+                    break;
+                case "mulligan":
+                    engine.Mulligan(0, engine.SecretHand(0).ToArray());
+                    engine.Mulligan(1, engine.SecretHand(1)[0]);
+                    break;
+                case "bounce":
+                    CardInstanceId frog = engine.Rules.Seat(0).Board[0].Id;
+                    engine.Play(0, engine.SecretHand(0)[0], EffectTargetRef.OnCritter(frog));
+                    Assert.That(engine.ZoneOf(frog), Is.EqualTo(AuthorityZone.Hand), "the frog went back to the hand");
+                    Assert.That(engine.Rules.Seat(0).UnseenPool, Does.Not.Contain(CardId.FromString("PondFrog")));
+                    break;
+                default:
+                    engine.Play(0, engine.SecretHand(0)[0]);
+                    Assert.That(engine.Pending.Kind, Is.EqualTo(MatchPendingKind.AwaitingEffectChoice));
+                    break;
+            }
 
-        [Test]
-        public void BouncedCardStaysOutOfTheUnseenPool()
-        {
-            Scenario       scenario = new Scenario(Config);
-            CardInstanceId undertow = scenario.Seat(0).Hand("Undertow");
-            CardInstanceId frog     = scenario.Seat(0).Board("PondFrog");
-            scenario.Seat(0).Mana(9, 9).DeckOf(4);
-            scenario.Seat(1).DeckOf(4);
-            MatchEngine engine = scenario.OnTurn(0).Build();
+            if (played != null)
+                before.Remove(CardId.FromString(played));
 
-            engine.Play(0, undertow, EffectTargetRef.OnCritter(frog));
-
-            Assert.That(engine.ZoneOf(frog), Is.EqualTo(AuthorityZone.Hand));
-            Assert.That(engine.Rules.Seat(0).UnseenPool, Does.Not.Contain(CardId.FromString("PondFrog")),
-                "the pool shrinks monotonically: a card that has been seen does not become unseen");
+            Assert.That(engine.Rules.Seat(0).UnseenPool, Is.EqualTo(before));
             Assert.That(engine.Rules.Seat(0).UnseenPool, Is.EqualTo(engine.DeriveUnseenPool(0)));
         }
 
@@ -244,31 +289,6 @@ namespace Game.Logic.Tests
             Assert.That(view.HandCount, Is.EqualTo(2));
             Assert.That(view.DeckCount, Is.EqualTo(7));
             Assert.That(view.UnseenPool.Count, Is.EqualTo(9), "the pool is the two combined, and the counts are separate");
-        }
-
-        [Test]
-        public void RevealToOwnerLeavesTheUnseenPoolAlone()
-        {
-            Scenario       scenario  = new Scenario(Config);
-            CardInstanceId collector = scenario.Seat(0).Hand("PebbleCollector"); // Hello: look at 3, keep 1
-            scenario.Seat(0).Deck("StrayGoat");
-            scenario.Seat(0).Deck("GreyOwl");
-            scenario.Seat(0).Deck("OldBadger");
-            scenario.Seat(0).DeckOf(3);
-            scenario.Seat(0).Mana(9, 9);
-            scenario.Seat(1).DeckOf(4);
-            MatchEngine engine = scenario.OnTurn(0).Build();
-
-            List<CardId> before = new List<CardId>(engine.Rules.Seat(0).UnseenPool);
-            engine.Play(0, collector);
-
-            Assert.That(engine.Pending.Kind, Is.EqualTo(MatchPendingKind.AwaitingEffectChoice));
-
-            before.Remove(CardId.FromString("PebbleCollector"));
-            Assert.That(engine.Rules.Seat(0).UnseenPool, Is.EqualTo(before),
-                "cards revealed to one player moved nowhere and are not public");
-            Assert.That(engine.Rules.Seat(0).UnseenPool, Is.EqualTo(engine.DeriveUnseenPool(0)));
-            Assert.That(engine.Rules.Seat(0).UnseenPool, Is.EqualTo(before));
         }
     }
 }

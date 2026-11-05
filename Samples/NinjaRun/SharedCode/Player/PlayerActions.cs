@@ -34,6 +34,7 @@ namespace Game.Logic
         public const int PlayerOpenTimeTrial          = 5007;
         public const int PlayerSetName            = 5008;
         public const int PlayerStartDraftPartTimeTrial = 5009;
+        public const int PlayerDeveloperGrantOrbs      = 5010;
     }
 
     /// <summary>
@@ -54,6 +55,7 @@ namespace Game.Logic
         public static readonly MetaActionResult NameTagNotOwned      = new MetaActionResult(nameof(NameTagNotOwned));
         public static readonly MetaActionResult InvalidPlayerName      = new MetaActionResult(nameof(InvalidPlayerName));
         public static readonly MetaActionResult InvalidDraftPart     = new MetaActionResult(nameof(InvalidDraftPart));
+        public static readonly MetaActionResult InvalidOrbGrant      = new MetaActionResult(nameof(InvalidOrbGrant));
     }
 
     /// <summary>
@@ -259,6 +261,36 @@ namespace Game.Logic
                 TimeTrialTicket ticket = player.IssueTimeTrialTicket(course.Id, isPractice: true, draftPart: Part);
                 player.ClientListener.OnTimeTrialStarted(ticket, null);
             }
+
+            return MetaActionResult.Success;
+        }
+    }
+
+    /// <summary>
+    /// Add Orbs to the balance without a run, so a developer can reach the Skill tree's upper tiers without
+    /// racing for them: the developer course tools' Orb grant. Development-only, so a server without its
+    /// development features turns it down for any player who is not a developer.
+    /// </summary>
+    [ModelAction(ActionCodes.PlayerDeveloperGrantOrbs)]
+    [DevelopmentOnlyAction]
+    public class PlayerDeveloperGrantOrbs : PlayerAction
+    {
+        /// <summary>The most Orbs one grant adds, which keeps the balance far from overflowing.</summary>
+        public const int MaxAmount = 1000;
+
+        /// <summary>How many Orbs to add, 1 to <see cref="MaxAmount"/>.</summary>
+        public int Amount { get; private set; }
+
+        public PlayerDeveloperGrantOrbs() { }
+        public PlayerDeveloperGrantOrbs(int amount) { Amount = amount; }
+
+        public override MetaActionResult Execute(PlayerModel player, bool commit)
+        {
+            if (Amount < 1 || Amount > MaxAmount)
+                return ActionResults.InvalidOrbGrant;
+
+            if (commit)
+                player.GrantOrbs(Amount);
 
             return MetaActionResult.Success;
         }

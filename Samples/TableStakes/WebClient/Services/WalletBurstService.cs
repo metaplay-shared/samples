@@ -1,5 +1,4 @@
 using System.Timers;
-using Microsoft.AspNetCore.Components;
 using WebClient.Integration;
 using WebClient.Meta;
 
@@ -22,17 +21,14 @@ public sealed class WalletBurstService : IDisposable
     /// </summary>
     private const int FrameMs = 33;
 
-    private readonly NavigationManager _navigation;
     private readonly System.Timers.Timer _frameTimer;
 
     private WalletBurstBalances? _balances;
     private bool _launched;
     private long _launchedAtTickMs;
 
-    public WalletBurstService(NavigationManager navigation)
+    public WalletBurstService()
     {
-        _navigation = navigation;
-
         _frameTimer = new System.Timers.Timer(FrameMs) { AutoReset = true };
         _frameTimer.Elapsed += OnFrame;
     }
@@ -167,7 +163,7 @@ public sealed class WalletBurstService : IDisposable
     /// stage duration is a fraction of this value, so all stages scale together.
     /// </summary>
     private int BurstMs =>
-        TestQuerySettings.TryGetInt(new Uri(_navigation.Uri).Query, "burstMs") ?? WalletBurstPlan.DefaultBurstMs;
+        TestQuerySettings.TryGetInt(TestQuerySettings.StartQuery, "burstMs") ?? WalletBurstPlan.DefaultBurstMs;
 
     /// <summary>
     /// Whether the browser requests reduced motion. The hold is timed in C#, so CSS cannot shorten it

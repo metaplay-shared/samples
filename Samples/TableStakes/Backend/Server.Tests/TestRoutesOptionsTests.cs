@@ -20,7 +20,8 @@ namespace Game.Server.Tests
         [Test]
         public void NoOptionsFileTurnsTheTestRoutesOn()
         {
-            string configDir = Path.Combine(GameConfigBuildTests.RepoRoot(), "Backend", "Server", "Config");
+            // The working directory is this project's directory (TestHelper.SetupForTests).
+            string configDir = Path.GetFullPath(Path.Combine("..", "Server", "Config"));
             string[] files = Directory.GetFiles(configDir, "Options.*.yaml");
             Assert.That(files, Is.Not.Empty, $"no options files found in {configDir}");
 

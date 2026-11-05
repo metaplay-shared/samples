@@ -66,6 +66,6 @@
     private void GoBack()
     {
         if (ResolvedParent is string parent)
-            EnvironmentLink.NavigateTo(Navigation, parent);
+            Navigation.NavigateTo(parent);
     }
 }

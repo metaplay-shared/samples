@@ -36,21 +36,6 @@ namespace Game.Server.Match
     public sealed class MatchActor : PersistedMultiplayerEntityActorBase<MatchModel, MatchAction, PersistedMatch>
     {
         /// <summary>
-        /// How long the table waits before running again after <see cref="PublishAction"/> refused an action.
-        /// <see cref="MaxPublishRetries"/> is how many retries it makes before it stops running itself. Together
-        /// they prevent a repeated refusal from causing a busy loop or retrying forever.
-        /// </summary>
-        static readonly MetaDuration PublishRetryDelay = MetaDuration.FromSeconds(1);
-
-        const int MaxPublishRetries = 5;
-
-        /// <summary>
-        /// How long a finished table waits before sending an unacknowledged result again. A player's actor that
-        /// did not answer is usually still waking up, so the delay is short.
-        /// </summary>
-        static readonly MetaDuration ResultRetryDelay = MetaDuration.FromSeconds(5);
-
-        /// <summary>
         /// The minimum interval between clock sync requests that this actor answers for one session. Clock sync
         /// is the only message other than a move that a client can send at will, so it is throttled. The interval
         /// is shorter than the client's <see cref="ServerClockEstimate.ResampleInterval"/>, so a normal client is never
@@ -63,9 +48,15 @@ namespace Game.Server.Match
         /// disconnect grace and play the game out. The SDK's default linger is shorter than
         /// <c>Match:DisconnectGrace</c>, so with the default, a table whose last human disconnected would shut down
         /// before the game finished (<c>docs/match.md</c>, "Model, actor and client").
+        /// <para>
+        /// Before its first subscriber, the actor waits <see cref="MatchOptions.GetActorInitialWait"/> instead, which
+        /// outlasts the restart grace of a table woken from the database. The SDK's default initial wait is shorter.
+        /// </para>
         /// </summary>
         protected override AutoShutdownPolicy ShutdownPolicy =>
-            AutoShutdownPolicy.ShutdownAfterSubscribersGone(lingerDuration: Options.ActorLingerAfterLastSubscriber);
+            AutoShutdownPolicy.ShutdownAfterSubscribersGone(
+                lingerDuration:      Options.ActorLingerAfterLastSubscriber,
+                initialWaitDuration: Options.GetActorInitialWait());
 
         /// <summary>A table is created by sending a setup message to a new entity id. No row is written first.</summary>
         protected override bool AllowEntityCreationOnMessage => true;
@@ -115,27 +106,11 @@ namespace Game.Server.Match
         /// </summary>
         bool _deliveringResults;
 
-        /// <summary>
-        /// When to send undelivered results again, or <see cref="MetaTime.Epoch"/> when no result is pending.
-        /// <see cref="GetNextAttentionAt"/> includes it when scheduling the next wake.
-        /// </summary>
-        MetaTime _resultRetryAt = MetaTime.Epoch;
+        /// <summary>The publish and result retries, from which <see cref="ArmNextWake"/> schedules the next wake.</summary>
+        readonly MatchActorRetries _retries = new MatchActorRetries();
 
         /// <summary>The table's one wake, armed by <see cref="ArmNextWake"/> and run by <see cref="OnWake"/>.</summary>
         readonly DeadlineWakeup _wake = new DeadlineWakeup();
-
-        // Retry state after a refused publish: when the table runs again, and how many retries it has made. Not
-        // persisted, because a refused publish does not change the model, and a restored table runs from its
-        // model.
-        MetaTime _publishRetryAt = MetaTime.Epoch;
-        int      _publishRetries;
-
-        /// <summary>
-        /// True if this actor stopped running the table after <see cref="MaxPublishRetries"/> refused publishes.
-        /// While set, no wakes are scheduled, so only a client message runs the table. A successful publish clears
-        /// it.
-        /// </summary>
-        bool _publishRetriesExhausted;
 
         // Whether any publish succeeded, and whether any was refused, since the last call to
         // RecoverFromRefusedPublish. Both can be true after one pass. A client's move publishes before the pass
@@ -198,9 +173,8 @@ namespace Game.Server.Match
         /// </summary>
         protected override Task OnClientSessionHandshake(EntityId sessionId, EntityId playerId, InternalEntitySubscribeRequestBase requestBase)
         {
-            // A null model means no database row exists for this id. Refuse the same way as for a player with no
-            // seat, so the player's actor clears its pointer.
-            if (Model == null || Model.FindSeatOfPlayer(playerId) < 0)
+            // The SDK refuses a subscribe to a table with no model before calling this, so Model is set here.
+            if (Model.FindSeatOfPlayer(playerId) < 0)
             {
                 _log.Warning("Player {PlayerId} tried to subscribe to a table they do not sit at. Refusing.", playerId);
                 throw new InternalEntitySubscribeRefusedBase.Builtins.NotAParticipant();
@@ -221,7 +195,7 @@ namespace Game.Server.Match
         /// </summary>
         protected override Task<InternalEntitySubscribeResponseBase> OnClientSessionStart(EntityId sessionId, EntityId playerId, InternalEntitySubscribeRequestBase requestBase, List<AssociatedEntityRefBase> associatedEntities)
         {
-            int seat = Model == null ? -1 : Model.FindSeatOfPlayer(playerId);
+            int seat = Model.FindSeatOfPlayer(playerId);
             if (seat >= 0)
             {
                 MatchHost.NoteSeatPresent(Model, seat, MetaTime.Now, HostEnvironment);
@@ -241,7 +215,7 @@ namespace Game.Server.Match
             base.OnParticipantSessionEnded(session);
 
             ClientPeerState peer = TryGetClientPeer(session);
-            if (peer == null || Model == null)
+            if (peer == null)
                 return;
 
             int seat = Model.FindSeatOfPlayer(peer.PlayerId);
@@ -250,28 +224,6 @@ namespace Game.Server.Match
 
             MatchHost.NoteSeatAbsent(Model, seat, MetaTime.Now, skipGrace: false, HostEnvironment);
             RunTable();
-        }
-
-        /// <summary>
-        /// Returns the subscribed session of the player at <paramref name="seat"/>, or null if that player is not
-        /// subscribed. Used to send a hand update to one client.
-        /// </summary>
-        EntitySubscriber TryGetSessionAtSeat(int seat)
-        {
-            if (Model == null || seat < 0 || seat >= MatchRules.NumSeats)
-                return null;
-
-            EntityId playerId = Model.GetSeat(seat).PlayerId;
-            if (!playerId.IsValid)
-                return null;
-
-            foreach ((int _, EntitySubscriber subscriber) in _subscribers)
-            {
-                ClientPeerState peer = TryGetClientPeer(subscriber);
-                if (peer != null && peer.PlayerId == playerId)
-                    return subscriber;
-            }
-            return null;
         }
 
         #endregion
@@ -325,19 +277,19 @@ namespace Game.Server.Match
         #region Client messages
 
         /// <summary>
-        /// Handles a move from a client. The seat in the message is checked against the player's actual seat
-        /// before the move is applied. A move that is not played gets an explicit refusal, because otherwise the
-        /// client's selected card would stay lifted and its hand would stay locked for the rest of the game.
+        /// Handles a move from a client, for the seat the sending player occupies. A move that is not played gets an
+        /// explicit refusal, because otherwise the client's selected card would stay lifted and its hand would stay
+        /// locked for the rest of the game.
         /// </summary>
         [PubSubMessageHandler]
         void HandlePlayCardRequest(EntitySubscriber session, MatchPlayCardRequest request)
         {
             ClientPeerState peer = TryGetClientPeer(session);
-            if (peer == null || Model == null)
+            if (peer == null)
                 return;
 
             MoveRefusalReason refusal = MatchHost.TrySubmitMove(
-                Model, peer.PlayerId, request.Seat, request.PlayIndex, request.Card, MetaTime.Now, HostEnvironment);
+                Model, peer.PlayerId, request.PlayIndex, request.Card, MetaTime.Now, HostEnvironment);
 
             if (refusal != MoveRefusalReason.None)
                 SendToClient(session, new MatchMoveRefused(request.PlayIndex, request.Card, refusal));
@@ -361,7 +313,7 @@ namespace Game.Server.Match
         void HandleLeaveRequest(EntitySubscriber session, MatchLeaveRequest _)
         {
             ClientPeerState peer = TryGetClientPeer(session);
-            if (peer == null || Model == null)
+            if (peer == null)
                 return;
 
             int seat = Model.FindSeatOfPlayer(peer.PlayerId);
@@ -409,14 +361,14 @@ namespace Game.Server.Match
             /// <summary>Limits this session's clock sync requests to one per <see cref="ClockSyncMinInterval"/>.</summary>
             public RequestThrottle ClockSyncThrottle = RequestThrottle.Open(ClockSyncMinInterval);
 
-            public MatchPeerState(ClientSlot clientSlot, int clientChannelId, EntityId playerId)
-                : base(clientSlot, clientChannelId, playerId)
+            public MatchPeerState(AssociatedEntityRefBase associationRef, int clientChannelId, EntityId playerId)
+                : base(associationRef, clientChannelId, playerId)
             {
             }
         }
 
         protected override ClientPeerState CreateClientPeer(EntityId playerId, InternalEntitySubscribeRequestBase requestBase, InternalEntitySubscribeResponseBase responseBase)
-            => new MatchPeerState(requestBase.AssociationRef.GetClientSlot(), requestBase.ClientChannelId, playerId);
+            => new MatchPeerState(requestBase.AssociationRef, requestBase.ClientChannelId, playerId);
 
         #endregion
 
@@ -505,7 +457,7 @@ namespace Game.Server.Match
 
         /// <summary>
         /// The <see cref="IMatchHostEnvironment"/> through which <see cref="MatchHost"/> calls back into this actor to
-        /// publish actions, draw seeds, and send messages to one seat's client. Created once per actor.
+        /// publish actions, draw seeds, and report seat losses. Created once per actor.
         /// </summary>
         IMatchHostEnvironment HostEnvironment => _environment ??= new ActorHostEnvironment(this);
 
@@ -523,21 +475,6 @@ namespace Game.Server.Match
             public bool Publish(MatchAction action) => _actor.PublishAction(action);
 
             public ulong NextSeed() => _actor._hostRng.NextULong();
-
-            /// <summary>
-            /// Called when the host changed a seat's hand without that seat's client playing a card, for example
-            /// by a deadline auto-play, a covering bot's move, or a reclaim. Sends the new hand to the seat's
-            /// client, if one is subscribed. The deal and reconnects are covered by the private state sent at
-            /// subscribe time.
-            /// </summary>
-            public void OnSeatHandChanged(int seat)
-            {
-                EntitySubscriber session = _actor.TryGetSessionAtSeat(seat);
-                if (session == null)
-                    return;
-
-                _actor.SendToClient(session, MatchHost.BuildHandDelivery(_actor.Model, seat));
-            }
 
             /// <summary>
             /// Called when a seat's owner no longer plays it. Casts <see cref="MatchSeatLostNotification"/> to the
@@ -567,15 +504,15 @@ namespace Game.Server.Match
             List<MatchSeatResult> undeliveredResults = SeatsAwaitingTheirResult();
             if (undeliveredResults.Count == 0)
             {
-                _resultRetryAt = MetaTime.Epoch;
+                _retries.ClearResultRetry();
                 return;
             }
 
             _deliveringResults = true;
 
-            // No retry is due while the round is in flight. An ask can take longer than ResultRetryDelay, and a retry
-            // time that passes during the round would make every wake re-arm at once. The round's end sets the next one.
-            _resultRetryAt = MetaTime.Epoch;
+            // A retry time that passed during the round would make every wake re-arm at once. The round's end sets
+            // the next one.
+            _retries.ClearResultRetry();
 
             // Send the asks in parallel. Sequential asks would each wait for the previous one, so one unreachable
             // player would delay every seat after it by a full ask timeout.
@@ -593,7 +530,7 @@ namespace Game.Server.Match
                 {
                     _log.Error("The result delivery round faulted unexpectedly: {Error}", failure);
                     _deliveringResults = false;
-                    _resultRetryAt     = MetaTime.Now + ResultRetryDelay;
+                    NoteResultRound(numFailed: undeliveredResults.Count);
                     ArmNextWake();
                 });
         }
@@ -658,7 +595,7 @@ namespace Game.Server.Match
 
         /// <summary>
         /// Marks the seats that acknowledged as delivered, persists the model, and schedules a retry after
-        /// <see cref="ResultRetryDelay"/> if any seat did not acknowledge.
+        /// <see cref="MatchActorRetries.ResultRetryDelay"/> if any seat did not acknowledge.
         /// </summary>
         async Task OnDeliveryRoundFinished(List<MatchSeatResult> owed, bool[] acknowledged)
         {
@@ -681,15 +618,8 @@ namespace Game.Server.Match
                     _abandonedSeatsAcknowledged.Add(owed[index].Seat);
             }
 
-            if (failedCount > 0)
-            {
-                _log.Warning("{Failed} of {Total} results could not be delivered. Retrying in {Delay}.", failedCount, owed.Count, ResultRetryDelay);
-                _resultRetryAt = MetaTime.Now + ResultRetryDelay;
-            }
-            else
-            {
-                _resultRetryAt = MetaTime.Epoch;
-            }
+            if (!NoteResultRound(failedCount) && failedCount > 0)
+                _log.Warning("{Failed} of {Total} results could not be delivered. Retrying in {Delay}.", failedCount, owed.Count, MatchActorRetries.ResultRetryDelay);
 
             if (deliveredCount > 0)
             {
@@ -700,6 +630,16 @@ namespace Game.Server.Match
             }
 
             ArmNextWake();
+        }
+
+        /// <summary>Records a finished result delivery round. Returns whether it logged the repeated-failure error.</summary>
+        bool NoteResultRound(int numFailed)
+        {
+            if (!_retries.AfterResultRound(numFailed, MetaTime.Now))
+                return false;
+
+            _log.Error("Results have failed to deliver in {Rounds} rounds in a row. The table keeps retrying.", _retries.FailedResultRounds);
+            return true;
         }
 
         /// <summary>
@@ -721,54 +661,14 @@ namespace Game.Server.Match
             _anyPublishSucceeded = false;
             _anyPublishRefused   = false;
 
-            // A successful publish means the table advanced, so reset the retry count and resume running the table.
-            if (anySucceeded)
-            {
-                _publishRetries = 0;
-                _publishRetriesExhausted = false;
-            }
-
-            if (!anyRefused)
-            {
-                _publishRetryAt = MetaTime.Epoch;
-                return;
-            }
-
-            if (_publishRetries >= MaxPublishRetries)
-            {
-                if (!_publishRetriesExhausted)
-                    _log.Error("The timeline refused {Retries} publishes in a row. This table has stopped driving itself.", _publishRetries);
-
-                // Keep _publishRetryAt instead of clearing it. No wake is scheduled from it while driving is
-                // stopped, but it still records when the table last needed attention.
-                _publishRetriesExhausted = true;
-                return;
-            }
-
-            _publishRetries++;
-            _publishRetryAt = MetaTime.Now + PublishRetryDelay;
+            if (_retries.AfterPass(anySucceeded, anyRefused, MetaTime.Now))
+                _log.Error("The timeline refused {Retries} publishes in a row. This table has stopped driving itself.", _retries.PublishRetries);
         }
 
-        /// <summary>
-        /// Returns when the table next needs to run: the earliest of the model's pending deadlines, the pending
-        /// bot move, the publish retry, and the result retry. Returns <see cref="MetaTime.Epoch"/> if none is
-        /// pending.
-        /// </summary>
-        MetaTime GetNextAttentionAt()
-        {
-            // Include the result retry. Without it, a table that ended while a player's actor was unreachable
-            // would never send the result again (docs/match.md, "Results").
-            return MatchHost.Earlier(MatchHost.Earlier(MatchHost.GetNextWakeAt(Model, _pendingBotMove), _publishRetryAt), _resultRetryAt);
-        }
-
-        /// <summary>
-        /// Schedules the next wake at the time from <see cref="GetNextAttentionAt"/>. When
-        /// <see cref="_publishRetriesExhausted"/> is set, no wake is scheduled, because the pending timestamps are ones
-        /// the table just failed to act on, and scheduling would cause a wake every <see cref="DeadlineWakeup.Padding"/>.
-        /// </summary>
+        /// <summary>Schedules the next wake at the time from <see cref="MatchActorRetries.NextWakeAt"/>.</summary>
         void ArmNextWake()
         {
-            MetaTime wakeAt = _publishRetriesExhausted ? MetaTime.Epoch : GetNextAttentionAt();
+            MetaTime wakeAt = _retries.NextWakeAt(Model, _pendingBotMove);
             if (_wake.TryArm(wakeAt, MetaTime.Now, out TimeSpan delay))
                 ScheduleExecuteOnActorContext(delay, () => OnWake(wakeAt));
         }

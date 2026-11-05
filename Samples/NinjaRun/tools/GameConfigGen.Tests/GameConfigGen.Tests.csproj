@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Tests of the game config build and of the files it reads: that the sources in GameConfigSource/ build, that
+       the committed archives match a build of them, that GameConfigGen refuses to write an archive when the SDK build
+       reported an error, and the course parts' JSON format. Separate from Backend/SharedCode.Tests, because they read
+       files outside Backend/ (the sources, the committed client archive and this tool), which the server's test image
+       does not contain.
+
+       GameConfigBuildTests asserts the build tool's own two gates - the report gate and the missing-sheet precheck -
+       rather than restating them, so that the checks the tool applies and the checks CI trusts cannot drift apart. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>Latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="nunit" Version="4.4.0" />
+    <PackageReference Include="NUnit.Analyzers" Version="4.10.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="NUnit3TestAdapter" Version="5.1.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GameConfigGen\GameConfigGen.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\Backend\SharedCode.Tests\TestGameConfig.cs" Link="Shared\TestGameConfig.cs" />
+  </ItemGroup>
+
+</Project>

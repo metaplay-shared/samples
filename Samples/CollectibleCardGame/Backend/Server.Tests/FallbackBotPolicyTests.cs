@@ -1,4 +1,5 @@
 using Game.Logic;
+using Game.Logic.Tests;
 using Game.Server.Matchmaking;
 using Metaplay.Core;
 using NUnit.Framework;
@@ -8,7 +9,7 @@ namespace Game.Server.Tests
 {
     /// <summary>
     /// The seat the fill wait hands out. The deck half of it is <c>BotDecks</c> and is pinned by
-    /// <c>BotDeckTests</c> — legality, determinism, clan disjointness, Power-Score proximity and rank
+    /// <c>BotDeckTests</c> — clan disjointness, Power-Score proximity and rank
     /// clamping — so what is left here is the profile bucketing and the one stakes pairing the shipped helper
     /// cannot express.
     /// </summary>
@@ -21,28 +22,21 @@ namespace Game.Server.Tests
 
         static BotProfileId ProfileFor(int rating) => FallbackBotPolicy.ProfileFor(rating, Global, Schedule);
 
-        [Test]
-        public void ThreeBucketsSplitSymmetricallyAroundTheRatingSeed()
+        /// <summary>
+        /// Three buckets either side of the rating seed, and one set of rating thresholds in the codebase rather
+        /// than two independently tuned ones: the boundaries are the schedule's widest bounded band (250), and the
+        /// boundary itself is inside the middle bucket.
+        /// </summary>
+        [TestCase(-1000, BotProfileId.Sloppy)]
+        [TestCase(-251, BotProfileId.Sloppy)]
+        [TestCase(-250, BotProfileId.Casual)]
+        [TestCase(0, BotProfileId.Casual)]
+        [TestCase(250, BotProfileId.Casual)]
+        [TestCase(251, BotProfileId.Practiced)]
+        [TestCase(1000, BotProfileId.Practiced)]
+        public void TheBucketsSplitAroundTheRatingSeedAtTheSchedulesWidestBand(int offsetFromSeed, BotProfileId expected)
         {
-            int seed = Global.InitialRating;
-
-            Assert.That(ProfileFor(seed), Is.EqualTo(BotProfileId.Casual), "a fresh account meets the middle bucket");
-            Assert.That(ProfileFor(seed - 1000), Is.EqualTo(BotProfileId.Sloppy));
-            Assert.That(ProfileFor(seed + 1000), Is.EqualTo(BotProfileId.Practiced));
-        }
-
-        [Test]
-        public void TheBucketBoundariesAreTheSchedulesOwnWidestFiniteRatingBand()
-        {
-            // One set of rating thresholds in the codebase rather than two independently tuned ones: the
-            // buckets are the schedule's widest bounded band, either side of the seed.
-            int seed = Global.InitialRating;
-            int band = 250;
-
-            Assert.That(ProfileFor(seed - band), Is.EqualTo(BotProfileId.Casual), "the boundary itself is inside the middle");
-            Assert.That(ProfileFor(seed - band - 1), Is.EqualTo(BotProfileId.Sloppy));
-            Assert.That(ProfileFor(seed + band), Is.EqualTo(BotProfileId.Casual));
-            Assert.That(ProfileFor(seed + band + 1), Is.EqualTo(BotProfileId.Practiced));
+            Assert.That(ProfileFor(Global.InitialRating + offsetFromSeed), Is.EqualTo(expected));
         }
 
         [Test]

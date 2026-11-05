@@ -1,7 +1,5 @@
 using Metaplay.Core.Config;
-using NUnit.Framework;
 using System;
-using System.IO;
 using System.Threading.Tasks;
 
 namespace Game.Logic.Tests
@@ -17,13 +15,13 @@ namespace Game.Logic.Tests
         const string StaticGameConfigPath = "../Server/GameConfig/StaticGameConfig.mpa";
 
         /// <summary>
-        /// Load the game config archive file from disk. The <see cref="SharedGameConfig"/> part of the full
-        /// archive is returned.
+        /// Load the game config archive file from disk, by default the committed one. The <see cref="SharedGameConfig"/>
+        /// part of the full archive is returned.
         /// </summary>
-        public static async Task<SharedGameConfig> LoadSharedAsync()
+        public static async Task<SharedGameConfig> LoadSharedAsync(string staticGameConfigPath = StaticGameConfigPath)
         {
             // Read StaticGameConfig.mpa from disk
-            ConfigArchive staticGameConfigArchive = await ConfigArchive.FromFileAsync(StaticGameConfigPath);
+            ConfigArchive staticGameConfigArchive = await ConfigArchive.FromFileAsync(staticGameConfigPath);
 
             // Extract Shared.mpa from the parent archive
             ReadOnlyMemory<byte> sharedGameConfigBytes = staticGameConfigArchive.GetEntryByName("Shared.mpa").Bytes;
@@ -32,20 +30,6 @@ namespace Game.Logic.Tests
             // Create the SharedGameConfig from the bytes
             ISharedGameConfig sharedGameConfig = GameConfigUtil.ImportSharedConfig(sharedGameConfigArchive);
             return (SharedGameConfig)sharedGameConfig;
-        }
-
-        /// <summary>
-        /// The repo root, found by walking up from the test working directory. <c>TestHelper.SetupForTests()</c>
-        /// makes that the test project's own directory, so nothing here depends on how deep it sits.
-        /// </summary>
-        public static string RepoRoot()
-        {
-            DirectoryInfo directory = new DirectoryInfo(Directory.GetCurrentDirectory());
-            while (directory != null && !File.Exists(Path.Combine(directory.FullName, "metaplay-project.yaml")))
-                directory = directory.Parent;
-
-            Assert.That(directory, Is.Not.Null, "could not find the repo root above the test working directory");
-            return directory.FullName;
         }
     }
 }

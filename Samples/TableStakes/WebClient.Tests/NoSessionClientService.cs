@@ -13,9 +13,9 @@ namespace WebClient.Tests;
 /// and <see cref="SetMatchmakingSeatDeadlineAt"/>. Until a test sets them, they hold the values of a client with no
 /// session: no table, not searching, and no seat deadline.
 /// <para>
-/// Both <c>ConnectAsync</c> and the SDK core initialization are skipped: this assembly is a plain net10.0 test
-/// host with no pre-built serializer and no integration metadata, and a render without a session does not need
-/// the initialization.
+/// The SDK core initialization is skipped: this assembly is a plain net10.0 test host with no pre-built serializer
+/// and no integration metadata, and a render without a session does not need the initialization. Nothing starts the
+/// service either, because the layouts start it and the render tests render no layout.
 /// </para>
 /// </summary>
 public class NoSessionClientService : MetaplayClientService
@@ -38,8 +38,6 @@ public class NoSessionClientService : MetaplayClientService
         // No SDK core initialization: the test host never opens a session, and the entry assembly carries no
         // integration metadata the initialization would look for.
     }
-
-    public override Task ConnectAsync() => Task.CompletedTask;
 
     /// <summary>Set <see cref="Match"/> and notify the rendered components of the change.</summary>
     public void ShowTable(MatchModel? match)

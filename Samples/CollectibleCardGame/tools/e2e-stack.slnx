@@ -1,0 +1,14 @@
+<!-- The three projects an E2E stack needs: the game server, the web client the browser loads, and the test
+     assembly that drives it. run_e2e.py builds this solution in one `dotnet build` rather than one per
+     project, so the graph is evaluated and restored once instead of three times.
+
+     Nothing else belongs here. Adding a project makes every harness run build it; a project the stack does
+     not need (a code generator, say) is built on its own when it is wanted. Conversely, a
+     project the stack comes to need has to be listed, because the harness starts what this build produced.
+     The mixed target frameworks are deliberate and fine: WebClient is net10.0-browser and the other two are
+     net10.0, and a solution build asks each project for its own framework rather than negotiating one. -->
+<Solution>
+  <Project Path="../Backend/Server/Server.csproj" />
+  <Project Path="../WebClient/WebClient.csproj" />
+  <Project Path="../WebClient.Tests/WebClient.Tests.csproj" />
+</Solution>

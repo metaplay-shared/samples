@@ -1,20 +1,20 @@
 # Configure schema to use.
-# yaml-language-server: $schema=../../MetaplaySDK/projectConfigSchema.json
-$schema: "../../MetaplaySDK/projectConfigSchema.json"
+# yaml-language-server: $schema=MetaplaySDK/projectConfigSchema.json
+$schema: "MetaplaySDK/projectConfigSchema.json"
 
 # Configure project.
 projectID: silver-cobras-hunt
-buildRootDir: ../..
-sdkRootDir: ../../MetaplaySDK
+buildRootDir: .
+sdkRootDir: MetaplaySDK
 backendDir: Backend
 sharedCodeDir: SharedCode
-unityProjectDir: . # hack: this project doesn't have a Unity client
+unityProjectDir: . # No Unity client; Metaplay CLI versions before 1.26.0 require this field
 
 # Specify .NET runtime version to build project for, only '<major>.<minor>'.
 dotnetRuntimeVersion: "10.0"
 
 # Specify Helm chart versions to use for server and bot deployments.
-serverChartVersion: latest-prerelease
+serverChartVersion: 0.12.0
 botClientChartVersion: latest-prerelease
 
 # Customize Metaplay features used in the game.
@@ -23,6 +23,16 @@ features:
   dashboard:
     useCustom: true
     rootDir: Backend/Dashboard
+
+# Web clients that 'metaplay deploy webclient' uploads to an environment's CDN. Publish the client first, into a
+# clean directory, as a publish never deletes a file:
+#   rm -rf WebClient/bin/Release/net10.0-browser/publish && dotnet publish WebClient -c Release
+# The deploy writes metaplay-endpoints.json next to it with the game server's address, as far as the environment
+# reports it; the client reads it at startup.
+webClients:
+  - name: webclient
+    sourceDir: WebClient/bin/Release/net10.0-browser/publish/wwwroot
+    preset: blazor
 
 # Project environments.
 environments:

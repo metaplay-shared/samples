@@ -86,7 +86,7 @@ namespace Game.Logic.Tests
 
                     List<Card>        legal   = MatchRules.GetLegalPlays(model.Engine.GetHand(seatOnTurn), model.Board.LedSuit);
                     MoveRefusalReason refusal = MatchHost.TrySubmitMove(
-                        model, MatchTestDeals.Player(seatOnTurn), seatOnTurn, model.Board.PlayIndex, legal[0], now, host);
+                        model, MatchTestDeals.Player(seatOnTurn), model.Board.PlayIndex, legal[0], now, host);
                     Assert.That(refusal, Is.EqualTo(MoveRefusalReason.None), $"seed {seed}: a legal card was refused");
                 }
                 else

@@ -6,11 +6,15 @@ using System.Threading.Tasks;
 namespace WebClientBase.Integration;
 
 /// <summary>
-/// Offline server for the Blazor WebAssembly client. It runs the session in-process against the built-in game
-/// config, with no game server. The "offline" environment selects it (see
-/// <see cref="Configuration.StaticEnvironmentConfigProvider"/>), and the SDK finds it as the
-/// <c>IOfflineServer</c> integration. In the browser, the SDK fetches the built-in config archive over HTTP from
-/// <c>&lt;page base&gt;Assets/SharedGameConfig.mpa</c>. This class only replaces the error for a missing archive.
+/// Offline server for the Blazor WebAssembly client: runs the session in-process against the built-in game
+/// config, with no game server involved. Selected by the "offline" environment
+/// (<c>?offline</c>), and picked up automatically as the SDK's
+/// <c>IOfflineServer</c> integration.
+/// <para>
+/// The SDK's own paths are correct here — in the browser it resolves the built-in config archive to
+/// <c>&lt;page base&gt;Assets/SharedGameConfig.mpa</c> and fetches it over HTTP, which is where the
+/// game config build writes it — so only the diagnostic for a missing archive is specialized.
+/// </para>
 /// </summary>
 public class BlazorOfflineServer : DefaultOfflineServer
 {
@@ -22,11 +26,11 @@ public class BlazorOfflineServer : DefaultOfflineServer
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException)
         {
-            // A missing archive fetched over HTTP fails with an IOException, which the SDK's file-not-found error
-            // does not cover. Name the archive and the command that builds it.
+            // Fetching the archive over HTTP reports a missing file as IOException, which the SDK's own
+            // file-not-found diagnostic does not cover, so name the archive and how to produce it.
             throw new InvalidOperationException(
                 $"Offline mode could not load the built-in game config from '{GetBuiltinGameConfigArchivePath()}'. " +
-                "Generate it with: dotnet run --project tools/GameConfigGen",
+                "Build it with: dotnet run --project tools/GameConfigGen",
                 ex);
         }
     }

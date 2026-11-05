@@ -3,10 +3,12 @@
 [Documentation index](../README.md#documentation)
 
 This doc describes how Table Stakes is put together on the Metaplay SDK: its projects, how the shared game code is
-compiled for the server and the client, the server's entities, the web client and how the server hosts it, and
-deployment. The feature docs linked below cover each system in depth. Commands are in [`AGENTS.md`](../AGENTS.md).
+compiled for the server and the client, the server's entities, the web client, and deployment. The feature docs linked below cover each system in depth. Commands are in [`AGENTS.md`](../AGENTS.md).
 
 ## Projects
+
+The project structure is the Blazor starter project's
+([project structure](https://github.com/metaplay-shared/blazor-starter-project/blob/main/docs/project-structure.md)).
 
 | Project | Role |
 |---|---|
@@ -19,7 +21,7 @@ deployment. The feature docs linked below cover each system in depth. Commands a
 | [`WebClient`](../WebClient/WebClient.csproj) | The game's Blazor WebAssembly app |
 | [`tools/GameConfigGen`](../tools/GameConfigGen/GameConfigGen.csproj) | Builds the game config archives ([`game-config.md`](game-config.md)) |
 | [`tools/SerializerGen`](../tools/SerializerGen/SerializerGen.csproj) | Generates the pre-built serializer the web client loads |
-| `Backend/SharedCode.Tests`, `Backend/Server.Tests`, `WebClient.Tests` | Tests ([`testing.md`](testing.md)) |
+| `Backend/SharedCode.Tests`, `Backend/Server.Tests`, `tools/GameConfigGen.Tests`, `WebClient.Tests` | Tests ([`testing.md`](testing.md)) |
 
 `WebClient` and `WebClientBase` target `net10.0-browser`, so a `net10.0` project cannot reference them.
 `WebClient.Tests` compiles their sources in instead.
@@ -75,8 +77,8 @@ The game's endpoints run on the public, unauthenticated PublicWebApi host. The `
 uses to force match timers and to create or seed weekly events, answer 404 unless `TestRoutes:Enabled` is on
 ([`testing.md`](testing.md), [`weekly-event.md`](weekly-event.md)). It is off in every environment, and only the E2E
 harness turns it on. Neither the environment type nor `Environment:EnableDevelopmentFeatures` is the gate, because
-both are on in deployed development environments that anyone can reach. A catch-all route serves the web client
-([Web client hosting](#web-client-hosting)).
+both are on in deployed development environments that anyone can reach. The host's root redirects to the web client
+on the CDN ([Deploying](#deploying)).
 
 ### LiveOps Dashboard
 
@@ -112,7 +114,6 @@ match engine through `MatchTimings` ([`match.md`](match.md)).
 | `Matchmaking` | [`MatchmakingOptions`](../Backend/Server/Matchmaking/MatchmakingOptions.cs) | Fill wait and ask timeouts | [`matchmaking.md`](matchmaking.md) |
 | `Tournament` | [`TournamentOptions`](../Backend/Server/Tournament/TournamentOptions.cs) | Season schedule | [`seasonal-tournament.md`](seasonal-tournament.md) |
 | `WeeklyEventSeeding` | [`WeeklyEventSeedingOptions`](../Backend/Server/WeeklyEvent/WeeklyEventSeedingOptions.cs) | Seeding horizon and pass schedule | [`weekly-event.md`](weekly-event.md) |
-| `WebClientHosting` | [`WebClientHostingOptions`](../Backend/Server/WebClientHosting/WebClientHostingOptions.cs) | The directory the web client is served from | [Web client hosting](#web-client-hosting) |
 | `TestRoutes` | [`TestRoutesOptions`](../Backend/Server/TestRoutes/TestRoutesOptions.cs) | Whether the `test/` routes answer | [HTTP endpoints](#http-endpoints) |
 
 The options files and the environments that use them are described in
@@ -127,18 +128,10 @@ Dashboard. See [`game-config.md`](game-config.md).
 ## Web client
 
 The client is a Blazor WebAssembly app that runs the Metaplay client in the browser. `MetaplayClientService` creates
-the SDK client with two sub-clients: `MatchClient` for the table and a league client for the tournament. The client
-picks its environment from the page host, so the same build connects to a local server, a cloud server, or runs
-offline with `?env=offline`. See [`web-client.md`](web-client.md) for the client and
+the SDK client with two sub-clients: `MatchClient` for the table and a league client for the tournament. The SDK
+picks the game server when the client starts, so the same build connects to a local server, to the cloud server the
+deploy names, or runs offline with `?offline`. See [`web-client.md`](web-client.md) for the client and
 [`meta-shell.md`](meta-shell.md) for its screens.
-
-## Web client hosting
-
-The game server serves the published web client itself, from the PublicWebApi host.
-`WebClientHostingController` serves the files in the directory set by `WebClientHosting:WebRootPath`: the image's
-`publicwebapp` directory in the cloud, and the local publish output under `Options.local.yaml`. How the client gets
-into the cloud image is in [Server image](#server-image), and the caching rules that let running clients update are in
-[`web-client.md`](web-client.md).
 
 ## Bot client
 
@@ -151,29 +144,25 @@ queues again. The matchmaker treats bot clients as people, not as bot seats ([`b
 ### Project configuration
 
 [`metaplay-project.yaml`](../metaplay-project.yaml) configures the Metaplay CLI. The project builds against the SDK
-two directories up, and it has one Metaplay-hosted environment, `Demo`.
+two directories up, and it has one Metaplay-hosted environment, `Demo`. Its `webClients` entry names the published
+web client that `metaplay deploy webclient` uploads, with the SDK's `blazor` preset.
 
 The browser client connects through the server's WebSocket gateway, which the server chart serves by default, so it
 needs no Helm configuration. [`Backend/Deployments/example-server.yaml`](../Backend/Deployments/example-server.yaml)
 holds comments only.
 
-### Server image
-
-The SDK's `Dockerfile.server` cannot build the web client: its build stage has neither the client sources nor the
-`wasm-tools` workload. [`tools/ServerImageBuild.cs`](../tools/ServerImageBuild.cs) therefore publishes the client
-first, stages it in `Backend/Server/publicwebapp/`, and then runs `metaplay build image`. `Server.csproj` copies that
-directory into the server's publish output, where the cloud default of `WebClientHosting:WebRootPath` points.
-
-Two details of the staging matter:
-
-- The staging directory is emptied first. The publish's asset file names contain content hashes, and a copy over an
-  old publish would leave unreferenced files.
-- The build writes a build ID into `index.html` and into `build-info.json` next to it. Running clients poll that file
-  to notice a new deploy ([`web-client.md`](web-client.md)).
-
-Running `metaplay build image` directly ships a stale client or none.
-
 ### Deploying
 
-Build the image with `tools/ServerImageBuild.cs` and deploy it with `metaplay deploy server`. The client is served
-from the PublicWebApi host, whose name is the server hostname with `-public` added to its first label.
+The game server and the web client deploy separately. The commands are in [`AGENTS.md`](../AGENTS.md#deploying).
+
+- **Game server.** `metaplay build image` builds the image with the SDK's `Dockerfile.server`, and
+  `metaplay deploy server` deploys it. The image does not contain the web client.
+- **Web client.** `dotnet publish` builds the trimmed client ([the published client](https://github.com/metaplay-shared/blazor-starter-project/blob/main/docs/publishing.md#the-published-client)),
+  and `metaplay deploy webclient` uploads it to the environment's CDN, at `<environment>-assets.<domain>`. Publish into
+  an empty directory, because a publish never deletes files and a stale file would be uploaded too. How the CDN serves
+  the files and how the client finds its server are in [the starter project's publishing guide](https://github.com/metaplay-shared/blazor-starter-project/blob/main/docs/publishing.md#deploying-to-the-cloud).
+
+[`WebClientRedirectController`](../Backend/Server/WebClientRedirect/WebClientRedirectController.cs) answers the root of
+the game server's PublicWebApi host, the server hostname with `-public` added to its first label, with a 302 to the root
+of the environment's public CDN, `BlobStorage:S3PublicBucketCdnUrl`, keeping the query. With no CDN address, as on a
+local server, the root answers 404.

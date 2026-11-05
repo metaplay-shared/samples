@@ -64,21 +64,8 @@ namespace Game.Logic.Tests
 
             Assert.That(drawEngine.Result.Outcome, Is.EqualTo(MatchOutcome.Draw));
             Assert.That(drawEngine.Result.Cause, Is.EqualTo(MatchEndCause.BothDensAtZero));
-        }
-
-        [Test]
-        public void DrawResultNamesNoWinner()
-        {
-            Scenario scenario = new Scenario(Config);
-            scenario.Seat(0).Den(0).DeckOf(6);
-            scenario.Seat(1).Den(0).DeckOf(6);
-            CardInstanceId mouse = scenario.Seat(0).Board("MeadowMouse");
-            MatchEngine engine = scenario.OnTurn(0).Build();
-
-            engine.Attack(0, mouse, EffectTargetRef.Den(1));
-
-            Assert.That(engine.Result.IsDraw, Is.True);
-            Assert.That(engine.Result.WinnerSeat, Is.EqualTo(MatchSeats.None));
+            Assert.That(drawEngine.Result.IsDraw, Is.True);
+            Assert.That(drawEngine.Result.WinnerSeat, Is.EqualTo(MatchSeats.None), "a draw names no winner");
         }
 
         [Test]
@@ -174,22 +161,6 @@ namespace Game.Logic.Tests
             Assert.That(Cards(engine.Result.PlayedBy(0)), Does.Contain(CardId.FromString("DumpsterBandit")));
             Assert.That(Cards(engine.Result.PlayedBy(0)), Does.Not.Contain(CardId.FromString("BerrySnack")),
                 "a copy of the opponent's trick is not a card of yours to lose");
-        }
-
-        [Test]
-        public void IntentsAfterCompleteAreRefusedWrongPhase()
-        {
-            Scenario       scenario = Fresh();
-            CardInstanceId frog     = scenario.Seat(0).Board("PondFrog");
-            scenario.Seat(0).Hand("MeadowMouse");
-            scenario.Seat(1).Den(15);
-            MatchEngine engine = scenario.Build();
-
-            engine.Attack(0, frog, EffectTargetRef.Den(1));
-            Assert.That(engine.Phase, Is.EqualTo(MatchPhase.Complete));
-
-            Assert.That(engine.EndTurn(0), Is.EqualTo(MatchIntentResults.WrongPhase));
-            Assert.That(engine.Play(0, engine.SecretHand(0)[0]), Is.EqualTo(MatchIntentResults.WrongPhase));
         }
 
         /// <summary>

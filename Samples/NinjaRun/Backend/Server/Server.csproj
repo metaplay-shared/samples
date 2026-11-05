@@ -17,13 +17,4 @@
     <ProjectReference Include="..\SharedCode\SharedCode.csproj" />
     <ProjectReference Include="$(MetaplayServerPath)\Server\Metaplay.Server.csproj" />
   </ItemGroup>
-
-  <ItemGroup>
-    <!-- The published Blazor WASM WebClient, staged here by tools/ServerImageBuild.cs before the
-         Docker image build. Copied into the publish output at publicwebapp/, which is where the
-         cloud-default WebClientHosting.WebRootPath points. Publish only, so a plain build or
-         `metaplay dev server` is unaffected; the directory is absent (and ignored) in normal work. -->
-    <None Remove="publicwebapp\**" />
-    <Content Include="publicwebapp\**" CopyToPublishDirectory="PreserveNewest" />
-  </ItemGroup>
 </Project>

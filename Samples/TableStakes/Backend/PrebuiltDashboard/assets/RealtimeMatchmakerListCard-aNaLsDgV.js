@@ -1,0 +1,1 @@
+import{Dr as e,Pr as t,Zr as n,br as r,fi as i,j as a}from"./src-XQkPPXhf.js";t();var o=e({__name:`RealtimeMatchmakerListCard`,setup(e){return(e,t)=>(n(),r(i(a),{title:`Real-Time Matchmakers`,"item-list":[],"get-item-key":e=>e,"empty-list-message":`No real-time matchmakers to list!`,"data-testid":`realtime-matchmakers-list-card`},null,8,[`get-item-key`]))}});export{o as default};

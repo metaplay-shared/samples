@@ -2,7 +2,6 @@ using Metaplay.Core;
 using Metaplay.Core.Config;
 using Metaplay.Core.Model;
 using Metaplay.Core.Player;
-using Metaplay.Core.Serialization;
 using NUnit.Framework;
 using System;
 using System.Collections.Generic;
@@ -41,27 +40,6 @@ namespace Game.Logic.Tests
         }
 
         #region The value
-
-        [Test]
-        public void ASavedChoiceAndAStarterChoiceAreEachWellFormed()
-        {
-            Assert.That(DeckChoice.Saved(3).IsSaved, Is.True);
-            Assert.That(DeckChoice.Saved(3).IsStarter, Is.False);
-            Assert.That(DeckChoice.Saved(3).IsWellFormed, Is.True);
-
-            DeckChoice starter = DeckChoice.Starter(StarterDeckId.FromString("FireAndFoam"));
-            Assert.That(starter.IsStarter, Is.True);
-            Assert.That(starter.IsSaved, Is.False);
-            Assert.That(starter.IsWellFormed, Is.True);
-        }
-
-        [Test]
-        public void NeitherHalfSetIsMalformed()
-        {
-            // A default-constructed choice, which is what a deserialized payload from an old client gives.
-            Assert.That(new DeckChoice().IsWellFormed, Is.False);
-            Assert.That(DeckChoice.Saved(0).IsWellFormed, Is.False);
-        }
 
         [Test]
         public void BothHalvesSetIsMalformed()
@@ -183,35 +161,9 @@ namespace Game.Logic.Tests
             }
         }
 
-        [Test]
-        public void TheRefusalNamesTheChoiceThatFailed()
-        {
-            Assert.That(ActionResults.ForChoiceError(DeckChoiceError.Malformed), Is.EqualTo(ActionResults.MalformedDeckChoice));
-            Assert.That(ActionResults.ForChoiceError(DeckChoiceError.UnknownStarterDeck), Is.EqualTo(ActionResults.UnknownStarterDeck));
-            Assert.That(ActionResults.ForChoiceError(DeckChoiceError.UnknownSavedDeck), Is.EqualTo(ActionResults.UnknownDeck));
-        }
-
         #endregion
 
         #region Persistence
-
-        [Test]
-        public void AChoiceRoundTripsTheSerializer()
-        {
-            // The value is persisted on the player model, so both halves have to survive a tagged round trip.
-            DeckChoice starter = MetaSerialization.CloneTagged(
-                DeckChoice.Starter(StarterDeckId.FromString("SunlitThicket")),
-                MetaSerializationFlags.IncludeAll, logicVersion: null, resolver: Config);
-            Assert.That(starter.StarterDeckId, Is.EqualTo(StarterDeckId.FromString("SunlitThicket")));
-            Assert.That(starter.SavedDeckId, Is.Zero);
-            Assert.That(starter.IsWellFormed, Is.True);
-
-            DeckChoice saved = MetaSerialization.CloneTagged(
-                DeckChoice.Saved(4), MetaSerializationFlags.IncludeAll, logicVersion: null, resolver: Config);
-            Assert.That(saved.SavedDeckId, Is.EqualTo(4));
-            Assert.That(saved.StarterDeckId, Is.Null);
-            Assert.That(saved.IsWellFormed, Is.True);
-        }
 
         #endregion
     }

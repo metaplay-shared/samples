@@ -71,7 +71,7 @@ namespace Game.Server.Player
                 return;
             }
 
-            (MatchSeatSetup seat, int powerScore) = MatchmakingTicketPolicy.FreezeSeat(Model, _entityId, resolved.Cards, SharedGameConfig);
+            (MatchSeatSetup seat, int powerScore) = MatchmakingTicketPolicy.FreezeSeat(Model, _entityId, resolved.Cards, Model.GameConfig);
             MatchmakingTicket ticket = MatchmakingTicketPolicy.Freeze(Model, deck, seat, powerScore, MetaTime.Now);
 
             EnterPhase(step.Phase);

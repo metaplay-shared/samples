@@ -9,13 +9,9 @@ namespace WebClient.Tests;
 /// carry it up the mountain, so the editor lets the author pick the band the preview and the draft's runs
 /// stand in; a map's parts take theirs from their position and never read it.
 /// </summary>
-[Parallelizable(ParallelScope.Self)]
 [TestFixture]
-public class DevPartEditorThemeOfflineModeTests : GamePageTest
+public class DevPartEditorThemeOfflineModeTests : OfflinePageTest
 {
-    private static readonly string BaseUrl =
-        (Environment.GetEnvironmentVariable("WEBCLIENT_BASE_URL") ?? "http://localhost:5290").TrimEnd('/');
-
     /// <summary>The bands every course climbs through, lowest first, as the renderer names them on the canvas.</summary>
     private const string EveryBand = "foothills mid-ridge summit";
 
@@ -76,7 +72,7 @@ public class DevPartEditorThemeOfflineModeTests : GamePageTest
     /// <summary>Open the editor offline on a fresh draft of the lowland part.</summary>
     private async Task OpenOnLowlandAsync()
     {
-        await Page.GotoAsync(BaseUrl + "/dev/parts?env=offline&source=rr-lowland");
+        await Page.GotoAsync(ClientUrl("/dev/parts", "offline&source=rr-lowland"));
 
         await Expect(Page.GetByTestId("dev-parts")).ToBeVisibleAsync(new() { Timeout = 30000 });
         await Expect(Page.GetByTestId("dev-editor-code")).ToHaveValueAsync(new Regex("\"rr-lowland\""), new() { Timeout = 30000 });

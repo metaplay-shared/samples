@@ -1,20 +1,20 @@
 # Configure schema to use.
-# yaml-language-server: $schema=../../MetaplaySDK/projectConfigSchema.json
-$schema: "../../MetaplaySDK/projectConfigSchema.json"
+# yaml-language-server: $schema=MetaplaySDK/projectConfigSchema.json
+$schema: "MetaplaySDK/projectConfigSchema.json"
 
 # Configure project.
 projectID: whole-impalas-strive
-buildRootDir: ../..
-sdkRootDir: ../../MetaplaySDK
+buildRootDir: .
+sdkRootDir: MetaplaySDK
 backendDir: Backend
 sharedCodeDir: SharedCode
-unityProjectDir: . # does not exist!
+unityProjectDir: . # No Unity client; Metaplay CLI versions before 1.26.0 require this field
 
 # Specify .NET runtime version to build project for, only '<major>.<minor>'.
 dotnetRuntimeVersion: "10.0"
 
 # Specify Helm chart versions to use for server and bot deployments.
-serverChartVersion: 0.10.0
+serverChartVersion: 0.12.0
 botClientChartVersion: 0.4.2
 
 # Customize Metaplay features used in the game.
@@ -23,6 +23,21 @@ features:
   dashboard:
     useCustom: false
     rootDir:
+
+# Web clients that 'metaplay deploy webclient' uploads to an environment's CDN. Publish the client first,
+# see WebClient/README.md. The deploy writes metaplay-endpoints.json next to it with the game server's
+# address, as far as the environment reports it; the client reads it at startup.
+webClients:
+  - name: webclient
+    sourceDir: WebClient/bin/Release/net10.0-browser/publish/wwwroot
+    preset: blazor
+    objects:
+      # The art and the sound are named after their content (<name>.sha256-<hash>.<ext>), so a changed file is a
+      # new name: they can be cached forever, and uploaded before the stylesheets and modules that name them.
+      - matchRegex: '\.sha256-[0-9a-f]+\.[A-Za-z0-9]+$'
+        cacheControl: public, max-age=31536000, immutable
+        uploadOrder: -1
+
 # Project environments.
 environments:
   - name: Develop

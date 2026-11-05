@@ -3,7 +3,7 @@
 /* ---------------------------------------------------------------------------
    Customize view
    The ninja's name, the one slot and the Skill tree, in the same portrait area the menu uses and reached
-   from it through the same curtain, set below the floating top bar. The tree is laid
+   from it through the same curtain, set below the floating debug bar. The tree is laid
    out from the config: one row per tier, the nodes of a row spread evenly across it, and the wires drawn
    behind them from the same coordinates.
    --------------------------------------------------------------------------- */

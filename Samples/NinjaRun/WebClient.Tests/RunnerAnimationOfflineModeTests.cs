@@ -5,19 +5,15 @@ using System.Text.Json;
 namespace WebClient.Tests;
 
 /// <summary>
-/// E2E tests for the runner's animations in the run renderer, driven through <c>?env=offline</c> so they need
+/// E2E tests for the runner's animations in the run renderer, driven through <c>?offline</c> so they need
 /// only the web client. The renderer is created directly over a small course and fed snapshots, and the canvas'
 /// data attributes say which frame the runner was drawn in and how many high-landing rolls and climb frames
 /// there have been.
 /// </summary>
-[Parallelizable(ParallelScope.Self)]
 [TestFixture]
-public class RunnerAnimationOfflineModeTests : GamePageTest
+public class RunnerAnimationOfflineModeTests : OfflinePageTest
 {
-    private static readonly string BaseUrl =
-        (Environment.GetEnvironmentVariable("WEBCLIENT_BASE_URL") ?? "http://localhost:5290").TrimEnd('/');
-
-    private static readonly string OfflineUrl = BaseUrl + "/?env=offline";
+    private static readonly string OfflineUrl = ClientUrl(query: "offline");
 
     /// <summary>
     /// A shelf at 6 m, a 2 m pit down to the floor at 0 m, and the ground after it at 2 m, whose far wall is the

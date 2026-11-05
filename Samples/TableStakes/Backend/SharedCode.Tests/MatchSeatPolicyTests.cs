@@ -133,7 +133,7 @@ namespace Game.Logic.Tests
             MatchHost.NoteSeatPresent(model, next, T0, host);
 
             Card              card    = model.Engine.GetHand(leader)[0];
-            MoveRefusalReason refusal = MatchHost.TrySubmitMove(model, Player(leader), leader, model.Board.PlayIndex, card, Later(MetaDuration.FromSeconds(1)), host);
+            MoveRefusalReason refusal = MatchHost.TrySubmitMove(model, Player(leader), model.Board.PlayIndex, card, Later(MetaDuration.FromSeconds(1)), host);
 
             Assert.That(refusal, Is.EqualTo(MoveRefusalReason.None), $"seed {Seed}");
             Assert.That(model.PlayHasBegun, Is.False, $"seed {Seed}");
@@ -284,7 +284,6 @@ namespace Game.Logic.Tests
             Assert.That(model.Board.Plays[3].Card, Is.EqualTo(cheapestTrump), $"seed {Seed}: the auto-play did not use the strongest profile");
             Assert.That(model.GetSeat(0).ConsecutiveMissedDeadlines, Is.EqualTo(1), $"seed {Seed}");
             Assert.That(model.GetSeat(0).Occupancy, Is.EqualTo(MatchSeatOccupancy.Human), $"seed {Seed}: one lapse handed the seat away");
-            Assert.That(host.HandCorrectedSeats, Does.Contain(0), $"seed {Seed}: the seat's hand changed without a correction being sent");
         }
 
         /// <summary>
@@ -346,7 +345,7 @@ namespace Game.Logic.Tests
 
             MatchTestDeals.PlayUntilSeatIsOnTurn(model, 0, host, Seed);
             Card card = model.Engine.GetLegalPlays(0)[0];
-            Assert.That(MatchHost.TrySubmitMove(model, Player(0), 0, model.Board.PlayIndex, card, T0, host), Is.EqualTo(MoveRefusalReason.None), $"seed {Seed}");
+            Assert.That(MatchHost.TrySubmitMove(model, Player(0), model.Board.PlayIndex, card, T0, host), Is.EqualTo(MoveRefusalReason.None), $"seed {Seed}");
 
             Assert.That(model.GetSeat(0).ConsecutiveMissedDeadlines, Is.Zero, $"seed {Seed}: a lapse and a move later, the count had not started over");
         }
@@ -370,7 +369,7 @@ namespace Game.Logic.Tests
 
             // A move with a stale play index, as when the tap arrives just after another play took the turn.
             Card anyCard = model.Engine.GetHand(0).Count > 0 ? model.Engine.GetHand(0)[0] : model.Board.TrumpCard;
-            MoveRefusalReason refusal = MatchHost.TrySubmitMove(model, Player(0), 0, model.Board.PlayIndex - 1, anyCard, T0, host);
+            MoveRefusalReason refusal = MatchHost.TrySubmitMove(model, Player(0), model.Board.PlayIndex - 1, anyCard, T0, host);
 
             Assert.That(refusal, Is.EqualTo(MoveRefusalReason.StalePlayIndex), $"seed {Seed}: this test needs a refused move");
             Assert.That(model.GetSeat(0).Occupancy, Is.EqualTo(MatchSeatOccupancy.Human), $"seed {Seed}: the reclaim depended on the move being accepted");
@@ -570,7 +569,7 @@ namespace Game.Logic.Tests
 
             // A refused move, a reconnect and a cold wake change the table without advancing the game.
             MetaTime refusedAt = Later(MetaDuration.FromMinutes(1));
-            Assert.That(MatchHost.TrySubmitMove(model, Player(0), 0, model.Board.PlayIndex - 1, card, refusedAt, host), Is.Not.EqualTo(MoveRefusalReason.None), $"seed {Seed}");
+            Assert.That(MatchHost.TrySubmitMove(model, Player(0), model.Board.PlayIndex - 1, card, refusedAt, host), Is.Not.EqualTo(MoveRefusalReason.None), $"seed {Seed}");
             MatchHost.NoteSeatPresent(model, 0, refusedAt, host);
             MatchHost.NoteColdWake(model, refusedAt, host);
             Assert.That(model.LastActivityAt, Is.EqualTo(initialLastActivityAt), $"seed {Seed}: something other than a move stamped activity");
@@ -578,7 +577,7 @@ namespace Game.Logic.Tests
             // An accepted move does update the activity time.
             MatchHost.NoteSeatPresent(model, 0, refusedAt, host);
             MetaTime playedAt = Later(MetaDuration.FromMinutes(2));
-            Assert.That(MatchHost.TrySubmitMove(model, Player(0), 0, model.Board.PlayIndex, card, playedAt, host), Is.EqualTo(MoveRefusalReason.None), $"seed {Seed}");
+            Assert.That(MatchHost.TrySubmitMove(model, Player(0), model.Board.PlayIndex, card, playedAt, host), Is.EqualTo(MoveRefusalReason.None), $"seed {Seed}");
             Assert.That(model.LastActivityAt, Is.EqualTo(playedAt), $"seed {Seed}: an accepted move did not stamp activity");
         }
 

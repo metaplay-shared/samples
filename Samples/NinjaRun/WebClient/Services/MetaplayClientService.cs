@@ -1,8 +1,10 @@
 using Game.Logic;
 using Metaplay.Client;
 using Metaplay.Core.Client;
+using Metaplay.Core.Player;
 using Metaplay.Core.Session;
 using Metaplay.Unity;
+using Microsoft.AspNetCore.Components;
 using WebClient.Gameplay;
 using WebClientBase.Services;
 
@@ -13,8 +15,34 @@ namespace WebClient.Services;
 /// lifecycle management from <see cref="MetaplayClientServiceBase{TModel}"/> and implements the player model
 /// client listener so model changes re-render the UI.
 /// </summary>
-public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPlayerModelClientListener
+public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPlayerModelClientListener, IPlayerModelClientListenerCore
 {
+    /// <summary>
+    /// The pages render on a change only, not on every frame: a run draws itself on its canvas from its own frame
+    /// loop (<c>wwwroot/js/timeTrialHost.js</c>), and a render of the whole page on each frame would take the
+    /// run's frame time on a phone. The model listeners below ask for a render for the changes that arrive from
+    /// the server.
+    /// </summary>
+    protected override bool RenderEveryFrame => false;
+
+    /// <summary>The map id the page URL named with <c>?course=</c> when the client started, or null for none.</summary>
+    readonly string _requestedPracticeCourse;
+
+    /// <param name="navigation">
+    /// The page URL. The service is created as the client starts, so <c>?course=</c> is read from the URL the page
+    /// was loaded at, as the SDK reads its own parameters, and in-app navigation does not change it.
+    /// </param>
+    public MetaplayClientService(NavigationManager navigation)
+    {
+        const string CourseParameter = "course=";
+        string query = new Uri(navigation.Uri).Query.TrimStart('?');
+        foreach (string pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (pair.StartsWith(CourseParameter, StringComparison.Ordinal) && pair.Length > CourseParameter.Length)
+                _requestedPracticeCourse = Uri.UnescapeDataString(pair.Substring(CourseParameter.Length));
+        }
+    }
+
     /// <summary>Create the Metaplay client.</summary>
     protected override IMetaplayClient CreateClient()
     {
@@ -182,6 +210,15 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
     public SharedGameConfig? GameConfig => PlayerModel?.GameConfig;
 
     /// <summary>
+    /// The map offline practice opens: the one the page URL named with <c>?course=&lt;map id&gt;</c> when the client
+    /// started, or else the published practice map. Null before a session has started, and with neither. Online, the
+    /// map is the server's to pick from the registry's active set, so nothing reads this.
+    /// </summary>
+    public CourseId? PracticeCourseId => _requestedPracticeCourse != null
+        ? CourseId.FromString(_requestedPracticeCourse)
+        : GameConfig?.Global.OfflinePracticeMapId;
+
+    /// <summary>
     /// Ask for a run. The ticket arrives through <see cref="TimeTrialStarted"/>.
     /// </summary>
     public void StartTimeTrial()
@@ -191,7 +228,7 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
         // or the published offline practice map, raced against nobody.
         if (IsOfflineMode)
         {
-            CourseId? courseId = OfflineCourseOverride.RequestedCourseId ?? GameConfig?.Global.OfflinePracticeMapId;
+            CourseId? courseId = PracticeCourseId;
             if (courseId != null)
                 ExecuteAction(new PlayerStartPracticeTimeTrial(courseId));
             return;
@@ -223,6 +260,12 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
     public void SetPlayerName(string name) => ExecuteAction(new PlayerSetName(name));
 
     /// <summary>
+    /// Add Orbs to the balance without a run, from the developer course tools. Development-only: the server runs
+    /// it only for a developer or with its development features on.
+    /// </summary>
+    public void GrantDeveloperOrbs(int amount) => ExecuteAction(new PlayerDeveloperGrantOrbs(amount));
+
+    /// <summary>
     /// Hand a finished run to the server. The server runs the recording through its own simulation and answers
     /// with <see cref="PlayerAcceptTimeTrialResult"/> or <see cref="PlayerRejectTimeTrialResult"/>, which
     /// arrive on the model and through the listener hooks below.
@@ -246,7 +289,10 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
     {
         PlayerModel? playerModel = session.PlayerContext.Model as PlayerModel;
         if (playerModel != null)
-            playerModel.ClientListener = this;
+        {
+            playerModel.ClientListener     = this;
+            playerModel.ClientListenerCore = this;
+        }
     }
 
     #region Model client listeners (trigger UI re-render)
@@ -266,20 +312,23 @@ public class MetaplayClientService : MetaplayClientServiceBase<PlayerModel>, IPl
         }
 
         TimeTrialStarted?.Invoke(ticket, lineup);
-        NotifyStateChanged();
+        RequestRender();
     }
 
     void IPlayerModelClientListener.OnTimeTrialAccepted(CourseId courseId, TimeTrialResult result, bool isNewBest, TimeTrialStanding standing)
     {
         TimeTrialAccepted?.Invoke(result, standing);
-        NotifyStateChanged();
+        RequestRender();
     }
 
     void IPlayerModelClientListener.OnTimeTrialRejected(int ticketId, TimeTrialRejectReason reason)
     {
         TimeTrialRejected?.Invoke(ticketId, reason);
-        NotifyStateChanged();
+        RequestRender();
     }
+
+    /// <summary>The name changed outside the game's own action, as a rename from the LiveOps Dashboard does.</summary>
+    void IPlayerModelClientListenerCore.OnPlayerNameChanged(string newName) => RequestRender();
 
     #endregion
 }

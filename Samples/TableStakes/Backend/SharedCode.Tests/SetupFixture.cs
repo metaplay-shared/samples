@@ -4,7 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 
 [assembly: Parallelizable(ParallelScope.Fixtures)]
 
-// \note In the global namespace so that NUnit runs this setup before the tests in every namespace of the assembly.
+// \note In global namespace to make sure it covers all the game-specific tests, too
 [SetUpFixture]
 [SuppressMessage("Microsoft.Design", "CA1050:DeclareTypesInNamespaces", Scope = "type", Target = "OutputWriter")]
 public class TestSetUp
@@ -12,7 +12,7 @@ public class TestSetUp
     [OneTimeSetUp]
     public void SetUp()
     {
-        // Initialize the SDK for tests and set the working directory to the project root.
+        // Initialize for tests & set working directory to project root.
         TestHelper.SetupForTests();
     }
 }

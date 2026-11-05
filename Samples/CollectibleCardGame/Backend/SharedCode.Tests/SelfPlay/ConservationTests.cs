@@ -8,55 +8,12 @@ namespace Game.Logic.Tests
     /// it. Cards are in exactly one zone and the starting-deck census never moves; mana across a step is
     /// exactly the costs paid, the ramp, and whatever a resolved step granted; a critter's damage is exactly
     /// what the step said happened to it, and a Den holds exactly what the last event about it announced.
+    /// <c>InvariantBatchTests</c> runs the walk over the bulk seeded run; these are its negative controls.
     /// </summary>
     [TestFixture]
     public class ConservationTests
     {
         static SharedGameConfig Config => TestGameConfig.Shared;
-
-        [Test]
-        public void NothingIsCreatedOrLostAcrossAnyStepOfAnyGame()
-        {
-            SelfPlayHarness.RunBatch(
-                "conservation",
-                SelfPlayStreams.Conservation,
-                SelfPlayRun.Games(standard: 60, deep: 4000),
-                index => new SelfPlayGameSpec
-                {
-                    Config = Config,
-                    Seat0   = SelfPlaySeats.Mix[index % SelfPlaySeats.Mix.Length].Seat0,
-                    Seat1   = SelfPlaySeats.Mix[index % SelfPlaySeats.Mix.Length].Seat1,
-                    Pairing = SelfPlaySeats.Mix[index % SelfPlaySeats.Mix.Length].Name,
-                    Checks = SelfPlayChecks.Conservation,
-                    // Every action of this game also runs against a follower, and the two models are
-                    // compared after each one. This is the refactor's proof, and it is on for every batch.
-                    MirrorOnFollower = true,
-                });
-        }
-
-        [Test]
-        public void EveryStepOfEveryPacedGameConservesEverything()
-        {
-            // The same games, paced. The clock changes no rule, but it changes the *stamps*: at zero timings
-            // every deadline is null, so a follower deriving one from (payload, public state) is never
-            // actually put to the test. This batch is where it is — a follower that reached a different
-            // stamp fails the mirror.
-            SelfPlayHarness.RunBatch(
-                "conservation, paced",
-                SelfPlayStreams.Conservation,
-                SelfPlayRun.Games(standard: 20, deep: 400),
-                index => new SelfPlayGameSpec
-                {
-                    Config  = Config,
-                    Seat0   = SelfPlaySeats.Mix[index % SelfPlaySeats.Mix.Length].Seat0,
-                    Seat1   = SelfPlaySeats.Mix[index % SelfPlaySeats.Mix.Length].Seat1,
-                    Pairing = SelfPlaySeats.Mix[index % SelfPlaySeats.Mix.Length].Name,
-                    Checks  = SelfPlayChecks.Conservation,
-                    Timings = MatchTimings.Default,
-                    MirrorOnFollower = true,
-                });
-
-        }
 
         [Test]
         public void TheWalkCatchesACardInTwoPlacesAtOnce()

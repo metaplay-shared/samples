@@ -1,4 +1,5 @@
 using Game.Logic;
+using Game.Logic.Tests;
 using Metaplay.Core;
 using NUnit.Framework;
 using System.Collections.Generic;
@@ -6,20 +7,8 @@ using System.Collections.Generic;
 namespace Game.Server.Tests
 {
     /// <summary>
-    /// The Heist's own rules, as pure functions: what a tier owes, what is left on the menu, what an absent
-    /// winner takes, what one pick does to one collection, and what the table's next step is.
-    /// <para>
-    /// <c>MatchResultRecordTests</c> owns the <em>eligibility subtraction</em> and the outcome record's own
-    /// shape; this fixture owns everything the phase decides on top of them. The split is deliberate: those
-    /// eight eligibility rows are the rules half, and a rewrite that broke one of them should fail where
-    /// they were written.
-    /// </para>
-    /// <para>
-    /// There is no actor harness here and there is deliberately not going to be one, so the phase's ordering
-    /// rules are reachable only because
-    /// <see cref="MatchHeistPolicy.Resolve"/> is pure. Every case below is one the actor cannot decide for
-    /// itself.
-    /// </para>
+    /// The Heist's rules as pure functions: payouts, menu, defaults and phase steps. What one pick does to a
+    /// collection is the rank-transfer table in <c>PlayerCollectionTests</c>, against the real write path.
     /// </summary>
     [TestFixture]
     public class MatchHeistPolicyTests
@@ -213,56 +202,6 @@ namespace Game.Server.Tests
             Assert.That(MatchHeistPolicy.AutoDefault(Menu(Row("EmberKit", 1)), Config), Is.EqualTo(Card("EmberKit")));
             Assert.That(MatchHeistPolicy.AutoDefault(new List<HeistEligibleCard>(), Config), Is.Null);
             Assert.That(MatchHeistPolicy.AutoDefault(null, Config), Is.Null);
-        }
-
-        // ---------------------------------------------------------------- the transfer, one side at a time
-
-        [Test]
-        public void TheWinnerGainsARankBelowTheCeilingAndNothingAtIt()
-        {
-            HeistRankMove gained = MatchHeistPolicy.WinnerGain(owns: true, rank: 3, locked: false, Global);
-            Assert.That(gained.Kind, Is.EqualTo(HeistMove.Moved));
-            Assert.That(gained.From, Is.EqualTo(3));
-            Assert.That(gained.To, Is.EqualTo(4));
-
-            HeistRankMove capped = MatchHeistPolicy.WinnerGain(owns: true, rank: Global.RankMax, locked: false, Global);
-            Assert.That(capped.Kind, Is.EqualTo(HeistMove.AtCeiling));
-            Assert.That(capped.Moves, Is.False, "nothing above rank five, and nothing paid instead");
-        }
-
-        [Test]
-        public void AWinnerWhoOwnsNoCopyIsGivenOneAtTheFloor()
-        {
-            HeistRankMove acquired = MatchHeistPolicy.WinnerGain(owns: false, rank: 0, locked: false, Global);
-
-            Assert.That(acquired.Kind, Is.EqualTo(HeistMove.Acquired));
-            Assert.That(acquired.From, Is.EqualTo(0));
-            Assert.That(acquired.To, Is.EqualTo(Global.RankMin));
-        }
-
-        [Test]
-        public void AFrozenCopyMovesOnNeitherSide()
-        {
-            // A lock runs both ways, and it is read live at the moment the transfer applies rather than off
-            // the snapshot the pick was filtered against — which is what makes the promise hold on a retry
-            // that lands after the owner locked the card.
-            Assert.That(MatchHeistPolicy.WinnerGain(owns: true, rank: 2, locked: true, Global).Moves, Is.False);
-            Assert.That(MatchHeistPolicy.LoserLoss(owns: true, rank: 4, locked: true, Global).Moves, Is.False);
-            Assert.That(MatchHeistPolicy.LoserLoss(owns: true, rank: 4, locked: true, Global).Kind, Is.EqualTo(HeistMove.Frozen));
-        }
-
-        [Test]
-        public void TheLoserLosesARankAboveTheFloorAndNothingAtIt()
-        {
-            HeistRankMove lost = MatchHeistPolicy.LoserLoss(owns: true, rank: 3, locked: false, Global);
-            Assert.That(lost.Kind, Is.EqualTo(HeistMove.Moved));
-            Assert.That(lost.To, Is.EqualTo(2));
-
-            HeistRankMove floored = MatchHeistPolicy.LoserLoss(owns: true, rank: Global.RankMin, locked: false, Global);
-            Assert.That(floored.Kind, Is.EqualTo(HeistMove.AtFloor));
-            Assert.That(floored.To, Is.EqualTo(Global.RankMin), "cards are never removed from a collection");
-
-            Assert.That(MatchHeistPolicy.LoserLoss(owns: false, rank: 0, locked: false, Global).Kind, Is.EqualTo(HeistMove.NotOwned));
         }
 
         // ---------------------------------------------------------------- the phase's next step

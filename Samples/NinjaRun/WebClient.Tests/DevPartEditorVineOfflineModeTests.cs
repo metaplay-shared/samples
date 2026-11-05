@@ -8,18 +8,14 @@ namespace WebClient.Tests;
 
 /// <summary>
 /// E2E tests for hanging vines in the developer part editor at <c>/dev/parts</c>, driven through
-/// <c>?env=offline</c> so they need only the web client. Add hangs a vine on the draft where it first fits the
+/// <c>?offline</c> so they need only the web client. Add hangs a vine on the draft where it first fits the
 /// part's rules; it is listed in the side pane, written into the part JSON's <c>vines</c>, drawn by the overlay
 /// as an anchor, a rope and a platform handle, drawn by the preview, and played on the run screen when the draft
 /// is.
 /// </summary>
-[Parallelizable(ParallelScope.Self)]
 [TestFixture]
-public class DevPartEditorVineOfflineModeTests : GamePageTest
+public class DevPartEditorVineOfflineModeTests : OfflinePageTest
 {
-    private static readonly string BaseUrl =
-        (Environment.GetEnvironmentVariable("WEBCLIENT_BASE_URL") ?? "http://localhost:5290").TrimEnd('/');
-
     /// <summary>The part the editor is opened on: one of the handcrafted parts, which carries no vine of its own.</summary>
     private const string SourcePart = "rr-lowland";
 
@@ -200,7 +196,7 @@ public class DevPartEditorVineOfflineModeTests : GamePageTest
     /// <summary>Open the editor offline on a fresh draft of the source part.</summary>
     private async Task OpenOnSourceAsync()
     {
-        await Page.GotoAsync(BaseUrl + $"/dev/parts?env=offline&source={SourcePart}");
+        await Page.GotoAsync(ClientUrl("/dev/parts", $"offline&source={SourcePart}"));
 
         await Expect(Page.GetByTestId("dev-parts")).ToBeVisibleAsync(new() { Timeout = 30000 });
         await Expect(Page.GetByTestId("dev-editor-code")).ToHaveValueAsync(new Regex($"\"{SourcePart}\""), new() { Timeout = 30000 });

@@ -7,8 +7,8 @@ namespace Game.Server.Matchmaking
 {
     /// <summary>
     /// Sent by a player's actor to add the player to the matchmaking queue. Every message from a player's actor
-    /// to the matchmaker is a cast, not an ask. The matchmaker asks player actors during a formation, so a
-    /// player actor asking the matchmaker at the same time would block both until the ask timed out.
+    /// to the matchmaker is a cast, not an ask. The matchmaker asks player actors during a formation, and a
+    /// player actor waiting on an ask to the matchmaker could not answer meanwhile.
     /// </summary>
     [MetaMessage(MessageCodes.MatchmakerEnterQueueMessage, MessageDirection.ServerInternal)]
     public class MatchmakerEnterQueueMessage : MetaMessage
@@ -109,9 +109,9 @@ namespace Game.Server.Matchmaking
     /// message, the player would stay on a searching screen with no Cancel button until the reservation timed
     /// out.
     /// <para>
-    /// If the table could not be created, the players who accepted are re-queued with their original enqueue
-    /// times. A player whose reservation answer never arrived is <b>not</b> re-queued, because an unresponsive
-    /// actor at the head of the queue would stall every following formation (<see cref="IsStillQueued"/>).
+    /// If the table could not be created, every player who did not decline is re-queued with their original
+    /// enqueue time. Otherwise a player whose reservation answer never arrived is <b>not</b> re-queued, because an
+    /// unresponsive actor at the head of the queue would stall the following formations (<see cref="IsStillQueued"/>).
     /// </para>
     /// </summary>
     [MetaMessage(MessageCodes.MatchmakerSeatReleasedMessage, MessageDirection.ServerInternal)]

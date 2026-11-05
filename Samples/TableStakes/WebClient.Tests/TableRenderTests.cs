@@ -71,11 +71,9 @@ public class TableRenderTests : Bunit.TestContext
         Assert.That(GlyphOfSuit, Contains.Key(cut.Find("[data-testid=trump-suit]").GetAttribute("data-suit") ?? ""));
         Assert.That(cut.Find("[data-testid=seat-0]").TextContent, Does.Contain("You"));
 
-        // The viewer's hand is delivered separately, stamped with the play index at delivery. The opening deal
-        // delivers it before any card is played, so the index is zero.
+        // The viewer's hand is delivered separately from the board.
         Assert.That(cut.Find("[data-testid=own-seat]").TextContent, Is.EqualTo("0"));
         Assert.That(cut.Find("[data-testid=own-hand-count]").TextContent, Is.EqualTo("5"));
-        Assert.That(cut.Find("[data-testid=own-hand-index]").TextContent, Is.EqualTo("0"));
 
         // Every seat starts with no tricks. The other seats' card counts are drawn as card backs, which
         // Table_DrawsEveryOtherSeatsHand_AsBacksBesideTheirPlaque covers.
@@ -291,18 +289,13 @@ public class TableRenderTests : Bunit.TestContext
 
     /// <summary>
     /// Leave is a single button with no confirmation prompt. <c>TableRobustnessTests</c> covers what the tap does.
-    /// <para>
-    /// This table has a move deadline, so <c>Table.razor</c>'s repaint timer re-renders it on a background thread
-    /// during the test. <c>WaitForState</c> re-checks the condition after every render, so the test does not read
-    /// the DOM while a concurrent render is changing it.
-    /// </para>
     /// </summary>
     [Test]
     public void LeaveIsOfferedAsOneButton_AndAsksNothingFirst()
     {
         IRenderedComponent<Table> cut = RenderTable(TestTables.ViewerOnTurn);
 
-        cut.WaitForState(() => cut.FindAll("[data-testid=leave]").Count == 1);
+        Assert.That(cut.FindAll("[data-testid=leave]"), Has.Count.EqualTo(1));
         Assert.That(cut.FindAll("[data-testid=leave-prompt]"), Is.Empty,
             "leaving must not ask again before it acts");
         Assert.That(cut.FindAll("[data-testid=leave-confirm]"), Is.Empty,

@@ -9,6 +9,7 @@ dotnet run --project tools/GameConfigGen                 # build and write both 
 dotnet run --project tools/GameConfigGen -- --dry-run    # build and validate, write nothing
 dotnet run --project tools/GameConfigGen -- --print Backend/Server/GameConfig/StaticGameConfig.mpa
 dotnet run --project tools/GameConfigGen -- --sources <dir> --static <path> --shared <path>
+dotnet test tools/GameConfigGen.Tests                    # the build, and the committed archives against the sheets
 ```
 
 The tool does not publish. See [`docs/game-config.md`](../../docs/game-config.md#the-build-tool) for its outputs,

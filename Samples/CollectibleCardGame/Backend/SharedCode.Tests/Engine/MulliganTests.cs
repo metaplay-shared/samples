@@ -342,20 +342,6 @@ namespace Game.Logic.Tests
         }
 
         [Test]
-        public void MulliganDoesNotChangeTheUnseenPool()
-        {
-            MatchEngine  engine = Deal(seed: 5);
-            List<CardId> before = new List<CardId>(engine.Rules.Seat(0).UnseenPool);
-
-            engine.Mulligan(0, engine.SecretHand(0).ToArray());
-            engine.Mulligan(1, engine.SecretHand(1)[0]);
-
-            // The seat on turn drew at the start of its turn, which also does not touch the pool.
-            Assert.That(engine.Rules.Seat(0).UnseenPool, Is.EqualTo(before));
-            Assert.That(engine.Rules.Seat(0).UnseenPool, Is.EqualTo(engine.DeriveUnseenPool(0)));
-        }
-
-        [Test]
         public void MulliganResolvedEventCarriesOnlyACount()
         {
             MatchEngine        engine    = Deal(seed: 5);

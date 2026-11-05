@@ -8,11 +8,10 @@ namespace Game.Logic
 {
     /// <summary>
     /// The host-specific operations that <see cref="MatchHost"/> needs: publishing an action to the timeline,
-    /// drawing host random seeds, and notifying one seat's client.
+    /// drawing host random seeds, and reporting a seat loss.
     /// <para>
-    /// The server's match actor publishes with <c>ExecuteAction</c> and sends to a session. The browser's offline
-    /// server publishes to the offline timeline and sends on the entity channel. <see cref="MatchHost"/> makes the
-    /// same decisions for both.
+    /// The server's match actor publishes with <c>ExecuteAction</c>. The browser's offline server publishes to the
+    /// offline timeline. <see cref="MatchHost"/> makes the same decisions for both.
     /// </para>
     /// </summary>
     public interface IMatchHostEnvironment
@@ -26,14 +25,6 @@ namespace Game.Logic
 
         /// <summary>A new random seed for host decisions: which card a bot plays and its think delay.</summary>
         ulong NextSeed();
-
-        /// <summary>
-        /// The host changed this seat's hand without the seat's owner playing a card, for example by a deadline
-        /// auto-play, a covering bot's move or a reclaim. The subscribe's private state covers the deal and every
-        /// reconnect, and this call covers changes between them (<c>docs/match.md</c>, "Delivering a hand"). A
-        /// environment with no client at that seat does nothing.
-        /// </summary>
-        void OnSeatHandChanged(int seat);
 
         /// <summary>
         /// The owner of a seat stopped playing it, for <paramref name="reason"/>. Called once per loss, and a seat
@@ -89,7 +80,8 @@ namespace Game.Logic
     {
         /// <summary>
         /// The maximum number of state changes one <see cref="RunTable"/> call makes. A whole game needs far fewer,
-        /// so reaching the limit means a loop, and the limit stops it.
+        /// so reaching the limit means a loop. The limit stops it and logs an error. It does not throw, because a
+        /// persisted table would then fail on every wake.
         /// </summary>
         const int MaxStepsPerPass = 256;
 
@@ -144,28 +136,24 @@ namespace Game.Logic
         #region Moves
 
         /// <summary>
-        /// Handle a move from a client. The seat index in the message is untrusted, so it is checked against the
-        /// submitter's seat before <see cref="MatchEngine.PlanMove"/>, which throws on an out-of-range seat.
-        /// Any move from the seat's owner, even a refused one, marks the owner present: the lapse count is reset and a
-        /// covering bot returns the seat before the move is planned. The covering bot often plays the same play index
-        /// first, so a reclaim that required an accepted move would rarely succeed (<c>docs/match.md</c>, "The play
-        /// index"). The action is published before the engine commits the move, as <see cref="MovePlan"/> explains.
+        /// Handle a move from a client, for the seat the submitter occupies. Any move from the seat's owner, even a
+        /// refused one, marks the owner present: the lapse count is reset and a covering bot returns the seat before
+        /// the move is planned. The covering bot often plays the same play index first, so a reclaim that required an
+        /// accepted move would rarely succeed (<c>docs/match.md</c>, "The play index"). The action is published before
+        /// the engine commits the move, as <see cref="MovePlan"/> explains.
         /// </summary>
         /// <returns><see cref="MoveRefusalReason.None"/> when the move was published and played; a reason otherwise.</returns>
-        public static MoveRefusalReason TrySubmitMove(MatchModel model, EntityId submitterId, int seat, int playIndex, Card card, MetaTime now, IMatchHostEnvironment environment)
+        public static MoveRefusalReason TrySubmitMove(MatchModel model, EntityId submitterId, int playIndex, Card card, MetaTime now, IMatchHostEnvironment environment)
         {
             CheckArgs(model, environment);
 
             if (model.Phase != MatchPhase.Playing)
                 return MoveRefusalReason.NotInPlayablePhase;
-            if (seat < 0 || seat >= MatchRules.NumSeats)
-                return MoveRefusalReason.NotYourSeat;
 
-            // A bot seat's PlayerId is EntityId.None, so an invalid submitter id would match every bot seat. The
-            // host plays bot seats through TryPlayForSeat, which takes no submitter.
-            if (!submitterId.IsValid)
-                return MoveRefusalReason.NotYourSeat;
-            if (model.GetSeat(seat).PlayerId != submitterId)
+            // FindSeatOfPlayer returns -1 for an invalid id, so a submitter with no id cannot match a bot seat,
+            // whose PlayerId is EntityId.None.
+            int seat = model.FindSeatOfPlayer(submitterId);
+            if (seat < 0)
                 return MoveRefusalReason.NotYourSeat;
 
             NoteSeatPresent(model, seat, now, environment);
@@ -255,19 +243,12 @@ namespace Game.Logic
             List<MatchSeatState> states = MatchSeatPolicy.CurrentStates(model);
             states[seat] = MatchSeatPolicy.Present(states[seat]);
 
-            bool reclaimed = model.GetSeat(seat).Occupancy == MatchSeatOccupancy.HumanCoveredByBot;
             if (!PublishSeats(model, states, now, environment))
                 return false;
 
             // The owner is back, so clear the loss reason. Otherwise CaptureResults would report the old reason as
             // if the player had never returned.
             model.NoteSeatLossReason(seat, MatchSeatLossReason.None);
-
-            // A covering bot played cards from this hand. The board shows which, but every hand change the owner
-            // did not make gets a hand delivery (docs/match.md, "Delivering a hand").
-            if (reclaimed)
-                environment.OnSeatHandChanged(seat);
-
             return true;
         }
 
@@ -416,6 +397,8 @@ namespace Game.Logic
                 if (!TryPlayBotSeat(model, pendingBotMove, seat, now, environment))
                     return;
             }
+
+            model.Log.Error("Match {EntityId} stopped after {MaxSteps} steps in one pass, at play index {PlayIndex}", model.EntityId, MaxStepsPerPass, model.Board.PlayIndex);
         }
 
         /// <summary>
@@ -496,12 +479,7 @@ namespace Game.Logic
                 NoteSeatLost(model, seat, MatchSeatLossReason.DeadlineLapse, environment);
 
             BotDecision decision = BotPolicy.DecideAutoPlay(MatchSeatView.ForSeat(model.Engine, seat), environment.NextSeed());
-            if (!TryPlayForSeat(model, seat, decision.Card, now, environment))
-                return false;
-
-            // The owner did not play this card, so their client needs a hand delivery.
-            environment.OnSeatHandChanged(seat);
-            return true;
+            return TryPlayForSeat(model, seat, decision.Card, now, environment);
         }
 
         /// <summary>
@@ -526,13 +504,7 @@ namespace Game.Logic
 
             pendingBotMove.BotMovePending = false;
 
-            bool hasOwner = model.GetSeat(seat).HasOwner;
-            if (!TryPlayForSeat(model, seat, pendingBotMove.BotMoveCard, now, environment))
-                return false;
-
-            if (hasOwner)
-                environment.OnSeatHandChanged(seat);
-            return true;
+            return TryPlayForSeat(model, seat, pendingBotMove.BotMoveCard, now, environment);
         }
 
         /// <summary>
@@ -570,6 +542,8 @@ namespace Game.Logic
                 if (!TryPlayForSeat(model, seat, decision.Card, now, MoveTimings.Instant, environment))
                     return;
             }
+
+            model.Log.Error("Match {EntityId} play-out stopped after {MaxSteps} steps, at play index {PlayIndex}", model.EntityId, MaxStepsPerPass, model.Board.PlayIndex);
         }
 
         /// <summary>
@@ -744,15 +718,6 @@ namespace Game.Logic
             BotProfile profile = model.GetSeatBotProfile(seat) ?? BotProfiles.Strongest;
 
             return BotPolicy.Decide(view, profile, model.Engine.Timings, seed);
-        }
-
-        /// <summary>The hand delivery for one seat, with the play index at which the hand was read.</summary>
-        public static MatchHandDelivered BuildHandDelivery(MatchModel model, int seat)
-        {
-            if (model == null)
-                throw new ArgumentNullException(nameof(model));
-
-            return new MatchHandDelivered(seat, model.Engine.GetHand(seat), model.Board.PlayIndex);
         }
 
         #endregion

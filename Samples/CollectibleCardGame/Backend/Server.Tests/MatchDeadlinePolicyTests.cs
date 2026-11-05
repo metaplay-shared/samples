@@ -410,8 +410,8 @@ namespace Game.Server.Tests
             // The window this predicate exists for. The outcome record is written by the actor's post-action
             // step, which runs only after the handler that moved the game returns — so inside the handler that
             // lapsed a turn deadline and auto-played the rest of that turn, the game can be over with Result
-            // still null. Reading the record alone left the escalation's own guard dead in exactly that case,
-            // and what it guards is a seat covered into a game its owner cannot reclaim into.
+            // still null. The escalation's guard has to hold in exactly that case, since what it guards is a
+            // seat covered into a game its owner cannot reclaim into.
             MatchModel table = Table();
             table.Rules = RulesIn(MatchPhase.Complete);
 
@@ -452,8 +452,8 @@ namespace Game.Server.Tests
         [Test]
         public void ATableIsNotPlayedOutInsideALiveJoinWindow()
         {
-            // The clause that was missing while the rule lived inside the actor as three loops. Every human
-            // seat that has not arrived yet is disconnected and owed no grace, so seat by seat it is
+            // An unarrived seat looks like a departed one; only the live join window tells them apart. Every
+            // human seat that has not arrived yet is disconnected and owed no grace, so seat by seat it is
             // indistinguishable from a seat whose player left — and a ranked table whose second human is
             // mid-boot would be played to a real result against two bots, with both accounts taking a rating
             // change for a game neither played.

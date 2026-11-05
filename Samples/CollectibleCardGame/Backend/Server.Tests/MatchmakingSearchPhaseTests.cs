@@ -85,10 +85,9 @@ namespace Game.Server.Tests
         [Test]
         public void AnAccountAlreadyAtATableDeclinesTheSeat()
         {
-            // The third of the design's three declines, and the one that was missing: "an actor that has since
-            // cancelled, is already in a match, or has nobody on the other end of its connection declines". A
-            // seat handed to an account that cannot subscribe to it leaves the other human playing a ranked
-            // game against a phantom.
+            // The third of the design's three declines: "an actor that has since cancelled, is already in a
+            // match, or has nobody on the other end of its connection declines". A seat handed to an account
+            // that cannot subscribe to it leaves the other human playing a ranked game against a phantom.
             foreach (MatchmakingSearchPhase phase in new[] { MatchmakingSearchPhase.Searching, MatchmakingSearchPhase.SeatReserved })
             {
                 MatchmakingSearchStep step = Step(phase, MatchmakingSearchEvent.SeatAsked, connected: true, inMatch: true);

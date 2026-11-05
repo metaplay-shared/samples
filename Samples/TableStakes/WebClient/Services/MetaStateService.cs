@@ -9,13 +9,13 @@ using System.Timers;
 using Microsoft.AspNetCore.Components;
 using WebClient.Meta;
 using WebClient.Meta.Fixtures;
-using WebClientBase.Utilities;
+using WebClient.Integration;
 
 namespace WebClient.Services;
 
 /// <summary>
 /// Provides the meta shell's state. Screens read only <see cref="Snapshot"/> (docs/meta-shell.md, "How screens
-/// get state"). The snapshot starts from the fixture for the current <c>?meta=</c> scenario. Once a session exists,
+/// get state"). The snapshot starts from the fixture for the page's <c>?meta=</c> scenario. Once a session exists,
 /// each <see cref="FixtureSlice"/> is replaced with state read from the player model, unless the scenario pins that
 /// slice in <see cref="MetaFixtures.Scenarios"/>. Scenarios declare their pins because many fixture states, such
 /// as an actionable first-week day, are also normal real states and cannot be told apart by value.
@@ -25,7 +25,6 @@ public sealed class MetaStateService : IDisposable
     /// <summary>The query parameter that selects a fixture scenario.</summary>
     public const string ScenarioParameter = "meta";
 
-    private readonly NavigationManager _navigation;
     private readonly MetaplayClientService _client;
     private readonly System.Timers.Timer _tickTimer;
     private readonly DateTime _startedAt = DateTime.UtcNow;
@@ -35,8 +34,10 @@ public sealed class MetaStateService : IDisposable
 
     public MetaStateService(NavigationManager navigation, MetaplayClientService client)
     {
-        _navigation = navigation;
-        _client     = client;
+        // The scenario comes from the query the page was loaded with. Off the browser, as in the render tests,
+        // nothing remembers that query, and the address the service starts at stands in for it.
+        Scenario = ScenarioIn(QueryParameters.AtStart ?? new Uri(navigation.Uri).Query);
+        _client  = client;
 
         Analytics    = new PlayerTimelineShellAnalytics(client);
         Observations = new ShellObservationRecorder(Analytics);
@@ -51,7 +52,7 @@ public sealed class MetaStateService : IDisposable
         // redraw.
         //
         // ModelChanged is raised only when the model changes, unlike MetaplayClientService.OnStateChanged, which
-        // is raised on every client update and would rebuild the snapshot far more often than needed. It is also
+        // is raised on every frame and would rebuild the snapshot far more often than needed. It is also
         // raised at session start, when a new model appears without any model change callback firing.
         _client.ModelChanged += OnModelChanged;
     }
@@ -80,28 +81,13 @@ public sealed class MetaStateService : IDisposable
     public TimeSpan Elapsed => DateTime.UtcNow - _startedAt;
 
     /// <summary>
-    /// The fixture scenario from the URL's <see cref="ScenarioParameter"/>, or <see cref="MetaFixtures.Default"/>.
-    /// It is read on every render, so the result is cached until the URL changes.
+    /// The fixture scenario from the <see cref="ScenarioParameter"/> of the query the page was loaded with, or
+    /// <see cref="MetaFixtures.Default"/>. It holds on every screen, including those reached by in-app navigation.
     /// </summary>
-    public string Scenario
-    {
-        get
-        {
-            string address = _navigation.Uri;
-            if (!string.Equals(_scenarioAddress, address, StringComparison.Ordinal))
-            {
-                _scenarioAddress = address;
-                _scenario        = ScenarioIn(address);
-            }
-            return _scenario;
-        }
-    }
+    public string Scenario { get; }
 
-    private static string ScenarioIn(string address) =>
-        QueryParameters.Get(new Uri(address).Query, ScenarioParameter, StringComparison.OrdinalIgnoreCase) ?? MetaFixtures.Default;
-
-    private string? _scenarioAddress;
-    private string  _scenario = MetaFixtures.Default;
+    private static string ScenarioIn(string query) =>
+        QueryParameters.Get(query, ScenarioParameter, StringComparison.OrdinalIgnoreCase) ?? MetaFixtures.Default;
 
     /// <summary>
     /// What the player has already seen in this client. It is not stored on the server. The value is cached,

@@ -1,5 +1,6 @@
 using Metaplay.Core;
 using NUnit.Framework;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -152,41 +153,58 @@ namespace Game.Logic.Tests
         #endregion
 
         [Test]
-        public void ShippedContent_IsAccepted()
+        public void ShippedContent_ValidatesWithNoErrorsOrWarnings()
         {
+            // The same checks the config build runs, over the archive that build produced. Ten cards per clan
+            // plus fifteen Wanderers meet the deck size, so no mono-clan deck is short either.
             CollectingIssueSink sink = new CollectingIssueSink();
             ContentValidator.Validate(ContentPool.FromConfig(Config), sink);
 
             Assert.That(sink.Errors, Is.Empty, sink.Describe());
+            Assert.That(sink.Warnings, Is.Empty, sink.Describe());
         }
 
-        #region Vocabulary
+        #region The tables
 
-        [Test]
-        public void Rejects_EngineFlagKeywordTheEngineDoesNotImplement()
+        /// <summary> What the validator must say about a pool: fail the build, warn without failing, or accept. </summary>
+        public enum Verdict { Rejects, Warns, Accepts }
+
+        /// <summary> One control: a named pool with one thing changed, and what the validator must say about it. </summary>
+        static TestCaseData Row(string name, Verdict verdict, string fragment, Func<ContentPool> pool)
+            => new TestCaseData(verdict, fragment, pool).SetName(name);
+
+        static void AssertVerdict(Verdict verdict, string fragment, Func<ContentPool> pool)
         {
-            KeywordInfo bogus = new KeywordInfo(KeywordId.FromString("Bouncy"), KeywordKind.EngineFlag, "Bouncy", "Not a thing.");
-
-            AssertRejects(Pool(keywords: Plus(ContentPool.FromConfig(Config).Keywords, bogus)), "Keywords/Bouncy");
+            switch (verdict)
+            {
+                case Verdict.Rejects:
+                    AssertRejects(pool(), fragment);
+                    break;
+                case Verdict.Warns:
+                    AssertWarns(pool(), fragment);
+                    break;
+                default:
+                    CollectingIssueSink sink = new CollectingIssueSink();
+                    ContentValidator.Validate(pool(), sink);
+                    Assert.That(sink.Errors, Is.Empty, sink.Describe());
+                    break;
+            }
         }
 
-        [Test]
-        public void Rejects_TwoKeywordRowsNamingOneEngineFlag()
-        {
-            // A second row whose id spells the same flag would give the engine two identities for one rule.
-            List<KeywordInfo> keywords = ContentPool.FromConfig(Config).Keywords.ToList();
-            keywords.Add(new KeywordInfo(KeywordId.FromString("Guard"), KeywordKind.EngineFlag, "Bodyguard", "A duplicate."));
+        [TestCaseSource(nameof(StepShape))]
+        public void AStepIsHeldToItsOpsShape(Verdict verdict, string fragment, Func<ContentPool> pool) => AssertVerdict(verdict, fragment, pool);
 
-            AssertRejects(Pool(keywords: keywords), "same engine flag");
-        }
+        [TestCaseSource(nameof(StatDomain))]
+        public void AStatIsHeldInsideTheMatchsDomain(Verdict verdict, string fragment, Func<ContentPool> pool) => AssertVerdict(verdict, fragment, pool);
 
-        [Test]
-        public void Rejects_TriggerLabelThatNamesNoTrigger()
-        {
-            KeywordInfo bogus = new KeywordInfo(KeywordId.FromString("Farewell"), KeywordKind.TriggerLabel, "Farewell:", "Not a trigger.");
+        [TestCaseSource(nameof(Globals))]
+        public void TheGlobalsAndThePoolAreHeldToTheirInvariants(Verdict verdict, string fragment, Func<ContentPool> pool) => AssertVerdict(verdict, fragment, pool);
 
-            AssertRejects(Pool(keywords: Plus(ContentPool.FromConfig(Config).Keywords, bogus)), "Keywords/Farewell");
-        }
+        [TestCaseSource(nameof(CardShape))]
+        public void ACardTrackOrWeatherIsHeldToItsShape(Verdict verdict, string fragment, Func<ContentPool> pool) => AssertVerdict(verdict, fragment, pool);
+
+        [TestCaseSource(nameof(StarterDecks))]
+        public void AStarterDeckIsHeldToTheStarterRules(Verdict verdict, string fragment, Func<ContentPool> pool) => AssertVerdict(verdict, fragment, pool);
 
         #endregion
 
@@ -217,130 +235,75 @@ namespace Game.Logic.Tests
             return Pool(cards: Plus(shipped.Cards, carrier), effectSteps: Plus(shipped.EffectSteps, step));
         }
 
-        [Test]
-        public void Rejects_DamageStepWithNoAmount()
+        /// <summary> The vocabulary, each step's own shape, and the shape of what a card or weather feeds it. </summary>
+        static IEnumerable<TestCaseData> StepShape()
         {
-            AssertRejects(PoolWithStep(Step("NoAmount", EffectOp.Damage, EffectTargetKind.EnemyDen)), "EffectSteps/NoAmount");
-        }
+            yield return Row("Rejects_EngineFlagKeywordTheEngineDoesNotImplement", Verdict.Rejects, "Keywords/Bouncy",
+                () => Pool(keywords: Plus(ContentPool.FromConfig(Config).Keywords,
+                    new KeywordInfo(KeywordId.FromString("Bouncy"), KeywordKind.EngineFlag, "Bouncy", "Not a thing."))));
 
-        [Test]
-        public void Rejects_NegativeAmountOnAnythingButBuff()
-        {
-            EffectStepInfo step = Step("NegativeHeal", EffectOp.Heal, EffectTargetKind.OwnDen, new EffectAmount(-2));
+            // A second row whose id spells the same flag would give the engine two identities for one rule.
+            yield return Row("Rejects_TwoKeywordRowsNamingOneEngineFlag", Verdict.Rejects, "same engine flag",
+                () => Pool(keywords: Plus(ContentPool.FromConfig(Config).Keywords,
+                    new KeywordInfo(KeywordId.FromString("Guard"), KeywordKind.EngineFlag, "Bodyguard", "A duplicate."))));
 
-            AssertRejects(PoolWithStep(step), "must not be negative");
-        }
+            yield return Row("Rejects_TriggerLabelThatNamesNoTrigger", Verdict.Rejects, "Keywords/Farewell",
+                () => Pool(keywords: Plus(ContentPool.FromConfig(Config).Keywords,
+                    new KeywordInfo(KeywordId.FromString("Farewell"), KeywordKind.TriggerLabel, "Farewell:", "Not a trigger."))));
 
-        [Test]
-        public void Rejects_SeatScopedStepWithATarget()
-        {
-            EffectStepInfo step = Step("TargetedDraw", EffectOp.Draw, EffectTargetKind.OwnDen, new EffectAmount(1));
+            yield return Row("Rejects_DamageStepWithNoAmount", Verdict.Rejects, "EffectSteps/NoAmount",
+                () => PoolWithStep(Step("NoAmount", EffectOp.Damage, EffectTargetKind.EnemyDen)));
 
-            AssertRejects(PoolWithStep(step), "must have no Target");
-        }
+            yield return Row("Rejects_NegativeAmountOnAnythingButBuff", Verdict.Rejects, "must not be negative",
+                () => PoolWithStep(Step("NegativeHeal", EffectOp.Heal, EffectTargetKind.OwnDen, new EffectAmount(-2))));
 
-        [Test]
-        public void Rejects_GainManaWithNoDuration()
-        {
-            EffectStepInfo step = Step("ManaNoDuration", EffectOp.GainMana, amount: new EffectAmount(1));
+            yield return Row("Rejects_SeatScopedStepWithATarget", Verdict.Rejects, "must have no Target",
+                () => PoolWithStep(Step("TargetedDraw", EffectOp.Draw, EffectTargetKind.OwnDen, new EffectAmount(1))));
 
-            AssertRejects(PoolWithStep(step), "requires a Duration");
-        }
+            yield return Row("Rejects_GainManaWithNoDuration", Verdict.Rejects, "requires a Duration",
+                () => PoolWithStep(Step("ManaNoDuration", EffectOp.GainMana, amount: new EffectAmount(1))));
 
-        [Test]
-        public void Rejects_PeekThatKeepsMoreThanItLooksAt()
-        {
-            EffectStepInfo step = Step("GreedyPeek", EffectOp.Peek, amount: new EffectAmount(2), amount2: new EffectAmount(3));
+            yield return Row("Rejects_PeekThatKeepsMoreThanItLooksAt", Verdict.Rejects, "keeps 3 of the 2 cards",
+                () => PoolWithStep(Step("GreedyPeek", EffectOp.Peek, amount: new EffectAmount(2), amount2: new EffectAmount(3))));
 
-            AssertRejects(PoolWithStep(step), "keeps 3 of the 2 cards");
-        }
+            yield return Row("Rejects_SummonOfATrick", Verdict.Rejects, "Only critters can be summoned",
+                () => PoolWithStep(Step("SummonATrick", EffectOp.Summon, amount: new EffectAmount(1), card: Card("Foxfire"))));
 
-        [Test]
-        public void Rejects_SummonOfATrick()
-        {
-            EffectStepInfo step = Step("SummonATrick", EffectOp.Summon, amount: new EffectAmount(1), card: Card("Foxfire"));
+            yield return Row("Rejects_GrantOfATriggerLabel", Verdict.Rejects, "rather than an engine flag",
+                () => PoolWithStep(Step("GrantHello", EffectOp.GrantKeyword, EffectTargetKind.Self, keyword: Keyword("Hello"))));
 
-            AssertRejects(PoolWithStep(step), "Only critters can be summoned");
-        }
+            yield return Row("Rejects_CopyFromGraveyardPointedAtTheBoard", Verdict.Rejects, "OwnGraveyard or EnemyGraveyard",
+                () => PoolWithStep(Step("CopyFromBoard", EffectOp.CopyFromGraveyard, EffectTargetKind.AllEnemy, selector: GraveyardSelector.Cheapest)));
 
-        [Test]
-        public void Rejects_GrantOfATriggerLabel()
-        {
-            EffectStepInfo step = Step("GrantHello", EffectOp.GrantKeyword, EffectTargetKind.Self, keyword: Keyword("Hello"));
+            yield return Row("Rejects_CopyFromGraveyardWithNoSelector", Verdict.Rejects, "requires a Selector",
+                () => PoolWithStep(Step("CopyAnything", EffectOp.CopyFromGraveyard, EffectTargetKind.EnemyGraveyard)));
 
-            AssertRejects(PoolWithStep(step), "rather than an engine flag");
-        }
+            yield return Row("Rejects_BounceAimedAtADen", Verdict.Rejects, "needs a critter target",
+                () => PoolWithStep(Step("BounceADen", EffectOp.Bounce, EffectTargetKind.EnemyDen)));
 
-        [Test]
-        public void Rejects_CopyFromGraveyardPointedAtTheBoard()
-        {
-            EffectStepInfo step = Step("CopyFromBoard", EffectOp.CopyFromGraveyard, EffectTargetKind.AllEnemy, selector: GraveyardSelector.Cheapest);
-
-            AssertRejects(PoolWithStep(step), "OwnGraveyard or EnemyGraveyard");
-        }
-
-        [Test]
-        public void Rejects_CopyFromGraveyardWithNoSelector()
-        {
-            EffectStepInfo step = Step("CopyAnything", EffectOp.CopyFromGraveyard, EffectTargetKind.EnemyGraveyard);
-
-            AssertRejects(PoolWithStep(step), "requires a Selector");
-        }
-
-        [Test]
-        public void Rejects_BounceAimedAtADen()
-        {
-            EffectStepInfo step = Step("BounceADen", EffectOp.Bounce, EffectTargetKind.EnemyDen);
-
-            AssertRejects(PoolWithStep(step), "needs a critter target");
-        }
-
-        #endregion
-
-        #region Step usage
-
-        [Test]
-        public void Rejects_CritterOnlyStepFedAChoiceThatMayBeADen()
-        {
             // AnyTarget admits a Den, and a Den cannot be bounced. The card, not the step, is at fault.
-            EffectStepInfo bounce = Config.EffectSteps[EffectStepId.FromString("BounceChosen")];
-            CardInfo card = new CardInfo(
-                CardId.FromString("BadBounce"), "Bad Bounce", Clan("Tidepool"), CardType.Trick, CardRarity.Common, cost: 2,
-                rankTrack: Track("None"), chooseTarget: ChooseTargetKind.AnyTarget, hello: Steps(bounce),
-                collectible: false, inStarterCollection: false);
+            yield return Row("Rejects_CritterOnlyStepFedAChoiceThatMayBeADen", Verdict.Rejects, "Cards/BadBounce",
+                () => Pool(cards: Plus(ContentPool.FromConfig(Config).Cards, new CardInfo(
+                    CardId.FromString("BadBounce"), "Bad Bounce", Clan("Tidepool"), CardType.Trick, CardRarity.Common, cost: 2,
+                    rankTrack: Track("None"), chooseTarget: ChooseTargetKind.AnyTarget,
+                    hello: Steps(Config.EffectSteps[EffectStepId.FromString("BounceChosen")]),
+                    collectible: false, inStarterCollection: false))));
 
-            AssertRejects(Pool(cards: Plus(ContentPool.FromConfig(Config).Cards, card)), "Cards/BadBounce");
-        }
+            yield return Row("Rejects_SelfTargetOnATrick", Verdict.Rejects, "targets Self",
+                () => Pool(cards: Plus(ContentPool.FromConfig(Config).Cards, new CardInfo(
+                    CardId.FromString("SelfishTrick"), "Selfish Trick", Clan("Mossback"), CardType.Trick, CardRarity.Common, cost: 2,
+                    rankTrack: Track("None"), hello: Steps(Config.EffectSteps[EffectStepId.FromString("GrowSelf1")]),
+                    collectible: false, inStarterCollection: false))));
 
-        [Test]
-        public void Rejects_SelfTargetOnATrick()
-        {
-            EffectStepInfo grow = Config.EffectSteps[EffectStepId.FromString("GrowSelf1")];
-            CardInfo card = new CardInfo(
-                CardId.FromString("SelfishTrick"), "Selfish Trick", Clan("Mossback"), CardType.Trick, CardRarity.Common, cost: 2,
-                rankTrack: Track("None"), hello: Steps(grow), collectible: false, inStarterCollection: false);
+            yield return Row("Rejects_WeatherStepThatWantsAChosenTarget", Verdict.Rejects, "nobody to choose",
+                () => Pool(weathers: Plus(ContentPool.FromConfig(Config).Weathers, new WeatherInfo(
+                    WeatherId.FromString("PickyWeather"), "Picky Weather",
+                    trigger: WeatherTrigger.TurnStart, steps: NamedSteps("DamageChosen3")))));
 
-            AssertRejects(Pool(cards: Plus(ContentPool.FromConfig(Config).Cards, card)), "targets Self");
-        }
-
-        [Test]
-        public void Rejects_WeatherStepThatWantsAChosenTarget()
-        {
-            WeatherInfo weather = new WeatherInfo(
-                WeatherId.FromString("PickyWeather"), "Picky Weather",
-                trigger: WeatherTrigger.TurnStart, steps: NamedSteps("DamageChosen3"));
-
-            AssertRejects(Pool(weathers: Plus(ContentPool.FromConfig(Config).Weathers, weather)), "nobody to choose");
-        }
-
-        [Test]
-        public void Rejects_WeatherSelfTargetOutsideADeathHook()
-        {
-            WeatherInfo weather = new WeatherInfo(
-                WeatherId.FromString("SelfishWeather"), "Selfish Weather",
-                trigger: WeatherTrigger.TurnStart, steps: NamedSteps("GrowSelf1"));
-
-            AssertRejects(Pool(weathers: Plus(ContentPool.FromConfig(Config).Weathers, weather)), "only a CritterDies hook");
+            yield return Row("Rejects_WeatherSelfTargetOutsideADeathHook", Verdict.Rejects, "only a CritterDies hook",
+                () => Pool(weathers: Plus(ContentPool.FromConfig(Config).Weathers, new WeatherInfo(
+                    WeatherId.FromString("SelfishWeather"), "Selfish Weather",
+                    trigger: WeatherTrigger.TurnStart, steps: NamedSteps("GrowSelf1")))));
         }
 
         #endregion
@@ -368,306 +331,161 @@ namespace Game.Logic.Tests
 
         static ContentPool PoolWithCard(CardInfo card) => Pool(cards: Plus(ContentPool.FromConfig(Config).Cards, card));
 
-        [Test]
-        public void Rejects_CritterThatEntersPlayDead()
+        /// <summary>
+        /// The stat domain is bounded at both ends, and the two ends fail differently: a number the match cannot
+        /// contain is an error, and a number below the stat quantum is a warning, because a deliberately tiny
+        /// one is legal. The boundaries are inclusive on the legal side.
+        /// </summary>
+        static IEnumerable<TestCaseData> StatDomain()
         {
-            AssertRejects(PoolWithCard(BadCard("DeadOnArrival", health: 0)), "Cards/DeadOnArrival");
+            yield return Row("Rejects_CritterThatEntersPlayDead", Verdict.Rejects, "Cards/DeadOnArrival",
+                () => PoolWithCard(BadCard("DeadOnArrival", health: 0)));
+
+            yield return Row("Rejects_CritterTougherThanTheEnemyDen", Verdict.Rejects, "above the Den's",
+                () => PoolWithCard(BadCard("Unkillable", health: Config.Global.DenStartingHp + 1)));
+
+            yield return Row("Rejects_CritterHittingHarderThanADenHasHitPoints", Verdict.Rejects, "above the Den's",
+                () => PoolWithCard(BadCard("OneShot", attack: Config.Global.DenStartingHp + 1)));
+
+            // A body worth exactly a Den is extreme content, not broken content.
+            yield return Row("Accepts_ACritterExactlyAsToughAsTheDen", Verdict.Accepts, null,
+                () => PoolWithCard(BadCard("Exactly", health: Config.Global.DenStartingHp)));
+
+            // A 2/3 still parses and still plays, and is almost certainly a row somebody forgot to scale.
+            yield return Row("Warns_CritterBelowTheStatQuantum", Verdict.Warns, "below the stat quantum",
+                () => PoolWithCard(BadCard("Unscaled", attack: 2, health: 3)));
+
+            yield return Row("Rejects_ABlowLargerThanTheWholeDen", Verdict.Rejects, "the Den's whole",
+                () => PoolWithStep(Step("Annihilate", EffectOp.Damage, EffectTargetKind.EnemyDen,
+                    amount: new EffectAmount(Config.Global.DenStartingHp + 1))));
+
+            yield return Row("Warns_AHealBelowTheStatQuantum", Verdict.Warns, "below the stat quantum",
+                () => PoolWithStep(Step("TinyHeal", EffectOp.Heal, EffectTargetKind.OwnDen, amount: new EffectAmount(2))));
+
+            // The per-unit factor is the number a scaling card actually adds per unit, so it is held to the same
+            // domain as a literal: a bare count against a Den in the hundreds does nothing visible.
+            yield return Row("Warns_ACounterWorthLessThanTheQuantumPerUnit", Verdict.Warns, "below the stat quantum",
+                () => PoolWithStep(Step("BareCount", EffectOp.Damage, EffectTargetKind.EnemyDen,
+                    amount: new EffectAmount(0, EffectCounter.FriendlyCritters))));
+
+            // Buff is where the risk lives, because its numbers look like the rank-track deltas that are meant
+            // to be sub-quantum.
+            yield return Row("Warns_ABuffBelowTheStatQuantum", Verdict.Warns, "below the stat quantum",
+                () => PoolWithStep(Step("TinyGrowth", EffectOp.Buff, EffectTargetKind.Self,
+                    amount: new EffectAmount(1), amount2: new EffectAmount(1))));
+
+            // The bounds are on the magnitude: the sign says which way the stat moves.
+            yield return Row("Warns_ANegativeBuffBelowTheStatQuantum", Verdict.Warns, "below the stat quantum",
+                () => PoolWithStep(Step("TinyShrink", EffectOp.Buff, EffectTargetKind.Chosen,
+                    amount: new EffectAmount(-2), amount2: new EffectAmount(-2)), chooseTarget: ChooseTargetKind.EnemyCritter));
+
+            // Amount2 is a stat in its own right: a Buff scaled in one column and not the other is the likeliest
+            // way to half-scale a card.
+            yield return Row("Warns_ASecondAmountBelowTheStatQuantum", Verdict.Warns, "Amount2",
+                () => PoolWithStep(Step("HalfScaled", EffectOp.Buff, EffectTargetKind.Self,
+                    amount: new EffectAmount(10), amount2: new EffectAmount(2))));
+
+            yield return Row("Rejects_ABuffLargerThanTheWholeDen", Verdict.Rejects, "past the Den's whole",
+                () => PoolWithStep(Step("Colossal", EffectOp.Buff, EffectTargetKind.Self,
+                    amount: new EffectAmount(Config.Global.DenStartingHp + 1), amount2: new EffectAmount(5))));
+
+            yield return Row("Rejects_ASecondAmountLargerThanTheWholeDen", Verdict.Rejects, "Amount2",
+                () => PoolWithStep(Step("ColossalHealth", EffectOp.Buff, EffectTargetKind.Self,
+                    amount: new EffectAmount(5), amount2: new EffectAmount(Config.Global.DenStartingHp + 1))));
         }
 
-        #region The stat domain
-
-        // The stat domain is bounded at both ends, and the two ends fail differently: a number the match
-        // cannot contain is an error, and a number that looks like it was authored before the domain was
-        // widened is a warning, because a deliberately tiny one is legal.
-
-        [Test]
-        public void Rejects_CritterTougherThanTheEnemyDen()
+        /// <summary> The shipped globals with one edit applied. </summary>
+        static ContentPool PoolWithGlobal(Action<GlobalConfig> edit)
         {
-            CardInfo card = BadCard("Unkillable", health: Config.Global.DenStartingHp + 1);
-
-            AssertRejects(PoolWithCard(card), "above the Den's");
+            GlobalConfig global = EditableGlobal();
+            edit(global);
+            return Pool(global: global);
         }
 
-        [Test]
-        public void Rejects_CritterHittingHarderThanADenHasHitPoints()
-        {
-            CardInfo card = BadCard("OneShot", attack: Config.Global.DenStartingHp + 1);
-
-            AssertRejects(PoolWithCard(card), "above the Den's");
-        }
-
-        [Test]
-        public void Accepts_ACritterExactlyAsToughAsTheDen()
-        {
-            // The boundary is inclusive on the legal side: a body worth exactly a Den is extreme content,
-            // not broken content, and the error above must not fire one point early.
-            CollectingIssueSink sink = new CollectingIssueSink();
-            ContentValidator.Validate(PoolWithCard(BadCard("Exactly", health: Config.Global.DenStartingHp)), sink);
-
-            Assert.That(sink.Errors, Is.Empty, sink.Describe());
-        }
-
-        [Test]
-        public void Warns_CritterAuthoredInTheOldStatDomain()
-        {
-            // A 2/3 was a real card before F2 multiplied the domain by five. It still parses, still plays,
-            // and is almost certainly a row somebody forgot to scale — so it is reported without failing
-            // the build.
-            CardInfo card = BadCard("Unscaled", attack: 2, health: 3);
-
-            AssertWarns(PoolWithCard(card), "below the stat quantum");
-        }
-
-        [Test]
-        public void Rejects_ABlowLargerThanTheWholeDen()
-        {
-            EffectStepInfo step = Step("Annihilate", EffectOp.Damage, EffectTargetKind.EnemyDen,
-                amount: new EffectAmount(Config.Global.DenStartingHp + 1));
-
-            AssertRejects(PoolWithStep(step), "the Den's whole");
-        }
-
-        [Test]
-        public void Warns_AHealAuthoredInTheOldStatDomain()
-        {
-            EffectStepInfo step = Step("TinyHeal", EffectOp.Heal, EffectTargetKind.OwnDen,
-                amount: new EffectAmount(2));
-
-            AssertWarns(PoolWithStep(step), "below the stat quantum");
-        }
-
-        [Test]
-        public void Warns_ACounterWorthLessThanTheQuantumPerUnit()
-        {
-            // The per-unit factor is the number a scaling card actually adds per unit, so it is held to the
-            // same domain as a literal: a bare count against a Den in the hundreds does nothing visible.
-            EffectStepInfo step = Step("BareCount", EffectOp.Damage, EffectTargetKind.EnemyDen,
-                amount: new EffectAmount(0, EffectCounter.FriendlyCritters));
-
-            AssertWarns(PoolWithStep(step), "below the stat quantum");
-        }
-
-        [Test]
-        public void Warns_ABuffAuthoredInTheOldStatDomain()
-        {
-            // A +1/+1 growth was a real card before the domain was widened. Buff is where the risk actually
-            // lives, because its numbers look like the rank-track deltas that are *meant* to be sub-quantum.
-            EffectStepInfo step = Step("TinyGrowth", EffectOp.Buff, EffectTargetKind.Self,
-                amount: new EffectAmount(1), amount2: new EffectAmount(1));
-
-            AssertWarns(PoolWithStep(step), "below the stat quantum");
-        }
-
-        [Test]
-        public void Warns_ANegativeBuffAuthoredInTheOldStatDomain()
-        {
-            // The bounds are on the magnitude, so a shrink that was never scaled is caught too — the sign
-            // says which way the stat moves, not what domain it is written in.
-            EffectStepInfo step = Step("TinyShrink", EffectOp.Buff, EffectTargetKind.Chosen,
-                amount: new EffectAmount(-2), amount2: new EffectAmount(-2));
-
-            AssertWarns(PoolWithStep(step, chooseTarget: ChooseTargetKind.EnemyCritter), "below the stat quantum");
-        }
-
-        [Test]
-        public void Warns_ASecondAmountAuthoredInTheOldStatDomain()
-        {
-            // Amount2 is a stat in its own right and was unchecked for every op: a Buff scaled in one column
-            // and forgotten in the other is the likeliest way to half-scale a card.
-            EffectStepInfo step = Step("HalfScaled", EffectOp.Buff, EffectTargetKind.Self,
-                amount: new EffectAmount(10), amount2: new EffectAmount(2));
-
-            AssertWarns(PoolWithStep(step), "Amount2");
-        }
-
-        [Test]
-        public void Rejects_ABuffLargerThanTheWholeDen()
-        {
-            EffectStepInfo step = Step("Colossal", EffectOp.Buff, EffectTargetKind.Self,
-                amount: new EffectAmount(Config.Global.DenStartingHp + 1), amount2: new EffectAmount(5));
-
-            AssertRejects(PoolWithStep(step), "past the Den's whole");
-        }
-
-        [Test]
-        public void Rejects_ASecondAmountLargerThanTheWholeDen()
-        {
-            EffectStepInfo step = Step("ColossalHealth", EffectOp.Buff, EffectTargetKind.Self,
-                amount: new EffectAmount(5), amount2: new EffectAmount(Config.Global.DenStartingHp + 1));
-
-            AssertRejects(PoolWithStep(step), "Amount2");
-        }
-
-        [Test]
-        public void Rejects_AHandLimitThatDoesNotCoverTheCompensationCard()
+        /// <summary>
+        /// The globals, and the pool-level rules. A threshold outside its range is a knob that lies: a lock rank
+        /// above the ceiling locks nothing, a Power Score gap no two decks can straddle makes every match Even.
+        /// Zero is a supported newcomer shield: it means the shield is off.
+        /// </summary>
+        static IEnumerable<TestCaseData> Globals()
         {
             // The grant does not go through the full-hand rule — a seat compensated into its own deck has not
-            // been compensated — so the room for it is a content invariant and this is where it is kept.
-            GlobalConfig global = EditableGlobal();
-            global.OpeningHandSecondPlayer = global.MaxHandSize;
+            // been compensated — so the room for it is a content invariant.
+            yield return Row("Rejects_AHandLimitThatDoesNotCoverTheCompensationCard", Verdict.Rejects, "compensation card does not fit the hand limit",
+                () => PoolWithGlobal(global => global.OpeningHandSecondPlayer = global.MaxHandSize));
 
-            AssertRejects(Pool(global: global), "compensation card does not fit the hand limit");
-        }
+            yield return Row("Accepts_AHandLimitWithExactlyRoomForTheCompensationCard", Verdict.Accepts, null,
+                () => PoolWithGlobal(global => global.OpeningHandSecondPlayer = global.MaxHandSize - 1));
 
-        [Test]
-        public void Accepts_AHandLimitWithExactlyRoomForTheCompensationCard()
-        {
-            // The boundary is inclusive on the legal side: a hand of exactly the limit once the card is in is
-            // legal, and the error above must not fire one card early.
-            GlobalConfig global = EditableGlobal();
-            global.OpeningHandSecondPlayer = global.MaxHandSize - 1;
+            yield return Row("Rejects_NonPositiveStatQuantum", Verdict.Rejects, "StatQuantum",
+                () => PoolWithGlobal(global => global.StatQuantum = 0));
 
-            CollectingIssueSink sink = new CollectingIssueSink();
-            ContentValidator.Validate(Pool(global: global), sink);
+            yield return Row("Rejects_NonPositivePowerScoreGapThreshold", Verdict.Rejects, "PowerScoreGapThreshold",
+                () => PoolWithGlobal(global => global.PowerScoreGapThreshold = 0));
 
-            Assert.That(sink.Errors, Is.Empty, sink.Describe());
-        }
+            yield return Row("Rejects_APowerScoreGapThresholdNoTwoDecksCouldStraddle", Verdict.Rejects, "PowerScoreGapThreshold",
+                () => PoolWithGlobal(global => global.PowerScoreGapThreshold = global.DeckSize * (global.RankMax - global.RankMin)));
 
-        [Test]
-        public void Rejects_NonPositiveStatQuantum()
-        {
-            GlobalConfig global = EditableGlobal();
-            global.StatQuantum = 0;
+            yield return Row("Rejects_ANegativeNewcomerShield", Verdict.Rejects, "NewcomerShieldMatches",
+                () => PoolWithGlobal(global => global.NewcomerShieldMatches = -1));
 
-            AssertRejects(Pool(global: global), "StatQuantum");
-        }
+            yield return Row("Accepts_ANewcomerShieldOfZero", Verdict.Accepts, null,
+                () => PoolWithGlobal(global => global.NewcomerShieldMatches = 0));
 
-        [Test]
-        public void Rejects_NonPositivePowerScoreGapThreshold()
-        {
-            GlobalConfig global = EditableGlobal();
-            global.PowerScoreGapThreshold = 0;
+            yield return Row("Rejects_ANonPositiveInitialRating", Verdict.Rejects, "InitialRating",
+                () => PoolWithGlobal(global => global.InitialRating = 0));
 
-            AssertRejects(Pool(global: global), "PowerScoreGapThreshold");
-        }
-
-        [Test]
-        public void Rejects_APowerScoreGapThresholdNoTwoDecksCouldStraddle()
-        {
-            // The other way a threshold lies: every match would be Even and the asymmetric tiers would be
-            // content nothing can reach, which is the same defect MinLockRank outside the rank range is.
-            GlobalConfig global = EditableGlobal();
-            global.PowerScoreGapThreshold = global.DeckSize * (global.RankMax - global.RankMin);
-
-            AssertRejects(Pool(global: global), "PowerScoreGapThreshold");
-        }
-
-        [Test]
-        public void Rejects_ANegativeNewcomerShield()
-        {
-            GlobalConfig global = EditableGlobal();
-            global.NewcomerShieldMatches = -1;
-
-            AssertRejects(Pool(global: global), "NewcomerShieldMatches");
-        }
-
-        [Test]
-        public void Accepts_ANewcomerShieldOfZero()
-        {
-            // Zero is a supported configuration rather than a degenerate one: it means the shield is off, and
-            // the tier is simply never chosen. The positivity check must not fire on it.
-            GlobalConfig global = EditableGlobal();
-            global.NewcomerShieldMatches = 0;
-
-            CollectingIssueSink sink = new CollectingIssueSink();
-            ContentValidator.Validate(Pool(global: global), sink);
-
-            Assert.That(sink.Errors, Is.Empty, sink.Describe());
-        }
-
-        [Test]
-        public void Rejects_ANonPositiveInitialRating()
-        {
-            GlobalConfig global = EditableGlobal();
-            global.InitialRating = 0;
-
-            AssertRejects(Pool(global: global), "InitialRating");
-        }
-
-        [Test]
-        public void Rejects_ANonPositiveRatingKFactor()
-        {
             // A K of zero is a rating that never moves, which makes every band a permanent one.
-            GlobalConfig global = EditableGlobal();
-            global.RatingKFactor = 0;
+            yield return Row("Rejects_ANonPositiveRatingKFactor", Verdict.Rejects, "RatingKFactor",
+                () => PoolWithGlobal(global => global.RatingKFactor = 0));
 
-            AssertRejects(Pool(global: global), "RatingKFactor");
+            yield return Row("Rejects_OpeningHandThatDoesNotFitTheHandLimit", Verdict.Rejects, "does not fit the hand limit",
+                () => PoolWithGlobal(global => global.OpeningHandFirstPlayer = global.MaxHandSize + 1));
+
+            yield return Row("Rejects_DeckThatDoesNotCoverTheOpeningHand", Verdict.Rejects, "does not cover an opening hand",
+                () => PoolWithGlobal(global => global.DeckSize = 3));
+
+            yield return Row("Rejects_RankRangeThatRunsBackwards", Verdict.Rejects, "below RankMin",
+                () => PoolWithGlobal(global => global.RankMax = 0));
+
+            yield return Row("Rejects_LockThresholdAboveTheRankCeiling", Verdict.Rejects, "outside the rank range",
+                () => PoolWithGlobal(global => global.MinLockRank = global.RankMax + 1));
+
+            yield return Row("Rejects_LockThresholdBelowTheRankFloor", Verdict.Rejects, "outside the rank range",
+                () => PoolWithGlobal(global => global.MinLockRank = global.RankMin - 1));
+
+            yield return Row("Rejects_CollectibleSecondPlayerBonusCard", Verdict.Rejects, "must not be buildable into a deck",
+                () => PoolWithGlobal(global => global.SecondPlayerBonusCard = Card("Foxfire")));
+
+            yield return Row("Rejects_SecondPlayerBonusCardThatIsNotATrick", Verdict.Rejects, "must be a trick",
+                () => PoolWithGlobal(global => global.SecondPlayerBonusCard = Card("LambToken")));
+
+            yield return Row("Rejects_PoolTooSmallToBuildALegalDeck", Verdict.Rejects, "No allowed clan combination",
+                () => Pool(cards: ContentPool.FromConfig(Config).Cards.Take(4).ToList()));
+
+            yield return Row("Rejects_NonCollectibleCardInTheStarterCollection", Verdict.Rejects, "never live in a collection",
+                () => PoolWithCard(BadCard("StarterToken", collectible: false, inStarter: true)));
+
+            yield return Row("Rejects_NonCollectibleCardOnARealRankTrack", Verdict.Rejects, "no rank to grow",
+                () => PoolWithCard(BadCard("RankedToken", track: "CritterDefault", collectible: false)));
+
+            // Every card is still collectible, so the pool is fine; only the starter grant is too thin.
+            yield return Row("Rejects_StarterCollectionThatCannotBuildADeck", Verdict.Rejects, "the starter collection",
+                () => Pool(cards: ContentPool.FromConfig(Config).Cards
+                    .Select(card => new CardInfo(
+                        card.CardId, card.DisplayName, card.Clan, card.Type, card.Rarity, card.Cost, card.RankTrack,
+                        attack: card.Attack, health: card.Health, isSnack: card.IsSnack, keywords: card.Keywords,
+                        chooseTarget: card.ChooseTarget, hello: card.Hello, goodbye: card.Goodbye, onAttack: card.OnAttack,
+                        turnStart: card.TurnStart, turnEnd: card.TurnEnd, collectible: card.Collectible,
+                        inStarterCollection: false))
+                    .ToList()));
         }
 
-        #endregion
-
-        [Test]
-        public void Rejects_TrickWithCombatStats()
-        {
-            AssertRejects(PoolWithCard(BadCard("BeefyTrick", CardType.Trick, attack: 2, health: 2)), "only critters have Attack and Health");
-        }
-
-        [Test]
-        public void Rejects_TrickThatBindsMoreThanHello()
-        {
-            CardInfo card = BadCard("LingeringTrick", CardType.Trick, attack: 0, health: 0, goodbye: NamedSteps("BurnDen1"));
-
-            AssertRejects(PoolWithCard(card), "may bind Hello only");
-        }
-
-        [Test]
-        public void Rejects_CritterMarkedAsASnack()
-        {
-            AssertRejects(PoolWithCard(BadCard("SnackCritter", isSnack: true)), "a critter cannot be a Snack");
-        }
-
-        [Test]
-        public void Rejects_SnackThatPointsAtTheEnemy()
-        {
-            CardInfo card = BadCard("HostileSnack", CardType.Trick, attack: 0, health: 0, isSnack: true,
-                chooseTarget: ChooseTargetKind.EnemyCritter, hello: NamedSteps("ShrinkChosen11"));
-
-            AssertRejects(PoolWithCard(card), "they point at your own side");
-        }
-
-        [Test]
-        public void Rejects_TrickThatPrintsKeywords()
-        {
-            CardInfo card = BadCard("KeywordedTrick", CardType.Trick, attack: 0, health: 0,
-                keywords: new List<MetaRef<KeywordInfo>> { Keyword("Guard") });
-
-            AssertRejects(PoolWithCard(card), "only critters carry them");
-        }
-
-        [Test]
-        public void Rejects_ChosenStepOnACardThatAsksForNoTarget()
-        {
-            CardInfo card = BadCard("SilentChoice", hello: NamedSteps("DamageChosen3"));
-
-            AssertRejects(PoolWithCard(card), "the player is never asked to pick one");
-        }
-
-        [Test]
-        public void Rejects_ChooseTargetNoStepUses()
-        {
-            CardInfo card = BadCard("PointlessChoice", chooseTarget: ChooseTargetKind.AnyCritter, hello: NamedSteps("DrawOne"));
-
-            AssertRejects(PoolWithCard(card), "the pick would do nothing");
-        }
-
-        [Test]
-        public void Rejects_CardThatPrintsATriggerLabelAsAKeyword()
-        {
-            CardInfo card = BadCard("SelfDescribing", keywords: new List<MetaRef<KeywordInfo>> { Keyword("Goodbye") });
-
-            AssertRejects(PoolWithCard(card), "derives those labels");
-        }
-
-        #endregion
-
-        #region Rank tracks
-
-        [TestCase(2)]
-        [TestCase(4)]
-        public void Rejects_InvalidIntermediateRankEvenWhenLaterRankRepairsIt(int rank)
+        /// <summary> A critter whose track breaks at <paramref name="rank"/> and is repaired one rank later. </summary>
+        static ContentPool PoolWithAnIntermediateRankRepaired(int rank)
         {
             RankTrackStep invalid = new RankTrackStep(-6, 0, 0, 0);
-            RankTrackStep repair = new RankTrackStep(6, 0, 0, 0);
+            RankTrackStep repair  = new RankTrackStep(6, 0, 0, 0);
             RankTrackInfo track = new RankTrackInfo(RankTrackId.FromString("Intermediate"),
                 rank2: rank == 2 ? invalid : null,
                 rank3: rank == 2 ? repair : null,
@@ -676,201 +494,83 @@ namespace Game.Logic.Tests
             CardInfo card = new CardInfo(CardId.FromString("IntermediateCard"), "Intermediate Card",
                 Clan("Wanderer"), CardType.Critter, CardRarity.Common, 2,
                 MetaRef<RankTrackInfo>.FromItem(track), attack: 5, health: 5);
-            AssertRejects(Pool(cards: Plus(ContentPool.FromConfig(Config).Cards, card),
-                rankTracks: Plus(ContentPool.FromConfig(Config).RankTracks, track)), $"at rank {rank}");
+
+            return Pool(cards: Plus(ContentPool.FromConfig(Config).Cards, card),
+                rankTracks: Plus(ContentPool.FromConfig(Config).RankTracks, track));
         }
 
-        [Test]
-        public void Rejects_TrackThatTakesACardBelowZeroCost()
+        /// <summary> A card's shape, its rank track, a weather's hooks, and the rows nothing uses. </summary>
+        static IEnumerable<TestCaseData> CardShape()
         {
+            yield return Row("Rejects_TrickWithCombatStats", Verdict.Rejects, "only critters have Attack and Health",
+                () => PoolWithCard(BadCard("BeefyTrick", CardType.Trick, attack: 2, health: 2)));
+
+            yield return Row("Rejects_TrickThatBindsMoreThanHello", Verdict.Rejects, "may bind Hello only",
+                () => PoolWithCard(BadCard("LingeringTrick", CardType.Trick, attack: 0, health: 0, goodbye: NamedSteps("BurnDen1"))));
+
+            yield return Row("Rejects_CritterMarkedAsASnack", Verdict.Rejects, "a critter cannot be a Snack",
+                () => PoolWithCard(BadCard("SnackCritter", isSnack: true)));
+
+            yield return Row("Rejects_SnackThatPointsAtTheEnemy", Verdict.Rejects, "they point at your own side",
+                () => PoolWithCard(BadCard("HostileSnack", CardType.Trick, attack: 0, health: 0, isSnack: true,
+                    chooseTarget: ChooseTargetKind.EnemyCritter, hello: NamedSteps("ShrinkChosen11"))));
+
+            yield return Row("Rejects_TrickThatPrintsKeywords", Verdict.Rejects, "only critters carry them",
+                () => PoolWithCard(BadCard("KeywordedTrick", CardType.Trick, attack: 0, health: 0,
+                    keywords: new List<MetaRef<KeywordInfo>> { Keyword("Guard") })));
+
+            yield return Row("Rejects_ChosenStepOnACardThatAsksForNoTarget", Verdict.Rejects, "the player is never asked to pick one",
+                () => PoolWithCard(BadCard("SilentChoice", hello: NamedSteps("DamageChosen3"))));
+
+            yield return Row("Rejects_ChooseTargetNoStepUses", Verdict.Rejects, "the pick would do nothing",
+                () => PoolWithCard(BadCard("PointlessChoice", chooseTarget: ChooseTargetKind.AnyCritter, hello: NamedSteps("DrawOne"))));
+
+            yield return Row("Rejects_CardThatPrintsATriggerLabelAsAKeyword", Verdict.Rejects, "derives those labels",
+                () => PoolWithCard(BadCard("SelfDescribing", keywords: new List<MetaRef<KeywordInfo>> { Keyword("Goodbye") })));
+
+            yield return Row("Rejects_InvalidIntermediateRankEvenWhenLaterRankRepairsIt_AtRank2", Verdict.Rejects, "at rank 2",
+                () => PoolWithAnIntermediateRankRepaired(2));
+
+            yield return Row("Rejects_InvalidIntermediateRankEvenWhenLaterRankRepairsIt_AtRank4", Verdict.Rejects, "at rank 4",
+                () => PoolWithAnIntermediateRankRepaired(4));
+
             // TrickCheaper3 takes a point off the cost at rank 3, which a zero-cost card cannot pay.
-            CardInfo card = BadCard("FreeAndCheaper", CardType.Trick, cost: 0, attack: 0, health: 0,
-                hello: NamedSteps("DrawOne"), track: "TrickCheaper3");
+            yield return Row("Rejects_TrackThatTakesACardBelowZeroCost", Verdict.Rejects, "RankTracks/TrickCheaper3",
+                () => PoolWithCard(BadCard("FreeAndCheaper", CardType.Trick, cost: 0, attack: 0, health: 0,
+                    hello: NamedSteps("DrawOne"), track: "TrickCheaper3")));
 
-            AssertRejects(PoolWithCard(card), "RankTracks/TrickCheaper3");
-        }
+            yield return Row("Rejects_AmountScalingTrackOnACardWithNoAmountToScale", Verdict.Rejects, "no literal amount to scale",
+                () => PoolWithCard(BadCard("NothingToScale", CardType.Trick, attack: 0, health: 0,
+                    hello: NamedSteps("BounceAll"), track: "TrickAmount3")));
 
-        [Test]
-        public void Rejects_AmountScalingTrackOnACardWithNoAmountToScale()
-        {
-            CardInfo card = BadCard("NothingToScale", CardType.Trick, attack: 0, health: 0,
-                hello: NamedSteps("BounceAll"), track: "TrickAmount3");
+            yield return Row("Rejects_CostRuleThatChangesNothing", Verdict.Rejects, "the rule changes nothing",
+                () => Pool(weathers: Plus(ContentPool.FromConfig(Config).Weathers,
+                    new WeatherInfo(WeatherId.FromString("FlatRain"), "Flat Rain", costScope: WeatherCostScope.AllTricks, costDelta: 0))));
 
-            AssertRejects(PoolWithCard(card), "no literal amount to scale");
-        }
+            yield return Row("Rejects_TriggerWithNoSteps", Verdict.Rejects, "binds no steps",
+                () => Pool(weathers: Plus(ContentPool.FromConfig(Config).Weathers,
+                    new WeatherInfo(WeatherId.FromString("SilentDawn"), "Silent Dawn", trigger: WeatherTrigger.TurnStart))));
 
-        #endregion
+            yield return Row("Rejects_WeatherWithNoHooksAtAll", Verdict.Rejects, "no hooks at all",
+                () => Pool(weathers: Plus(ContentPool.FromConfig(Config).Weathers,
+                    new WeatherInfo(WeatherId.FromString("PlainDay"), "Plain Day"))));
 
-        #region Weathers
+            yield return Row("Rejects_EmptyWeatherPool", Verdict.Rejects, "Weather pool is empty",
+                () => Pool(weathers: new List<WeatherInfo>()));
 
-        [Test]
-        public void Rejects_CostRuleThatChangesNothing()
-        {
-            WeatherInfo weather = new WeatherInfo(WeatherId.FromString("FlatRain"), "Flat Rain", costScope: WeatherCostScope.AllTricks, costDelta: 0);
+            yield return Row("Warns_AboutAStepNothingUses", Verdict.Warns, "EffectSteps/OrphanDraw",
+                () => Pool(effectSteps: Plus(ContentPool.FromConfig(Config).EffectSteps,
+                    Step("OrphanDraw", EffectOp.Draw, amount: new EffectAmount(1)))));
 
-            AssertRejects(Pool(weathers: Plus(ContentPool.FromConfig(Config).Weathers, weather)), "the rule changes nothing");
-        }
+            yield return Row("Warns_AboutARankTrackNothingUses", Verdict.Warns, "RankTracks/OrphanTrack",
+                () => Pool(rankTracks: Plus(ContentPool.FromConfig(Config).RankTracks,
+                    new RankTrackInfo(RankTrackId.FromString("OrphanTrack"), rank3: new RankTrackStep(1, 0, 0, 0)))));
 
-        [Test]
-        public void Rejects_TriggerWithNoSteps()
-        {
-            WeatherInfo weather = new WeatherInfo(WeatherId.FromString("SilentDawn"), "Silent Dawn", trigger: WeatherTrigger.TurnStart);
-
-            AssertRejects(Pool(weathers: Plus(ContentPool.FromConfig(Config).Weathers, weather)), "binds no steps");
-        }
-
-        [Test]
-        public void Rejects_WeatherWithNoHooksAtAll()
-        {
-            WeatherInfo weather = new WeatherInfo(WeatherId.FromString("PlainDay"), "Plain Day");
-
-            AssertRejects(Pool(weathers: Plus(ContentPool.FromConfig(Config).Weathers, weather)), "no hooks at all");
-        }
-
-        [Test]
-        public void Rejects_EmptyWeatherPool()
-        {
-            AssertRejects(Pool(weathers: new List<WeatherInfo>()), "Weather pool is empty");
-        }
-
-        #endregion
-
-        #region The pool and the globals
-
-        [Test]
-        public void Rejects_PoolTooSmallToBuildALegalDeck()
-        {
-            List<CardInfo> justAFew = ContentPool.FromConfig(Config).Cards.Take(4).ToList();
-
-            AssertRejects(Pool(cards: justAFew), "No allowed clan combination");
-        }
-
-        [Test]
-        public void Rejects_NonCollectibleCardInTheStarterCollection()
-        {
-            CardInfo card = BadCard("StarterToken", collectible: false, inStarter: true);
-
-            AssertRejects(PoolWithCard(card), "never live in a collection");
-        }
-
-        [Test]
-        public void Rejects_NonCollectibleCardOnARealRankTrack()
-        {
-            CardInfo card = BadCard("RankedToken", track: "CritterDefault", collectible: false);
-
-            AssertRejects(PoolWithCard(card), "no rank to grow");
-        }
-
-        [Test]
-        public void Rejects_StarterCollectionThatCannotBuildADeck()
-        {
-            // Every card is still collectible, so the pool is fine; only the starter grant is too thin.
-            List<CardInfo> cards = ContentPool.FromConfig(Config).Cards
-                .Select(card => new CardInfo(
-                    card.CardId, card.DisplayName, card.Clan, card.Type, card.Rarity, card.Cost, card.RankTrack,
-                    attack: card.Attack, health: card.Health, isSnack: card.IsSnack, keywords: card.Keywords,
-                    chooseTarget: card.ChooseTarget, hello: card.Hello, goodbye: card.Goodbye, onAttack: card.OnAttack,
-                    turnStart: card.TurnStart, turnEnd: card.TurnEnd, collectible: card.Collectible,
-                    inStarterCollection: false))
-                .ToList();
-
-            AssertRejects(Pool(cards: cards), "the starter collection");
-        }
-
-        [Test]
-        public void Rejects_OpeningHandThatDoesNotFitTheHandLimit()
-        {
-            GlobalConfig global = EditableGlobal();
-            global.OpeningHandFirstPlayer = global.MaxHandSize + 1;
-
-            AssertRejects(Pool(global: global), "does not fit the hand limit");
-        }
-
-        [Test]
-        public void Rejects_DeckThatDoesNotCoverTheOpeningHand()
-        {
-            GlobalConfig global = EditableGlobal();
-            global.DeckSize = 3;
-
-            AssertRejects(Pool(global: global), "does not cover an opening hand");
-        }
-
-        [Test]
-        public void Rejects_RankRangeThatRunsBackwards()
-        {
-            GlobalConfig global = EditableGlobal();
-            global.RankMax = 0;
-
-            AssertRejects(Pool(global: global), "below RankMin");
-        }
-
-        [Test]
-        public void Rejects_LockThresholdAboveTheRankCeiling()
-        {
-            // A threshold outside the rank range is a knob that lies: above the ceiling no card in the game
-            // could ever be locked, and below the floor the rule protects nothing.
-            GlobalConfig global = EditableGlobal();
-            global.MinLockRank = global.RankMax + 1;
-
-            AssertRejects(Pool(global: global), "outside the rank range");
-        }
-
-        [Test]
-        public void Rejects_LockThresholdBelowTheRankFloor()
-        {
-            GlobalConfig global = EditableGlobal();
-            global.MinLockRank = global.RankMin - 1;
-
-            AssertRejects(Pool(global: global), "outside the rank range");
-        }
-
-        [Test]
-        public void Rejects_CollectibleSecondPlayerBonusCard()
-        {
-            GlobalConfig global = EditableGlobal();
-            global.SecondPlayerBonusCard = Card("Foxfire");
-
-            AssertRejects(Pool(global: global), "must not be buildable into a deck");
-        }
-
-        [Test]
-        public void Rejects_SecondPlayerBonusCardThatIsNotATrick()
-        {
-            GlobalConfig global = EditableGlobal();
-            global.SecondPlayerBonusCard = Card("LambToken");
-
-            AssertRejects(Pool(global: global), "must be a trick");
-        }
-
-        #endregion
-
-        #region Dead rows
-
-        [Test]
-        public void Warns_AboutAStepNothingUses()
-        {
-            EffectStepInfo orphan = Step("OrphanDraw", EffectOp.Draw, amount: new EffectAmount(1));
-
-            AssertWarns(Pool(effectSteps: Plus(ContentPool.FromConfig(Config).EffectSteps, orphan)), "EffectSteps/OrphanDraw");
-        }
-
-        [Test]
-        public void Warns_AboutARankTrackNothingUses()
-        {
-            RankTrackInfo orphan = new RankTrackInfo(RankTrackId.FromString("OrphanTrack"), rank3: new RankTrackStep(1, 0, 0, 0));
-
-            AssertWarns(Pool(rankTracks: Plus(ContentPool.FromConfig(Config).RankTracks, orphan)), "RankTracks/OrphanTrack");
-        }
-
-        [Test]
-        public void Warns_AboutTwoCardsWithTheSameName()
-        {
-            CardInfo twin = new CardInfo(
-                CardId.FromString("SecondFoxfire"), "Foxfire", Clan("Kitsune"), CardType.Trick, CardRarity.Common, cost: 2,
-                rankTrack: Track("None"), chooseTarget: ChooseTargetKind.AnyTarget, hello: NamedSteps("DamageChosen3"),
-                collectible: false, inStarterCollection: false);
-
-            AssertWarns(PoolWithCard(twin), "is also used by");
+            yield return Row("Warns_AboutTwoCardsWithTheSameName", Verdict.Warns, "is also used by",
+                () => PoolWithCard(new CardInfo(
+                    CardId.FromString("SecondFoxfire"), "Foxfire", Clan("Kitsune"), CardType.Trick, CardRarity.Common, cost: 2,
+                    rankTrack: Track("None"), chooseTarget: ChooseTargetKind.AnyTarget, hello: NamedSteps("DamageChosen3"),
+                    collectible: false, inStarterCollection: false)));
         }
 
         #endregion
@@ -890,26 +590,97 @@ namespace Game.Logic.Tests
             return copy;
         }
 
-        [Test]
-        public void Accepts_TheShippedStarterDecks()
+        /// <summary> The shipped starter decks with Fire &amp; Foam re-authored. </summary>
+        static ContentPool PoolWithFireAndFoam(string displayName, string description, string[] cards, IReadOnlyList<CardInfo> synthetic = null)
+            => Pool(starterDecks: StarterDecksWith(StarterDeckOf("FireAndFoam", displayName, description, cards, synthetic)));
+
+        static IEnumerable<TestCaseData> StarterDecks()
         {
-            // The narrow version of ShippedContent_IsAccepted, and the control that catches an authoring
-            // typo in StarterDecks.csv: a card id that means nothing fails the config build outright, but a
-            // real card in the wrong deck only shows up here.
-            CollectingIssueSink sink = new CollectingIssueSink();
-            ContentValidator.Validate(ContentPool.FromConfig(Config), sink);
+            yield return Row("Rejects_AStarterDeckOfTheWrongSize", Verdict.Rejects, "WrongSize",
+                () => PoolWithFireAndFoam("Fire & Foam", "One short.", CardsOf("FireAndFoam").Take(24).ToArray()));
 
-            Assert.That(sink.Errors.Where(error => error.Contains(ContentValidator.StarterDecksSheet)), Is.Empty, sink.Describe());
-        }
+            // A null entry carries no card to name, so without the position the author is left finding the hole
+            // by eye in a twenty-five-line block. Two blanks, so the message has to list rather than report the
+            // first.
+            yield return Row("Rejects_AStarterDeckWithANullCard_AndNamesWhichPosition", Verdict.Rejects, "Cards 12, 24 of 25 are blank",
+                () => PoolWithFireAndFoam("Fire & Foam", "Two holes.", With(With(CardsOf("FireAndFoam"), 11, null), 23, null)));
 
-        [Test]
-        public void Rejects_AStarterDeckOfTheWrongSize()
-        {
-            string[] short24 = CardsOf("FireAndFoam").Take(24).ToArray();
+            // A collectible card outside the starter collection. TheAcorn cannot serve as this control because it
+            // is also non-collectible, so the shared validator would refuse the deck before this rule was reached.
+            yield return Row("Rejects_AStarterDeckHoldingANonStarterCard", Verdict.Rejects, "not in the starter collection",
+                () =>
+                {
+                    CardInfo outsideTheGrant = BadCard("ExtraWanderer", collectible: true, inStarter: false);
+                    return Pool(
+                        cards: Plus(ContentPool.FromConfig(Config).Cards, outsideTheGrant),
+                        starterDecks: StarterDecksWith(StarterDeckOf(
+                            "FireAndFoam", "Fire & Foam", "Not yours yet.",
+                            With(CardsOf("FireAndFoam"), 24, "ExtraWanderer"),
+                            synthetic: new[] { outsideTheGrant })));
+                });
 
-            AssertRejects(
-                Pool(starterDecks: StarterDecksWith(StarterDeckOf("FireAndFoam", "Fire & Foam", "One short.", short24))),
-                "WrongSize");
+            // One Wanderer swapped for a third clan's card, which is the shared clan limit rather than the
+            // exactly-two-clans rule.
+            yield return Row("Rejects_AStarterDeckDrawingOnThreeClans", Verdict.Rejects, "TooManyClans",
+                () => PoolWithFireAndFoam("Fire & Foam", "One clan too many.", With(CardsOf("FireAndFoam"), 24, "MoonlitAlleycat")));
+
+            // Six clan cards plus the deck's thirteen Wanderers is 19, so the shared size rule catches a mono-clan
+            // deck before the two-clan lower bound does; the lower bound needs a padded pool (the next row).
+            yield return Row("Rejects_AMonoClanStarterDeck", Verdict.Rejects, "WrongSize",
+                () =>
+                {
+                    string[] monoClan = CardsOf("FireAndFoam").Take(6).Concat(CardsOf("FireAndFoam").Skip(12)).ToArray();
+                    Assert.That(monoClan.Length, Is.EqualTo(19), "six Kitsune plus thirteen Wanderers");
+                    return PoolWithFireAndFoam("Fire & Foam", "Kitsune alone.", monoClan);
+                });
+
+            // The two-clan lower bound: exactly two clans, not at most two. No list the shipped pool can build
+            // violates it — 15 Wanderers is short of 25 and singleton forbids padding — so the control pads the
+            // pool with twelve more Wanderers, which is the only way to reach the rule at all.
+            yield return Row("Rejects_AStarterDeckOfWanderersAlone", Verdict.Rejects, "draws on 0 clan-limited clans",
+                () =>
+                {
+                    List<CardInfo> padded = ContentPool.FromConfig(Config).Cards.ToList();
+                    List<string>   filler = new List<string>();
+                    for (int ndx = 0; ndx < 12; ndx++)
+                    {
+                        string id = $"FillerWanderer{ndx.ToString(CultureInfo.InvariantCulture)}";
+                        padded.Add(BadCard(id, collectible: true, inStarter: true));
+                        filler.Add(id);
+                    }
+
+                    string[] wanderersOnly = CardsOf("FireAndFoam").Skip(12).Concat(filler).ToArray();
+                    Assert.That(wanderersOnly.Length, Is.EqualTo(Config.Global.DeckSize), "thirteen real Wanderers and twelve filler");
+
+                    return Pool(
+                        cards: padded,
+                        starterDecks: StarterDecksWith(StarterDeckOf("FireAndFoam", "Fire & Foam", "Nobody's clan.", wanderersOnly, synthetic: padded)));
+                });
+
+            // The two Moonlight decks dropped. The four that remain are legal and on distinct pairs, so the only
+            // thing wrong with this pool is that a fresh account can never play Moonlight.
+            yield return Row("Rejects_AClanNoStarterDeckPlays", Verdict.Rejects, "Clans/Moonlight/: Clan 'Moonlight' is in no starter deck",
+                () => Pool(starterDecks: ContentPool.FromConfig(Config).StarterDecks
+                    .Where(deck => deck.StarterDeckId != StarterDeckId.FromString("AlleySparks")
+                                && deck.StarterDeckId != StarterDeckId.FromString("PorchlightPack"))
+                    .ToList()));
+
+            // The sixth deck re-authored onto the first deck's clan pair.
+            yield return Row("Rejects_TwoStarterDecksOnTheSameClanPair", Verdict.Rejects, "'FireAndFoam' and 'EmberAndOak' draw on the same two clans",
+                () => Pool(starterDecks: StarterDecksWith(StarterDeckOf(
+                    "EmberAndOak", "Ember & Oak", "Fire and foam again.", CardsOf("FireAndFoam")))));
+
+            yield return Row("Rejects_AStarterDeckWithNoDisplayName", Verdict.Rejects, "has no display name",
+                () => PoolWithFireAndFoam("", "No name.", CardsOf("FireAndFoam")));
+
+            yield return Row("Rejects_AStarterDeckWithADisplayNameThePickerCannotFit", Verdict.Rejects, "the picker is laid out for at most",
+                () => PoolWithFireAndFoam(new string('x', PlayerDeck.MaxNameLength + 1), "Too long.", CardsOf("FireAndFoam")));
+
+            yield return Row("Rejects_AStarterDeckWithNoDescription", Verdict.Rejects, "has no description",
+                () => PoolWithFireAndFoam("Fire & Foam", "", CardsOf("FireAndFoam")));
+
+            yield return Row("Rejects_AnEmptyStarterDeckPool", Verdict.Rejects, "There are no starter decks",
+                () => Pool(starterDecks: new List<StarterDeckInfo>()));
         }
 
         [Test]
@@ -917,158 +688,7 @@ namespace Game.Logic.Tests
         {
             string[] cards = CardsOf("FireAndFoam");
 
-            AssertRejects(
-                Pool(starterDecks: StarterDecksWith(StarterDeckOf("FireAndFoam", "Fire & Foam", "Twice over.", With(cards, 24, cards[0])))),
-                $"DuplicateCard ({cards[0]})");
-        }
-
-        [Test]
-        public void Rejects_AStarterDeckWithANullCard()
-        {
-            // This is what a blank row inside a deck block produces: the vertical layout fills a skipped
-            // element with a default one, so an accidental empty line is a null card rather than a short deck.
-            AssertRejects(
-                Pool(starterDecks: StarterDecksWith(StarterDeckOf("FireAndFoam", "Fire & Foam", "A hole in it.", With(CardsOf("FireAndFoam"), 7, null)))),
-                "UnknownCard");
-        }
-
-        [Test]
-        public void Rejects_AStarterDeckWithANullCard_AndNamesWhichPosition()
-        {
-            // A null entry carries no card to name, so without the position the author is left finding the
-            // hole by eye in a twenty-five-line block. Two blanks, so the message has to list rather than
-            // report the first.
-            string[] holed = With(With(CardsOf("FireAndFoam"), 11, null), 23, null);
-
-            AssertRejects(
-                Pool(starterDecks: StarterDecksWith(StarterDeckOf("FireAndFoam", "Fire & Foam", "Two holes.", holed))),
-                "Cards 12, 24 of 25 are blank");
-        }
-
-        [Test]
-        public void Rejects_AStarterDeckHoldingANonStarterCard()
-        {
-            // A collectible card outside the starter collection, which the shipped pool has none of: every
-            // collectible card is granted today. TheAcorn cannot serve as this control because it is also
-            // non-collectible, so the shared validator would refuse the deck before this rule was reached.
-            CardInfo outsideTheGrant = BadCard("ExtraWanderer", collectible: true, inStarter: false);
-
-            AssertRejects(
-                Pool(
-                    cards: Plus(ContentPool.FromConfig(Config).Cards, outsideTheGrant),
-                    starterDecks: StarterDecksWith(StarterDeckOf(
-                        "FireAndFoam", "Fire & Foam", "Not yours yet.",
-                        With(CardsOf("FireAndFoam"), 24, "ExtraWanderer"),
-                        synthetic: new[] { outsideTheGrant }))),
-                "not in the starter collection");
-        }
-
-        [Test]
-        public void Rejects_AStarterDeckDrawingOnThreeClans()
-        {
-            // One Wanderer swapped for a third clan's card, which is the shared clan limit rather than the
-            // exactly-two-clans rule.
-            AssertRejects(
-                Pool(starterDecks: StarterDecksWith(StarterDeckOf(
-                    "FireAndFoam", "Fire & Foam", "One clan too many.",
-                    With(CardsOf("FireAndFoam"), 24, "MoonlitAlleycat")))),
-                "TooManyClans");
-        }
-
-        [Test]
-        public void Rejects_AMonoClanStarterDeck()
-        {
-            // Six clan cards plus all fifteen Wanderers is 21, so the pool cannot express a mono-clan deck at
-            // all and the shared size rule catches this before the two-clan lower bound does. The lower bound needs a
-            // pool the shipped content cannot build — see Rejects_AStarterDeckOfWanderersAlone.
-            string[] monoClan = CardsOf("FireAndFoam").Take(6)
-                .Concat(CardsOf("FireAndFoam").Skip(12))
-                .ToArray();
-            Assert.That(monoClan.Length, Is.EqualTo(19), "six Kitsune plus thirteen Wanderers");
-
-            AssertRejects(
-                Pool(starterDecks: StarterDecksWith(StarterDeckOf("FireAndFoam", "Fire & Foam", "Kitsune alone.", monoClan))),
-                "WrongSize");
-        }
-
-        [Test]
-        public void Rejects_AStarterDeckOfWanderersAlone()
-        {
-            // The two-clan lower bound: exactly two clans, not at most two. No list the shipped pool can build
-            // violates it — 15 Wanderers is short of 25 and singleton forbids padding — so the control pads
-            // the pool with twelve more Wanderers, which is the only way to reach the rule at all.
-            List<CardInfo> padded = ContentPool.FromConfig(Config).Cards.ToList();
-            List<string>   filler = new List<string>();
-            for (int ndx = 0; ndx < 12; ndx++)
-            {
-                string id = $"FillerWanderer{ndx.ToString(CultureInfo.InvariantCulture)}";
-                padded.Add(BadCard(id, collectible: true, inStarter: true));
-                filler.Add(id);
-            }
-
-            string[] wanderersOnly = CardsOf("FireAndFoam").Skip(12).Concat(filler).ToArray();
-            Assert.That(wanderersOnly.Length, Is.EqualTo(Config.Global.DeckSize), "thirteen real Wanderers and twelve filler");
-
-            AssertRejects(
-                Pool(
-                    cards: padded,
-                    starterDecks: StarterDecksWith(StarterDeckOf(
-                        "FireAndFoam", "Fire & Foam", "Nobody's clan.", wanderersOnly, synthetic: padded))),
-                "draws on 0 clan-limited clans");
-        }
-
-        [Test]
-        public void Rejects_AClanNoStarterDeckPlays()
-        {
-            // The two Moonlight decks dropped. The four that remain are legal and on distinct pairs, so the
-            // only thing wrong with this pool is that a fresh account can never play Moonlight.
-            IReadOnlyList<StarterDeckInfo> withoutMoonlight = ContentPool.FromConfig(Config).StarterDecks
-                .Where(deck => deck.StarterDeckId != StarterDeckId.FromString("AlleySparks")
-                            && deck.StarterDeckId != StarterDeckId.FromString("PorchlightPack"))
-                .ToList();
-
-            AssertRejects(Pool(starterDecks: withoutMoonlight), "Clans/Moonlight/: Clan 'Moonlight' is in no starter deck");
-        }
-
-        [Test]
-        public void Rejects_TwoStarterDecksOnTheSameClanPair()
-        {
-            // The sixth deck re-authored onto the first deck's clan pair.
-            AssertRejects(
-                Pool(starterDecks: StarterDecksWith(StarterDeckOf(
-                    "EmberAndOak", "Ember & Oak", "Fire and foam again.", CardsOf("FireAndFoam")))),
-                "'FireAndFoam' and 'EmberAndOak' draw on the same two clans");
-        }
-
-        [Test]
-        public void Rejects_AStarterDeckWithNoDisplayName()
-        {
-            AssertRejects(
-                Pool(starterDecks: StarterDecksWith(StarterDeckOf("FireAndFoam", "", "No name.", CardsOf("FireAndFoam")))),
-                "has no display name");
-        }
-
-        [Test]
-        public void Rejects_AStarterDeckWithADisplayNameThePickerCannotFit()
-        {
-            AssertRejects(
-                Pool(starterDecks: StarterDecksWith(StarterDeckOf(
-                    "FireAndFoam", new string('x', PlayerDeck.MaxNameLength + 1), "Too long.", CardsOf("FireAndFoam")))),
-                "the picker is laid out for at most");
-        }
-
-        [Test]
-        public void Rejects_AStarterDeckWithNoDescription()
-        {
-            AssertRejects(
-                Pool(starterDecks: StarterDecksWith(StarterDeckOf("FireAndFoam", "Fire & Foam", "", CardsOf("FireAndFoam")))),
-                "has no description");
-        }
-
-        [Test]
-        public void Rejects_AnEmptyStarterDeckPool()
-        {
-            AssertRejects(Pool(starterDecks: new List<StarterDeckInfo>()), "There are no starter decks");
+            AssertRejects(PoolWithFireAndFoam("Fire & Foam", "Twice over.", With(cards, 24, cards[0])), $"DuplicateCard ({cards[0]})");
         }
 
         #endregion

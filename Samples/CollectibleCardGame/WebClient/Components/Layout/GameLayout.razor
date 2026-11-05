@@ -1,0 +1,9 @@
+@inherits LayoutComponentBase
+@* Created with the first page drawn, so it reads the address the page was loaded at. *@
+@inject StartupQuery StartupQuery
+
+@* The game's layout: its screens bring their own chrome (the metagame's top bar, the board's pill), so there is no
+   debug bar. Connection trouble shows over it from ConnectionOverlay, which App.razor mounts. *@
+<main class="mp-screen">
+    @Body
+</main>

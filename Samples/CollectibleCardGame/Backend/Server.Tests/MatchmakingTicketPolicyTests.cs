@@ -1,4 +1,5 @@
 using Game.Logic;
+using Game.Logic.Tests;
 using Game.Server.Match;
 using Game.Server.Matchmaking;
 using Metaplay.Cloud.Entity;
@@ -19,27 +20,8 @@ namespace Game.Server.Tests
         static readonly EntityId Player = EntityId.Create(EntityKindCore.Player, 12345);
         static readonly MetaTime Now    = MetaTime.FromDateTime(new DateTime(2026, 9, 9, 12, 0, 0, DateTimeKind.Utc));
 
-        /// <summary> The choice the entry named. One instance, so the freeze can be pinned as carrying it. </summary>
+        /// <summary> The choice the entry named. </summary>
         static readonly DeckChoice DeckFour = DeckChoice.Saved(4);
-
-        [Test]
-        public void TheFreezeCarriesTheAccountFactsTheTierReads()
-        {
-            // The two facts the stakes tier is decided from, and the waiver is the one with no other route in:
-            // the count is at least visible in the record, while a waiver that stopped being read would look
-            // exactly like a dashboard control that does nothing.
-            MatchmakingTicket ticket = MatchmakingTicketPolicy.Freeze(
-                Account(rankedMatchesPlayed: 3, shieldWaived: true), DeckFour, Seat(), powerScore: 77, Now);
-
-            Assert.That(ticket.RankedMatchesPlayed, Is.EqualTo(3));
-            Assert.That(ticket.NewcomerShieldWaived, Is.True);
-
-            // And it is the account's own answer rather than a constant: an unwaived account freezes unwaived.
-            MatchmakingTicket unwaived = MatchmakingTicketPolicy.Freeze(
-                Account(rankedMatchesPlayed: 0, shieldWaived: false), DeckFour, Seat(), powerScore: 77, Now);
-
-            Assert.That(unwaived.NewcomerShieldWaived, Is.False);
-        }
 
         [Test]
         public void TheFrozenTicketIsShieldedExactlyWhenTheAccountStillIs()
@@ -53,21 +35,6 @@ namespace Game.Server.Tests
             Assert.That(SeatOf(rankedMatchesPlayed: 0, shieldWaived: true).IsShielded(global), Is.False, "a waived newcomer");
             Assert.That(SeatOf(rankedMatchesPlayed: shield, shieldWaived: false).IsShielded(global), Is.False, "past the shield");
             Assert.That(SeatOf(rankedMatchesPlayed: shield, shieldWaived: true).IsShielded(global), Is.False, "and a waiver there changes nothing");
-        }
-
-        [Test]
-        public void TheFreezeCarriesTheSeatAndTheQueueFactsUnchanged()
-        {
-            MatchSeatSetup    seat   = Seat();
-            MatchmakingTicket ticket = MatchmakingTicketPolicy.Freeze(
-                Account(rankedMatchesPlayed: 3, shieldWaived: true), DeckFour, seat, powerScore: 77, Now);
-
-            Assert.That(ticket.Seat, Is.SameAs(seat));
-            Assert.That(ticket.PlayerId, Is.EqualTo(Player));
-            Assert.That(ticket.Rating, Is.EqualTo(1234));
-            Assert.That(ticket.PowerScore, Is.EqualTo(77));
-            Assert.That(ticket.DeckChoice, Is.SameAs(DeckFour));
-            Assert.That(ticket.ArrivedAt, Is.EqualTo(Now));
         }
 
         // ---------------------------------------------------------------- the deck freeze

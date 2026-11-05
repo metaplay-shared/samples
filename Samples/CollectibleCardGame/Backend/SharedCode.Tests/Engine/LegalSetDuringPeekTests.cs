@@ -6,7 +6,7 @@ namespace Game.Logic.Tests
 {
     /// <summary>
     /// The legal set changes across a held peek, with the phase and hand unchanged, so a client cache of it
-    /// cannot be keyed on those (<c>Client/Services/MatchService.LegalIntents</c> drops it on every
+    /// cannot be keyed on those (<c>WebClient/Services/MatchService.LegalIntents</c> drops it on every
     /// board change instead).
     /// </summary>
     [TestFixture]

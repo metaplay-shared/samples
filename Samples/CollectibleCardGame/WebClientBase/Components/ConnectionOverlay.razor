@@ -1,0 +1,99 @@
+@using ConnectionLostEvent = Metaplay.Core.Session.ConnectionLostEvent
+@using ConnectionLostReason = Metaplay.Core.Session.ConnectionLostReason
+@inject IMetaplayConnectionService MetaplayService
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JS
+@implements IDisposable
+
+@* Mounted once, in App.razor, over every page and the debug bar, so no page checks the connection itself. A lost
+   session is a modal dialog, so the player does not play on while actions cannot reach the server. What it says and
+   offers comes from the SDK's ConnectionLostEvent: its Reason and whether reconnecting can help (IsRetryable). *@
+@if (_lost != null)
+{
+    <dialog @ref="_dialog" open class="mp-conn-dialog" role="alertdialog" aria-modal="true" aria-labelledby="mp-conn-title" aria-describedby="mp-conn-body">
+        <h2 id="mp-conn-title" class="font-display">@Title(_lost.Reason)</h2>
+        <p id="mp-conn-body">@_lost.EnglishLocalizedReason</p>
+        @if (_lost.IsRetryable)
+        {
+            <div class="mp-conn-dialog__actions">
+                <button type="button" class="mp-button" @onclick="MetaplayService.Reconnect">
+                    @(_lost.Reason == ConnectionLostReason.LoggedInElsewhere ? "Play here" : "Reconnect")
+                </button>
+            </div>
+        }
+        else if (_lost.Reason == ConnectionLostReason.ClientVersionTooOld)
+        {
+            @* A reload fetches the latest client. *@
+            <div class="mp-conn-dialog__actions">
+                <button type="button" class="mp-button" @onclick="Reload">Reload</button>
+            </div>
+        }
+    </dialog>
+}
+else if (_reconnecting)
+{
+    <dialog @ref="_dialog" open class="mp-conn-dialog" role="alertdialog" aria-modal="true" aria-labelledby="mp-conn-title" aria-describedby="mp-conn-body">
+        <div class="mp-spinner" aria-hidden="true"></div>
+        <h2 id="mp-conn-title" class="font-display">Reconnecting…</h2>
+        <p id="mp-conn-body">Getting you back into the game.</p>
+    </dialog>
+}
+
+@code {
+    private IJSObjectReference? _module;
+    private ElementReference _dialog;
+
+    /// <summary>What was last rendered, so the frames in between skip the render.</summary>
+    private ConnectionLostEvent? _lost;
+    private bool _reconnecting;
+
+    /// <summary>
+    /// Reconnecting after a session was lost. Before the first session, the page's startup splash shows the
+    /// connection instead.
+    /// </summary>
+    private bool IsReconnecting => MetaplayService.ConnectionStatus == ConnectionStatus.Connecting && MetaplayService.PlayerId != null;
+
+    private static string Title(ConnectionLostReason reason) => reason switch
+    {
+        ConnectionLostReason.LoggedInElsewhere      => "Playing elsewhere",
+        ConnectionLostReason.ServerMaintenance      => "Down for maintenance",
+        ConnectionLostReason.ClientVersionTooOld    => "Game updated",
+        ConnectionLostReason.PlayerIsBanned         => "Account banned",
+
+        // ConnectionLost, the generic reason, and any other, including reasons later SDK versions add.
+        _                                           => "Disconnected",
+    };
+
+    private void Reload() => StartPage.Reload(NavigationManager);
+
+    protected override void OnInitialized()
+    {
+        _lost = MetaplayService.ConnectionLost;
+        _reconnecting = IsReconnecting;
+        MetaplayService.OnStateChanged += OnStateChanged;
+    }
+
+    private void OnStateChanged()
+    {
+        if (MetaplayService.ConnectionLost == _lost && IsReconnecting == _reconnecting)
+            return;
+
+        _lost = MetaplayService.ConnectionLost;
+        _reconnecting = IsReconnecting;
+        InvokeAsync(StateHasChanged);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            _module = await JS.InvokeAsync<IJSObjectReference>("import", "./_content/WebClientBase/js/connection-overlay.js");
+
+        if (_module != null && (_lost != null || _reconnecting))
+            await _module.InvokeVoidAsync("showModal", _dialog);
+    }
+
+    public void Dispose()
+    {
+        MetaplayService.OnStateChanged -= OnStateChanged;
+    }
+}

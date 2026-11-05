@@ -1,6 +1,9 @@
 # AGENTS.md
 
-Instructions for developers and AI coding agents working in Table Stakes.
+Instructions for developers and AI coding agents working in Table Stakes. Table Stakes is built on the
+[Blazor starter project](https://github.com/metaplay-shared/blazor-starter-project): its [`AGENTS.md`](https://github.com/metaplay-shared/blazor-starter-project/blob/main/AGENTS.md) and
+[docs](https://github.com/metaplay-shared/blazor-starter-project/blob/main/docs/project-structure.md) cover the project structure, the web client's base, the browser test harness,
+deploying, and the shared gotchas and conventions. This file covers what is Table Stakes' own.
 
 - [`README.md`](README.md): what the project is, and the index of all docs.
 - [`docs/architecture.md`](docs/architecture.md): how the project is built on Metaplay.
@@ -10,7 +13,7 @@ Instructions for developers and AI coding agents working in Table Stakes.
 
 ## Project context
 
-- The project builds against the SDK in `../../MetaplaySDK`. Run every command in this file from this directory.
+- The project builds against the SDK in `MetaplaySDK`. Run every command in this file from this directory.
 - `SharedCode/` (namespace `Game.Logic`) holds the game logic that both the server and the client run. It must be
   deterministic: the same input must give the same result on both.
 
@@ -19,6 +22,7 @@ Instructions for developers and AI coding agents working in Table Stakes.
 ### Server, web client and bot client
 
 ```bash
+dotnet build TableStakes.slnx                          # everything: server, web client, tools, tests and the SDK projects
 metaplay dev server                                    # game server
 dotnet run   --project WebClient/WebClient.csproj      # web client on http://localhost:5290
 dotnet watch --project WebClient/WebClient.csproj      # web client that rebuilds on file changes
@@ -26,10 +30,8 @@ metaplay dev botclient                                 # bot clients, count set 
 metaplay dev botclient -- -MaxBots=40 -MaxBotId=200 -SpawnRate=4
 ```
 
-- `http://localhost:5290/?env=offline` runs the web client without a game server.
-- Pressing `K` in the server console moves server time forward (`Backend/Server/ServerMain.cs`).
-- To test the web client as the game server serves it in the cloud: run
-  `dotnet publish WebClient/WebClient.csproj -c Release`, start the server, and open `http://localhost:5560/`.
+- `http://localhost:5290/?offline` runs the web client without a game server.
+- To try the published (trimmed) web client that players get: `python3 run_e2e.py --trimmed --no-test`.
 
 ### LiveOps Dashboard
 
@@ -51,7 +53,7 @@ nothing checks them. Details and the SDK update procedure: [`docs/architecture.m
 dotnet run --project tools/GameConfigGen                # build both archives from GameConfigSource/*.csv
 dotnet run --project tools/GameConfigGen -- --dry-run   # build and validate, write nothing
 dotnet run --project tools/GameConfigGen -- --print Backend/Server/GameConfig/StaticGameConfig.mpa
-dotnet test Backend/Server.Tests/Server.Tests.csproj --filter "FullyQualifiedName~MatchesTheSheets"
+dotnet test tools/GameConfigGen.Tests --filter "FullyQualifiedName~MatchesTheSheets"
 ```
 
 The game reads the built archives, not the CSV files. After editing a CSV file, run the build and commit both
@@ -60,25 +62,23 @@ archives it writes. The `MatchesTheSheets` test fails if the committed archives 
 
 ### Pre-built WASM serializer
 
-```bash
-dotnet run --project tools/SerializerGen -- WebClient/Serializer
-```
+Building `WebClient` runs `tools/SerializerGen` when the game types have changed, and writes the serializer under
+`WebClient/obj/`. There is no separate step. Details:
+[the pre-built serializer](https://github.com/metaplay-shared/blazor-starter-project/blob/main/docs/web-client.md#the-pre-built-serializer).
 
-Building `WebClient` runs this generator when needed. If the build fails because the serializer DLL "was not
-resolved", build again, or run the command above first. Details:
-[`docs/web-client.md`](docs/web-client.md#the-pre-built-serializer).
-
-### Server image
+### Deploying
 
 ```bash
-dotnet run tools/ServerImageBuild.cs                     # publish the web client, copy it into the server, build the image
-dotnet run tools/ServerImageBuild.cs -- mygame:1a27c25   # arguments after -- go to `metaplay build image`
-dotnet run tools/ServerImageBuild.cs -- --stage-only     # publish the web client and copy it into the server only
+metaplay build image                                   # the game server image
+metaplay deploy server Demo <image>
+rm -rf WebClient/bin/Release/net10.0-browser/publish   # a publish never deletes files, so start from an empty directory
+dotnet publish WebClient/WebClient.csproj -c Release
+metaplay deploy webclient Demo                         # upload the web client to the environment's CDN
+metaplay deploy webclient Demo --dry-run               # what would be uploaded, with which headers
 ```
 
-This needs the `wasm-tools` workload: `dotnet workload install wasm-tools`. Do not run `metaplay build image`
-directly: it does not build the web client, so the image contains an old web client or none. Details:
-[`docs/architecture.md`](docs/architecture.md#server-image).
+The server image does not contain the web client. Deploy the server for a server change and the web client for a
+client change. Details: [`docs/architecture.md`](docs/architecture.md#deployment).
 
 ### Database migrations
 
@@ -98,14 +98,17 @@ dotnet test Backend/SharedCode.Tests/SharedCode.Tests.csproj
 # Server unit tests. No server needed.
 dotnet test Backend/Server.Tests/Server.Tests.csproj
 
+# The game config build and the committed archives against the sheets.
+dotnet test tools/GameConfigGen.Tests
+
 # Render tests (bUnit) only. No browser or server needed.
 dotnet test WebClient.Tests/WebClient.Tests.csproj --filter "FullyQualifiedName~RenderTests"
 
 # All WebClient.Tests that need no browser: client logic tests and render tests.
-dotnet test WebClient.Tests/WebClient.Tests.csproj --filter "FullyQualifiedName!~LiveServer & FullyQualifiedName!~PageTests & FullyQualifiedName!~OfflineMode & FullyQualifiedName!~TableRobustness"
+dotnet test WebClient.Tests/WebClient.Tests.csproj --filter "FullyQualifiedName!~LiveServer & FullyQualifiedName!~PageTests & FullyQualifiedName!~OfflineMode & FullyQualifiedName!~TableRobustness & FullyQualifiedName!~ConnectionOverlay & FullyQualifiedName!~CloudHosting"
 
-# Browser tests (Playwright), run from a worktree. See "Browser tests" below.
-tools/run-e2e.sh
+# Browser tests (Playwright). See "Browser tests" below.
+python3 run_e2e.py
 ```
 
 - Add or update tests in the same change as the feature. Read the rules in
@@ -113,26 +116,21 @@ tools/run-e2e.sh
 
 ## Browser tests
 
-The default ports belong to the main checkout. In a worktree, run the browser tests with `tools/run-e2e.sh`. It
-builds and starts a game server and a web client on free ports, runs the tests, and stops both. It needs Python 3
-on `PATH`, and it refuses to run in the main checkout.
+Run the browser tests with `python3 run_e2e.py`, the starter project's
+[harness](https://github.com/metaplay-shared/blazor-starter-project/blob/main/docs/testing.md#the-e2e-harness), configured by [`e2e.toml`](e2e.toml). `python3 run_e2e.py --help`
+lists its options; `--plain-server` starts the server with production match timings, for playing by hand.
 
 ```bash
-dotnet build WebClient.Tests/WebClient.Tests.csproj
-pwsh WebClient.Tests/bin/Debug/net10.0/playwright.ps1 install chromium   # once per machine
-
-tools/run-e2e.sh                                                # all browser tests
-tools/run-e2e.sh --filter "FullyQualifiedName~ShellPageTests"   # other arguments are passed to dotnet test
-tools/run-e2e.sh --trimmed          # test the published (Release, trimmed) web client
-tools/run-e2e.sh --serve            # run the tests and leave the server and web client running
-tools/run-e2e.sh --no-test          # start the server and web client without running tests
-tools/run-e2e.sh --stop             # stop the server and web client that --serve left running
-tools/run-e2e.sh --shipped-pacing   # start the server with production match timings, for playing by hand
+python3 run_e2e.py                                              # all browser tests
+python3 run_e2e.py --filter "FullyQualifiedName~ShellPageTests" # other arguments are passed to dotnet test
+python3 run_e2e.py --trimmed        # test the published (Release, trimmed) web client
 ```
 
-In the main checkout, start the server and web client yourself. The tests then use the default ports:
+To run the tests against a server and web client you started yourself, run `dotnet test` with no harness. The
+tests then use the default ports:
 
 ```bash
+pwsh WebClient.Tests/bin/Debug/net10.0/playwright.ps1 install chromium   # once; the harness does this itself
 metaplay dev server -- --TestRoutes:Enabled=true     # terminal 1; without this flag the test/ routes return 404
 dotnet run --project WebClient/WebClient.csproj      # terminal 2
 dotnet test WebClient.Tests/WebClient.Tests.csproj   # terminal 3
@@ -141,23 +139,14 @@ dotnet test WebClient.Tests/WebClient.Tests.csproj   # terminal 3
 - `OfflineModeTests`, `TablePageTests` and `TableRobustnessTests` need only the web client, not the server.
 - Run `--trimmed` after changing the `<TrimmerRootAssembly>` list in `WebClient/WebClient.csproj` or after adding a
   project that the web client references. Only the published web client is trimmed, so a missing entry fails only
-  there ([`docs/web-client.md`](docs/web-client.md#the-published-client)).
-- Do not run two browser test runs against the same server at once. Two `tools/run-e2e.sh` runs are safe only from
-  different worktrees.
+  there ([the published client](https://github.com/metaplay-shared/blazor-starter-project/blob/main/docs/publishing.md#the-published-client)).
+- Do not run two browser test runs against the same server at once. Two `run_e2e.py` runs are safe only from
+  different checkouts, because runs from one checkout share build output.
 
 ## Known problems and fixes
 
-- **Every browser test fails at startup with "An unhandled error has occurred".** The web client was rebuilt while
-  its dev server was running. Restart the web client after every build. Running too many test workers at once
-  causes the same error, because the WebAssembly startup gets too little CPU and fails.
-- **Test setup fails with "is not the one built from this working tree".** Another process is using port 5290,
-  such as an old web client or one running inside WSL, or the web client was not rebuilt. Stop the other process,
-  or rebuild and restart the web client.
-- **Build warning `CS8784: Generator 'MetaplayGenerator' failed to initialize`, then at run time "Integration root
-  assembly 'SharedCode.Client' doesn't contain source generated Metaplay integration type info".** The generator
-  cannot find `Metaplay.Attributes.dll`. Build `MetaplaySDK/Backend/Attributes/Metaplay.Attributes.csproj`, run
-  `dotnet build-server shutdown`, delete `obj/` and `bin/` in `SharedCode`, `WebClientBase` and `WebClient`, and
-  build again. Rebuilding without deleting those directories does not fix it.
+- The starter project's [gotchas](https://github.com/metaplay-shared/blazor-starter-project/blob/main/AGENTS.md#gotchas) apply, including restarting a running web client after
+  building it from elsewhere.
 - **The server fails to start after you add an analytics event.** The event has a `ulong` field, which the BigQuery
   export does not accept. Use a signed type of the same size instead. `AnalyticsBigQueryFormatTests` in
   `Server.Tests` detects this.
@@ -168,11 +157,9 @@ dotnet test WebClient.Tests/WebClient.Tests.csproj   # terminal 3
 
 ## Code conventions
 
-- Use explicit types, not `var`. Iterate dictionaries with tuple deconstruction:
-  `foreach ((KeyType key, ValueType value) in dict)`.
-- Comments describe what the code does now. They do not describe the change that was made or earlier behavior.
+- The starter project's [conventions](https://github.com/metaplay-shared/blazor-starter-project/blob/main/AGENTS.md#conventions) apply.
 - When a comment says why something is safe, name the SDK behavior that makes it safe. Do not rely on something
   that is only true of the repository today.
-- Build links and navigation in the web client with `EnvironmentLink` (`WebClientBase/Utilities/EnvironmentLink.cs`).
-  It keeps the page's `?env=` parameter. A plain `NavigateTo` or `href` drops it, and the next page load connects
-  to a different environment.
+- Reload with `StartPage.Reload`, which goes back to the query the page was loaded with
+  ([the start query](https://github.com/metaplay-shared/blazor-starter-project/blob/main/docs/web-client.md#the-start-query)). Read a query setting from
+  `QueryParameters.AtStart` (`WebClient/Integration/QueryParameters.cs`), not from the current address.

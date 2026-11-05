@@ -15,14 +15,13 @@ namespace Game.Logic
     {
         // ---- 30000-30099: Match, client-facing. Types live in SharedCode/Match/MatchMessages.cs. ----
 
-        /// <summary>Client to server: play a named card at a named play index.</summary>
+        /// <summary>Client to server: play a named card at a named play index, for the sender's seat.</summary>
         public const int MatchPlayCardRequest = 30000;
 
         /// <summary>Server to client: the submitter's move was not played, and why.</summary>
         public const int MatchMoveRefused = 30001;
 
-        /// <summary>Server to client: this seat's hand, as it stands at a named play index.</summary>
-        public const int MatchHandDelivered = 30002;
+        // 30002: free.
 
         /// <summary>Client to server: request the host's current clock. The client measures the round trip itself.</summary>
         public const int MatchClockSyncRequest = 30003;

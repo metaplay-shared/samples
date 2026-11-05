@@ -2,7 +2,7 @@
 
 How Sticky Paws looks and moves: the illustration style, the card frame, the clan and rarity languages, and the rules
 that keep art and game state apart. What sits where on the board, and why, is [`client.md`](client.md); the shipped
-rasters and how they were made are [`../Client/wwwroot/art/README.md`](../Client/wwwroot/art/README.md).
+rasters and how they were made are [`../WebClient/wwwroot/art/README.md`](../WebClient/wwwroot/art/README.md).
 
 ## Style
 

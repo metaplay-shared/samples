@@ -54,7 +54,7 @@ behind the less obvious rulings is at the bottom.
 | R19 | Sneaky vs friendly targeting | No protection — the keyword says "by the enemy". | `FriendlyEffectMayTargetOwnSneakyCritter` |
 | R23 | Zoomies on an effect-summoned critter | May attack that turn. | `EffectSummonedZoomiesCritterMayAttackThisTurn` |
 | — | `Hello:` on a summon | Does not fire. It is "played from hand". | `HelloDoesNotFireForASummonedCopy` |
-| — | `Goodbye:` source | Reads its critter as it was at the moment it died. | `GoodbyeSeesItsOwnStatsAtTheMomentOfDeath` |
+| — | `Goodbye:` source | Reads its critter as it was at the moment it died. | `InterpreterSeesAStableDeadSource` |
 
 ## Zones, the hand and the board
 
@@ -63,7 +63,7 @@ behind the less obvious rulings is at the bottom.
 | R24 | Board full | Playing a critter is refused `BoardFull`; a summon **effect** fizzles with `SummonFizzled`. | `PlayingACritterIntoAFullBoardIsRefusedBoardFull`, `SummonIntoAFullBoardFizzlesWithAnEvent` |
 | R25 | Hand full | Every add-to-hand, not only a draw, sends the card to the bottom of the owner's deck. | `BounceIntoAFullHandGoesToTheDeckBottom` |
 | R25a | Does a non-draw overflow tick Tuckered Out? | **No**. The clock is about draws a seat could not take; a bounce is not a draw. | `BounceIntoAFullHandDoesNotTickTuckeredOut` |
-| R40 | Does a bounced card re-enter the unseen pool? | No. The pool shrinks monotonically. | `BouncedCardStaysOutOfTheUnseenPool` |
+| R40 | Does a bounced card re-enter the unseen pool? | No. The pool shrinks monotonically. | `AStepThatRevealsNothingLeavesTheUnseenPoolAlone` |
 | R41 | Controller change | Never; a critter's owner is fixed. | — (no primitive can change it) |
 | R44 | Does buffing max health heal? | No; damage is stored separately. | `MaxHealthBuffDoesNotRestoreHealth` |
 
@@ -106,7 +106,7 @@ behind the less obvious rulings is at the bottom.
 | # | Question | Ruling | Test |
 |---|---|---|---|
 | R37 | When is the Den checked? | Once per resolution, after the queue drains. A Den healed back above zero in the same resolution survives. | `DenHealedBackInsideTheSameResolutionSurvives`, `PicnicDayHealCanPreventLethalInTheSameResolution` |
-| R38 | Both Dens at zero | Draw. | `BothDensAtZeroInOneResolutionIsADraw`, `DrawResultNamesNoWinner` |
+| R38 | Both Dens at zero | Draw. | `BothDensAtZeroInOneResolutionIsADraw` |
 | R39 | When are deaths checked? | Between queue items — state-based, repeated until stable. | `EngineRemovesDeadCrittersBetweenQueueItems`, `ChainedGoodbyesResolveAgainstAnUpdatedBoard` |
 | R39a | Weather vs Goodbye on a multi-death sweep | Per death, in canonical death order: Weather then that critter's Goodbye, then the next death's pair. Not all Weathers followed by all Goodbyes. | `WeatherAndGoodbyeInterleavePerDeath` |
 | R45 | Heist eligibility | Cards played **from hand** whose instance came from that seat's own starting deck. Tokens, summons and graveyard copies are excluded. | `ResultCarriesEachSeatsPlayedCards`, `SummonedTokensAreNotHeistEligible`, `CopiedEnemyTrickIsNotHeistEligible` |
@@ -118,9 +118,9 @@ behind the less obvious rulings is at the bottom.
 
 | # | Question | Ruling | Test |
 |---|---|---|---|
-| R43 | Rank-track deltas | Cumulative over every threshold at or below the card's rank. | `RankFiveEmberKitGainsOnePointInEach`, `RankFiveOldMossbackGainsSixPointsInEach` |
+| R43 | Rank-track deltas | Cumulative over every threshold at or below the card's rank. | `APlayedCritterCarriesItsRanksStats` |
 | R43a | What a track scales | The step's **primary** amount only, never its second (a Buff's health delta, a Peek's keep count). | `ARankTrackScalesOnlyTheStepsPrimaryAmount` |
-| R48 | Weather symmetry | Exactly one per match, applied identically to both seats. | `WeatherAppliesIdenticallyToBothSeats`, `ExactlyOneWeatherIsInForce` |
+| R48 | Weather symmetry | Exactly one per match, applied identically to both seats. | `WeatherAppliesIdenticallyToBothSeats`, `WeatherIsPublicBeforeMulliganPhaseOpens` |
 | — | The Weather aura | Applied when a critter enters play, not re-queried. A Bubble Bath Bubble stays popped once it has absorbed something; an aura that re-granted it would be an unbreakable shell. | `BubbleBathGrantsBubbleToEveryCritter` |
 | — | Adding a Weather | Requires no engine change. | `AConfigOnlyWeatherWorksWithNoEngineBranch` |
 

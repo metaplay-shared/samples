@@ -5,7 +5,6 @@
 @layout MetaLayout
 @inherits MetaComponentBase
 @inject MetaplayClientService Client
-@inject NavigationManager Nav
 
 @* The Spin Wheel screen. The wheel animation belongs to this feature, and the result is shown with the shared
    RewardReveal (docs/meta-shell.md, "The shared reward flow").
@@ -228,23 +227,12 @@ else if (_refusal is SpinRefusal refusal && _revealStage == RewardRevealStage.Id
     private int HitMs => MotionPreference.ReducedMotion ? 1 : Math.Max(_hitMsKnob ?? WheelHitAnimation.DefaultHitMs, 1);
 
     /// <summary>
-    /// The <c>spinMs</c> and <c>hitMs</c> query parameters, parsed in <c>OnParametersSet</c> instead of on every
-    /// render. Blazor keeps this component when a navigation changes only the query, and calls
-    /// <c>OnParametersSet</c> again for it, so a new value takes effect.
-    /// <para>
-    /// Only the query values are cached. Reduced motion is checked on every read, because the player can change
-    /// it while the page is open.
-    /// </para>
+    /// The <c>spinMs</c> and <c>hitMs</c> parameters of the query the page was loaded with, read once instead of on
+    /// every render. Reduced motion is checked on every read, because the player can change it while the page is
+    /// open.
     /// </summary>
-    private int? _spinMsKnob;
-    private int? _hitMsKnob;
-
-    protected override void OnParametersSet()
-    {
-        string query = new Uri(Nav.Uri).Query;
-        _spinMsKnob  = TestQuerySettings.TryGetInt(query, "spinMs");
-        _hitMsKnob   = TestQuerySettings.TryGetInt(query, "hitMs");
-    }
+    private readonly int? _spinMsKnob = TestQuerySettings.TryGetInt(TestQuerySettings.StartQuery, "spinMs");
+    private readonly int? _hitMsKnob  = TestQuerySettings.TryGetInt(TestQuerySettings.StartQuery, "hitMs");
 
     protected override void OnInitialized()
     {

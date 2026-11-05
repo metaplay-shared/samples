@@ -13,17 +13,20 @@ namespace Game.Logic
     /// follower re-executes the identical body, so the SDK's own checksum covers the game rather than a
     /// picture of it (<c>Docs/match.md</c>, <c>Docs/rules.md</c>).
     /// <para>
-    /// <b>One secret root.</b> <see cref="Secret"/> is the only <c>[ServerOnly]</c> member: non-null on the
-    /// server and null on every client, so <c>Secret != null</c> <em>is</em> "I am the authority", and
-    /// <see cref="SecretSeat"/> is the only path to a seat's hidden half. A shape test asserts by reflection
-    /// that it is the only one. The per-viewer view (<see cref="OwnHand"/>, <see cref="OwnPeek"/>,
-    /// <see cref="Outbox"/>) is not serialized at all.
+    /// <b>One secret root.</b> <see cref="Secret"/> is non-null on the server and null on every client, so
+    /// <c>Secret != null</c> <em>is</em> "I am the authority", and
+    /// <see cref="SecretSeat"/> is the path to a seat's hidden half. Both are <c>internal</c>, which keeps server-only
+    /// and client-only code out, but the shared rules also run on clients, where the secret is null. Shared code is
+    /// expected to reach it only through <see cref="SecretOps"/>, whose methods do nothing when it is absent; that
+    /// is a convention, not something the compiler checks. The only other <c>ServerOnly</c> members are the
+    /// client's own view, <see cref="OwnHand"/> and <see cref="OwnPeek"/>, which are null on the server; a shape
+    /// test asserts that by reflection.
     /// </para>
     /// <para>
     /// <b>No shared action takes <c>ServerOnly</c> state as input to a public mutation.</b> Every
     /// action's mutation of public members is a function of (its own payload, the public model) only; secret
-    /// inputs drive secret mutations only. That is what makes the follower's copy — where every
-    /// <c>ServerOnly</c> member is default — reach the same public state. It is enforced by running every
+    /// inputs drive secret mutations only. That is what makes the follower's copy — where the secret is
+    /// null — reach the same public state. It is enforced by running every
     /// action twice offline against a network-masked clone, not by review
     /// (<c>Backend/SharedCode.Tests/SelfPlay/FollowerMirror.cs</c>).
     /// </para>
@@ -46,7 +49,7 @@ namespace Game.Logic
         /// seed, the hidden half of the card registry, and what a held peek revealed. Non-null on the
         /// server and null on every client.
         /// </summary>
-        [MetaMember(3), ServerOnly] public MatchSecrets Secret { get; set; }
+        [MetaMember(3), ServerOnly] internal MatchSecrets Secret { get; set; }
 
         // ---- the public game: the rules run on exactly these members and the SDK checksums them ----
 
@@ -115,10 +118,10 @@ namespace Game.Logic
         /// <summary>
         /// This client's own view of the match: the hand it holds, and what a held peek is showing it.
         /// <para>
-        /// <b>Client-only state, and not serialized at all.</b> Its value differs per viewer, so it can never
+        /// <b>Client-only state, though marked <c>ServerOnly</c>.</b> Its value differs per viewer, so it can never
         /// ride the checksummed timeline; it is null on the server, which reads hands out of
-        /// <see cref="Secret"/>. It needs no <c>ServerOnly</c>: the match entity is ephemeral and nothing in
-        /// the follower path copies a model, so nothing ever serializes it.
+        /// <see cref="Secret"/>. <c>ServerOnly</c> keeps it off the wire and out of the checksum, and unlike an
+        /// unserialized field it survives a copy of the model, such as the client journal's checkpoint.
         /// </para>
         /// <para>
         /// The baseline arrives as subscribe-time private state; every change after it is an <b>addressed</b>
@@ -126,10 +129,10 @@ namespace Game.Logic
         /// <see cref="MatchOwnPeekRevealed"/> — which the server never executes and no other seat receives.
         /// </para>
         /// </summary>
-        public List<HandCard> OwnHand { get; set; }
+        [MetaMember(40), ServerOnly] public List<HandCard> OwnHand { get; set; }
 
-        /// <summary> What a held peek is showing this client, or null. Client-only, for the reason above. </summary>
-        public PendingChoiceView OwnPeek { get; set; }
+        /// <summary> What a held peek is showing this client, or null. Client-only, for the reasons above. </summary>
+        [MetaMember(41), ServerOnly] public PendingChoiceView OwnPeek { get; set; }
 
         /// <summary>
         /// Addressed operations the host has produced and not yet staged, each with the seat it is for — an
@@ -147,9 +150,8 @@ namespace Game.Logic
         /// recipient does not need to be told that it is the recipient.
         /// </para>
         /// <para>
-        /// Not serialized, for the same reason as the two above and one more: it is drained inside the actor
-        /// turn that fills it. On a follower nothing ever appends here, because <see cref="SecretOps"/> queues
-        /// only where there is a secret to move a card in.
+        /// Not serialized, because it is drained inside the actor turn that fills it. On a follower nothing ever
+        /// appends here, because <see cref="SecretOps"/> queues only where there is a secret to move a card in.
         /// </para>
         /// </summary>
         public List<(int Seat, MatchAddressedAction Action)> Outbox { get; } = new List<(int, MatchAddressedAction)>();
@@ -202,7 +204,7 @@ namespace Game.Logic
         /// of the secret goes through <see cref="SecretOps"/>, which begins each method by resolving this and
         /// returning on null — which is what makes a follower run every secret excursion as a no-op.
         /// </summary>
-        public SeatSecrets SecretSeat(int seat) => Secret?.Seats[seat];
+        internal SeatSecrets SecretSeat(int seat) => Secret?.Seats[seat];
 
         /// <summary> The content this match runs on. </summary>
         public SharedGameConfig Content => (SharedGameConfig)GameConfig;

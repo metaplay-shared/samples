@@ -68,4 +68,40 @@ namespace Game.Logic
             return MetaActionResult.Success;
         }
     }
+
+    /// <summary>
+    /// Set how many completed matches this account has banked toward its next card gift.
+    /// <para>
+    /// <b>Development-only</b>, for a fixture or a playtest that needs the gift without playing every match
+    /// before it. It stops short of the interval, so a gift is still claimed only after a match completes
+    /// through the real result path.
+    /// </para>
+    /// </summary>
+    [ModelAction(ActionCodes.PlayerDevSetCardGiftProgress)]
+    [DevelopmentOnlyAction]
+    public class PlayerDevSetCardGiftProgress : PlayerAction
+    {
+        public int Progress { get; private set; }
+
+        public PlayerDevSetCardGiftProgress() { }
+
+        public PlayerDevSetCardGiftProgress(int progress)
+        {
+            Progress = progress;
+        }
+
+        public override MetaActionResult Execute(PlayerModel player, bool commit)
+        {
+            if (Progress < 0 || Progress >= player.GameConfig.Global.MatchesPerCardGift)
+                return ActionResults.InvalidCardGiftProgress;
+
+            if (commit)
+            {
+                player.CardGiftProgress = Progress;
+                player.ClientListener.Collection?.GenericPropertyChanged(nameof(PlayerModel.CardGiftProgress));
+            }
+
+            return MetaActionResult.Success;
+        }
+    }
 }

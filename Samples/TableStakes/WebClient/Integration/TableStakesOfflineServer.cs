@@ -66,7 +66,7 @@ public class TableStakesOfflineServer : BlazorOfflineServer
     {
         await base.InitializeAsync(offlineOptions);
         _timings   = ReadTimingsFromQuery();
-        _matchSeed = TestQuerySettings.TryGetULong(TestQuerySettings.ReadLocationSearch(), "matchSeed");
+        _matchSeed = TestQuerySettings.TryGetULong(TestQuerySettings.StartQuery, "matchSeed");
         if (_matchSeed.HasValue)
             _hostRng = RandomPCG.CreateFromSeed(_matchSeed.Value);
     }
@@ -111,7 +111,7 @@ public class TableStakesOfflineServer : BlazorOfflineServer
         //
         // The `seatArrives=false` query parameter seats the human as never arrived. Tests use it to reach an
         // abandoned table, where the join window ends with no human present.
-        bool seatArrives = TestQuerySettings.TryGet(TestQuerySettings.ReadLocationSearch(), "seatArrives") != "false";
+        bool seatArrives = TestQuerySettings.TryGet(TestQuerySettings.StartQuery, "seatArrives") != "false";
 
         // Bot names and strengths come from the session's game config, which offline is the config built into the
         // client. Names are drawn without replacement, so every bot has a different name. MatchHost.SetupNewMatch
@@ -184,7 +184,7 @@ public class TableStakesOfflineServer : BlazorOfflineServer
         MetaTime   now   = MetaTime.Now;
 
         MoveRefusalReason refusal = MatchHost.TrySubmitMove(
-            match, PlayerModel.PlayerId, request.Seat, request.PlayIndex, request.Card, now, HostEnvironment(manager));
+            match, PlayerModel.PlayerId, request.PlayIndex, request.Card, now, HostEnvironment(manager));
 
         if (refusal != MoveRefusalReason.None)
             SendEntityMessage(manager, new MatchMoveRefused(request.PlayIndex, request.Card, refusal));
@@ -215,8 +215,8 @@ public class TableStakesOfflineServer : BlazorOfflineServer
     }
 
     /// <summary>
-    /// The <see cref="IMatchHostEnvironment"/> for the turn-flow driver: publishing to the offline timeline, host
-    /// randomness, and messages to the single client.
+    /// The <see cref="IMatchHostEnvironment"/> for the turn-flow driver: publishing to the offline timeline and host
+    /// randomness.
     /// </summary>
     /// <remarks>
     /// Cached per channel, because the per-frame table update requests the environment on every frame and a browser
@@ -251,19 +251,6 @@ public class TableStakesOfflineServer : BlazorOfflineServer
         public ulong NextSeed() => _server._hostRng.NextULong();
 
         /// <summary>
-        /// Called when the host changed a seat's hand without the seat's player playing, such as a deadline
-        /// auto-play or a covering bot's move. Sends the updated hand if the seat is the local player's.
-        /// </summary>
-        public void OnSeatHandChanged(int seat)
-        {
-            MatchModel match = (MatchModel)_manager.Model;
-            if (match.FindSeatOfPlayer(_server.PlayerModel.PlayerId) != seat)
-                return;
-
-            _server.SendEntityMessage(_manager, MatchHost.BuildHandDelivery(match, seat));
-        }
-
-        /// <summary>
         /// Called when a seat stops being played by its owner. Does nothing, because offline mode has no analytics
         /// pipeline or player actor to notify.
         /// </summary>
@@ -285,24 +272,6 @@ public class TableStakesOfflineServer : BlazorOfflineServer
 
         ExecuteEntityAction(manager, action);
         return true;
-    }
-
-    /// <summary>
-    /// Sends the player's hand as a directed message when a client attaches to the table during the session. A
-    /// client attached at session start received its hand in the private state at subscribe time.
-    /// </summary>
-    protected override void HandleEntityActivatedOnClient(ChannelEntity manager)
-    {
-        if (manager.Slot != ClientSlotGame.Match)
-        {
-            base.HandleEntityActivatedOnClient(manager);
-            return;
-        }
-
-        MatchModel match = (MatchModel)manager.Model;
-        int        seat  = match.FindSeatOfPlayer(PlayerModel.PlayerId);
-        if (seat >= 0)
-            SendEntityMessage(manager, MatchHost.BuildHandDelivery(match, seat));
     }
 
     /// <summary>
@@ -331,7 +300,7 @@ public class TableStakesOfflineServer : BlazorOfflineServer
     /// </summary>
     static MatchTimings ReadTimingsFromQuery()
     {
-        string query = TestQuerySettings.ReadLocationSearch();
+        string query = TestQuerySettings.StartQuery;
 
         MatchTimings timings = MatchTimings.Default;
         timings.MoveDeadline = MetaDuration.Zero;
@@ -374,4 +343,122 @@ public class TableStakesOfflineServer : BlazorOfflineServer
         return timings;
     }
 
+    /// <summary>
+    /// Answers the player requests that the server's <c>PlayerActor</c> answers, with the same shared policies, so
+    /// the screens that send them also work offline. The actor's message throttles are left out, because offline
+    /// there is only the one client.
+    /// </summary>
+    protected override void HandleCustomMessage(MetaMessage message)
+    {
+        switch (message)
+        {
+            case PlayerRenameRequest request:
+                HandleRenameRequest(request);
+                break;
+
+            case PlayerDailyRewardClaimRequest _:
+                HandleDailyRewardClaimRequest();
+                break;
+
+            case PlayerWheelSpinRequest request:
+                HandleWheelSpinRequest(request);
+                break;
+
+            default:
+                base.HandleCustomMessage(message);
+                break;
+        }
+    }
+
+    PlayerModel Player => (PlayerModel)PlayerModel;
+
+    void HandleRenameRequest(PlayerRenameRequest request)
+    {
+        MetaTime now = MetaTime.Now;
+
+        DisplayNameRefusal refusal = DisplayNamePolicy.ValidateRename(
+            request.NewName, Player.PlayerName, Player.LastRenamedAt, now, BotConfig.ReservedNames(Player.GameConfig));
+
+        if (refusal != DisplayNameRefusal.None)
+        {
+            SendToClient(new PlayerRenameResponse(refusal, Player.PlayerName));
+            return;
+        }
+
+        string newName = DisplayNamePolicy.ToStoredForm(request.NewName);
+        ExecutePlayerServerAction(new PlayerRenamed(newName, now));
+        SendToClient(new PlayerRenameResponse(DisplayNameRefusal.None, newName));
+    }
+
+    /// <summary>
+    /// The activation whose claim is enqueued, or -1. The claim action runs on the client's timeline after the
+    /// answer, so until it runs the outlook still shows the reward as claimable.
+    /// </summary>
+    int _dailyRewardClaimEnqueuedFor = -1;
+
+    void HandleDailyRewardClaimRequest()
+    {
+        MetaTime           now      = MetaTime.Now;
+        PlayerLocalTime    localNow = DailyRewardPolicy.LocalTimeOf(Player, now);
+        DailyRewardOutlook outlook  = DailyRewardPolicy.OutlookAt(
+            Player.DailyReward, Player.GameConfig.Global, DailyRewardPolicy.ActiveTable(Player.GameConfig), localNow);
+
+        if (!outlook.IsClaimable)
+        {
+            SendToClient(new PlayerDailyRewardClaimResponse(outlook.Refusal, outlook.Activation.Index));
+            return;
+        }
+
+        if (_dailyRewardClaimEnqueuedFor == outlook.Activation.Index)
+        {
+            SendToClient(new PlayerDailyRewardClaimResponse(DailyRewardRefusal.AlreadyClaimed, outlook.Activation.Index));
+            return;
+        }
+
+        WalletSettlement settlement = Player.PreviewWallet(WalletTransaction.Grant(
+            EconomyFeature.DailyReward, EconomyReason.DailyReward, outlook.Claim.Reward,
+            EconomyContentId.FromString(outlook.Claim.StepId.Value)));
+
+        if (!settlement.IsSuccess)
+        {
+            SendToClient(new PlayerDailyRewardClaimResponse(DailyRewardRefusal.WalletRefused, outlook.Activation.Index));
+            return;
+        }
+
+        _dailyRewardClaimEnqueuedFor = outlook.Activation.Index;
+        EnqueueServerAction(new PlayerDailyRewardClaimed(outlook.Activation.Index, now));
+        SendToClient(new PlayerDailyRewardClaimResponse(DailyRewardRefusal.None, outlook.Activation.Index));
+    }
+
+    /// <summary>Random source for spin wheel sectors, separate from the match's.</summary>
+    readonly RandomPCG _wheelRng = RandomPCG.CreateNew();
+
+    /// <summary>
+    /// The spin whose result is enqueued, or -1, so a repeated request gets <c>ResultPending</c> instead of a
+    /// second draw.
+    /// </summary>
+    int _wheelSpinEnqueuedFor = -1;
+
+    void HandleWheelSpinRequest(PlayerWheelSpinRequest request)
+    {
+        SpinWheelOutlook outlook = SpinWheelPolicy.OutlookFor(Player.SpinWheel, Player.Wallet, Player.GameConfig, request.ExpectedOrdinal);
+
+        if (!outlook.CanSpin)
+        {
+            SendToClient(new PlayerWheelSpinResponse(outlook.Refusal, outlook.NextOrdinal));
+            return;
+        }
+
+        if (_wheelSpinEnqueuedFor == outlook.NextOrdinal)
+        {
+            SendToClient(new PlayerWheelSpinResponse(SpinRefusal.ResultPending, outlook.NextOrdinal));
+            return;
+        }
+
+        int sectorIndex = SpinWheelPolicy.DrawSectorIndex(_wheelRng, outlook.Table);
+
+        _wheelSpinEnqueuedFor = outlook.NextOrdinal;
+        EnqueueServerAction(new PlayerWheelSpinResolved(outlook.NextOrdinal, sectorIndex, MetaTime.Now));
+        SendToClient(new PlayerWheelSpinResponse(SpinRefusal.None, outlook.NextOrdinal));
+    }
 }

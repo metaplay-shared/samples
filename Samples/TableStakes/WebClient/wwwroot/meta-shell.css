@@ -64,10 +64,9 @@
     --m-disabled-opacity: var(--disabled-opacity);
 }
 
-/* The shell's z-index layers, taken from the layer scale in app-base.css. Meta layer rules use only these
-   and never set their own z-index values.
-
-   All of them are below --layer-conn-pill, so the connection shell is always above a reward reveal. */
+/* The shell's z-index layers, taken from the layer scale in app.css. Meta layer rules use only these and never
+   set their own z-index values. WebClientBase's connection dialog opens in the browser's top layer, so it is
+   always above a reward reveal. */
 :root {
     --layer-meta-chrome: var(--layer-chrome);
     --layer-meta-toast:  var(--layer-toast);
@@ -3423,8 +3422,8 @@ button.m-tab:active:not(:disabled),
    chip. The sprites animate only transform and opacity, because there can be many of them at once.
    =========================================================================== */
 
-/* The layer the animation is drawn on: a fixed layer covering the frame, above everything except the
-   connection shell, so the sprites fly over whatever screen is shown. */
+/* The layer the animation is drawn on: a fixed layer covering the frame, above everything except WebClientBase's
+   connection dialog, so the sprites fly over whatever screen is shown. */
 .m-fx {
     position: fixed;
     inset: 0;

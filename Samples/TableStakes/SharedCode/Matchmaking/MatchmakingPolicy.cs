@@ -168,9 +168,7 @@ namespace Game.Logic
         /// <see cref="MatchmakingWaiter.EnqueuedAt"/>. A formation that failed to create a table calls this, so the
         /// fill wait is still measured from when the waiters joined.
         /// <para>
-        /// A waiter already in the queue, or with an invalid id, is skipped. The matchmaker does not produce this
-        /// case, because the actor handles one message at a time and nothing joins during a formation, but the
-        /// check keeps the one-entry rule true for any input.
+        /// A waiter already in the queue, or with an invalid id, is skipped, so the one-entry rule holds.
         /// </para>
         /// </summary>
         public void ReturnToHead(IReadOnlyList<MatchmakingWaiter> waiters)

@@ -1,5 +1,3 @@
-// This file is part of Metaplay SDK which is released under the Metaplay SDK License.
-
 using Game.Logic;
 using Metaplay.Cloud.Entity;
 using Metaplay.Core;
@@ -23,11 +21,12 @@ namespace Game.Server.Player
     {
         /// <summary>
         /// The SharedGameConfig that contains any A/B tests that affect this user player.
+        /// This is the same instance as <c>Model.GameConfig</c>.
         /// This is only available after PostLoad has been invoked, or rather in most methods outside Initialize, InitializePersisted, PostLoad, and the constructor!
         ///
         /// Feel free to change return value to your own SharedGameConfig type when you implement game config! 
         /// </summary>
-        private SharedGameConfigBase SharedGameConfig => (SharedGameConfigBase)_specializedGameConfig.SharedConfig;
+        private SharedGameConfigBase SharedGameConfig => (SharedGameConfigBase)SpecializedGameConfig.SharedConfig;
         
         /// <summary>
         /// The ServerGameConfig that contains any A/B tests that affect this user player.
@@ -35,7 +34,7 @@ namespace Game.Server.Player
         ///
         /// Feel free to change return value to your own ServerGameConfig type when you implement game config! 
         /// </summary>
-        private ServerGameConfigBase ServerGameConfig => (ServerGameConfigBase)_specializedGameConfig.ServerConfig;
+        private ServerGameConfigBase ServerGameConfig => (ServerGameConfigBase)SpecializedGameConfig.ServerConfig;
 
         protected override string RandomNewPlayerName()
         {

@@ -157,7 +157,7 @@
         Meta.RecordPromotedEntrySelection(PromotedEntryPlacement.FeatureCard, feature);
 
         if (MetaRoutes.For(feature) is string route)
-            EnvironmentLink.NavigateTo(Navigation, route);
+            Navigation.NavigateTo(route);
     }
 
     private void OpenOffer(OfferView offer)
@@ -165,7 +165,7 @@
         // This records only that the teaser was tapped. The shop emits its own event for the specific offer
         // when the player takes it.
         Meta.RecordPromotedEntrySelection(PromotedEntryPlacement.Teaser, MetaFeature.Shop);
-        EnvironmentLink.NavigateTo(Navigation, MetaRoutes.Shop);
+        Navigation.NavigateTo(MetaRoutes.Shop);
     }
 
     private static string ShortcutIcon(MetaFeature feature) => feature switch

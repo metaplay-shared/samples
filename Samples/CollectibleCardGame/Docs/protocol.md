@@ -21,9 +21,7 @@ This game uses all three, for three different jobs:
   guild model uses for per-member invites. It covers the deal and every reconnect with no custom protocol.
 - **An addressed timeline operation maintains it.** `ExecuteActionPerMember(member, action)` stages an operation that
   one member receives and every other subscriber — and the server itself — runs as a `NoopAction`, at the same position,
-  under the same checksum. This call is not in the Metaplay SDK R38 release: the sample carries a vendored copy of the
-  SDK change that adds it, in `Backend/Server/SdkPreview/` — read [its
-  README](../Backend/Server/SdkPreview/README.md) before copying the pattern.
+  under the same checksum. The call arrived in Metaplay SDK Release 39.
 - **A directed message answers a request** — `MatchIntentRefused`. It has nothing to order against the timeline.
 
 **An addressed action may not touch the checksummed model.** The server runs a `NoopAction` in its place, so a public
@@ -32,10 +30,11 @@ every member who received one rather than a silent one. In this game an addresse
 view of its hand and of a held peek. Why the private half rides the timeline rather than a message of its own, and
 everything about how a hand is kept in step, is [`hidden-information.md`](hidden-information.md#delivering-a-hand).
 
-**And the checksum covers the game, not a picture of it.** With the rules on the timeline, a public rules divergence
-is a checksum mismatch — the loudest failure the SDK has. The report travels one way: the client sends its own
-`ComputeChecksum` bytes to the server (`EntityChecksumMismatchDetails`), and the server logs a member-by-member diff
-when it is checksumming every operation, which the match does in development. Nothing sends a *server* model dump to a
+**And the checksum covers the rules.** Because clients run the rules themselves, a rules bug that makes a client
+disagree with the server is a checksum mismatch — the loudest failure the SDK has — rather than a wrongly drawn board.
+The report travels one way: the client sends its own `ComputeChecksum` bytes to the server
+(`EntityChecksumMismatchDetails`), and the server logs a member-by-member diff when it is checksumming every operation,
+which the match does in development. Nothing sends a *server* model dump to a
 client on the multiplayer-entity route — which matters for the `ServerOnly`-over-`Hidden` argument below, since the
 bug-report route that argument is about is the *player* entity's.
 
@@ -49,7 +48,7 @@ explicit message back.
 ## Actions replay on clients against a stripped model
 
 A server action is broadcast verbatim and re-executed on every client's copy of the model — where every server-only
-member is null or default. In this game the actions *are* the rules, so that is the design rule everything follows
+member is null or default. In this game the rules are those actions, so this is the design rule everything follows
 from:
 
 > **An action carries every value it needs in its own payload, and its public mutations are a function of (payload,
@@ -270,10 +269,11 @@ A knob set long enough never to fire by accident cannot also fire on demand. Tes
   how the self-play and balance harnesses run thousands of matches in seconds.
 - **Lengthen** a duration far past the run, where the test must not be overtaken by it — the join window, the turn
   deadline in any test not about the turn deadline. Cold WebAssembly boots under parallel load make this the direction
-  the end-to-end suites need most. There is no endpoint that forces a deadline to expire on demand, so each lapse is
-  covered by pure `Server.Tests` cases over the policy that decides it, and a lapse is proven to *fire* end to end only
-  where a fixture brings a server of its own with shortened timings: the turn deadline in `MatchStrikeTests`, and the
-  Heist pick clock and a delivery retry in `HeistTests`. The other lapses are asserted as policy only.
+  the end-to-end suites need most. A developer player's board can lapse the deadline in force on demand (*Run out the
+  clock*, `DebugLapseDeadlineIntent`), through the same handler the timer runs; `MatchStrikeTests` lapses turn
+  deadlines that way. Each lapse is covered by pure `Server.Tests` cases over the policy that decides it, and a timer
+  is proven to *fire* end to end only where a fixture brings a server of its own with shortened timings: the Heist pick
+  clock and a delivery retry in `HeistTests`. The other lapses are asserted as policy only.
 
 ## See also
 

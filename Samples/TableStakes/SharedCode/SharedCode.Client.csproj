@@ -1,13 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Client build of the shared game logic. The server compiles the same sources in
-    Backend/SharedCode/SharedCode.csproj against Metaplay.Cloud. The two cannot be one assembly because
-    Metaplay.Cloud and Metaplay.Client each compile the SDK's core types into themselves.
+    Client build of the game logic in this directory, which the client and the server share.
 
-    The WebAssembly client cannot generate its serializer at runtime, so it loads a pre-built
-    Metaplay.Generated.Browser.dll that references the game types by assembly identity. tools/SerializerGen and
-    WebClient both reference this one project so that identity matches.
+    The server compiles the same sources in Backend/SharedCode/SharedCode.csproj, against Metaplay.Cloud. The two
+    builds cannot be one assembly: Metaplay.Cloud and Metaplay.Client each compile the SDK's core types into
+    themselves, so the game logic has to be compiled against each. The server project excludes this project's
+    bin/ and obj/ from its source glob.
+
+    The WebAssembly client cannot generate its serializer at runtime (mono-wasm has no Reflection.Emit / Roslyn),
+    so it loads a pre-built Metaplay.Generated.Browser.dll. That generated assembly references the concrete game
+    types (PlayerModel, PlayerActions, ...) *by assembly identity*. To make the identity match between the
+    build-time generator (tools/SerializerGen) and the runtime app (WebClient), both reference this one project
+    rather than source-including the game logic into each.
   -->
   <PropertyGroup>
     <!-- Two flavors, mirroring Metaplay.Client: net10.0-browser for the WebClient app (the compiler's BROWSER
@@ -24,15 +29,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\MetaplaySDK\Backend\CodeAnalyzers\Metaplay.CodeAnalyzers.csproj">
-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-      <OutputItemType>Analyzer</OutputItemType>
-    </ProjectReference>
-    <ProjectReference Include="..\..\..\MetaplaySDK\Backend\CodeAnalyzers.Shared\Metaplay.CodeAnalyzers.Shared.csproj">
-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-      <OutputItemType>Analyzer</OutputItemType>
-    </ProjectReference>
-    <ProjectReference Include="..\..\..\MetaplaySDK\Dotnet\Client\Metaplay.Client.csproj" />
+    <ProjectReference Include="$(MetaplaySDKPath)\Dotnet\Client\Metaplay.Client.csproj" />
   </ItemGroup>
 
 </Project>

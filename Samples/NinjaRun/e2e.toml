@@ -1,0 +1,18 @@
+# The browser test stack, run by run_e2e.py next to this file: `python3 run_e2e.py`.
+
+# One build of this solution builds the game server, the web client and the test assembly. List only projects the
+# run starts or tests: the harness starts the outputs of this build with --no-build.
+build = "tools/e2e-stack.slnx"
+
+[server]
+project = "Backend/Server"
+
+[client]
+project = "WebClient/WebClient.csproj"
+framework = "net10.0-browser"
+
+[[phases]]
+name = "WebClient.Tests"
+command = ["dotnet", "test", "WebClient.Tests/WebClient.Tests.csproj", "--no-build"]
+nunitWorkers = true
+playwright = "WebClient.Tests/bin/Debug/net10.0"

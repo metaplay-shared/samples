@@ -1,5 +1,3 @@
-// This file is part of Metaplay SDK which is released under the Metaplay SDK License.
-
 using Game.Logic;
 using Game.Logic.Matchmaking;
 using Metaplay.Core;

@@ -8,8 +8,8 @@ namespace WebClient.Tests;
 /// Tab cannot leave it while it is open, and closing it puts focus where the keyboard can continue. Focus left on
 /// <c>&lt;body&gt;</c> is a dead end, because the document itself never scrolls (<c>app.css</c>). The tests cover
 /// the three ways a <c>Panel</c> is opened: <c>MetaSheet</c>, <c>RewardReveal</c> and the card table's help dialog.
-/// Two tests need the live game server: offline mode has no claim handler for the reward reveal, and it redirects
-/// Home, where the help dialog opens, to a table (<c>docs/web-client.md</c>, "Offline mode"). No test taps PLAY,
+/// Two tests use the live game server. The help dialog's needs it, because offline mode redirects Home, where the
+/// dialog opens, to a table (<c>docs/web-client.md</c>, "Offline mode"). No test taps PLAY,
 /// so the fixture needs no <see cref="LiveServerLocks"/> lock. Each test's fresh guest account has a claimable reward.
 /// </summary>
 [TestFixture]
@@ -78,7 +78,7 @@ public class KeyboardTraversalPageTests : PlaywrightPageTest
     [Test]
     public async Task TheOddsSheetTrapsFocusAndReturnsItOnClose()
     {
-        await Page.GotoAsync(ClientUrl("/events/spin", "env=offline"));
+        await Page.GotoAsync(ClientUrl("/events/spin", "offline"));
         await WaitForLiveSessionAsync();
         await Expect(Page.GetByTestId("prize-details")).ToBeVisibleAsync(new() { Timeout = BootTimeoutMs });
 

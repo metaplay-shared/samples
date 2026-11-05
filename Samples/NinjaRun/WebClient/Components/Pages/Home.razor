@@ -9,7 +9,7 @@
 
 <PageTitle>@Config.AppTitle</PageTitle>
 
-<GameConnectionGate>
+<StartupSplash IsReady="Player != null">
     @* The menu and every run state occupy one canonical portrait area. The transition is clipped here so
        it covers the game composition without sweeping across the shared application shell or margins. Every
        view is swapped in and out behind the one curtain, inside this one page. *@
@@ -56,12 +56,9 @@
 
         <ScreenCurtain Transition="_transition" />
     </div>
-</GameConnectionGate>
+</StartupSplash>
 
 @code {
-
-    /// <summary>Where the run's sound loads its clips from, relative to the site root.</summary>
-    private const string AudioBaseUrl = "audio/";
 
     /// <summary>The views of the portrait area, one on screen at a time.</summary>
     private enum HomeView
@@ -98,13 +95,10 @@
     private PlayerModel? Player => MetaplayService.PlayerModel;
 
     /// <summary>
-    /// Whether the portrait area is on screen at all: the session is up and the player model is in, so the
-    /// connection gate is showing its content rather than a spinner or an error.
+    /// Whether the portrait area is there to play: the player model is in and the session is up, so neither the
+    /// startup splash nor the connection dialog stands in front of it.
     /// </summary>
-    private bool IsContentShown => Player != null
-        && MetaplayService.ConnectionState != ConnectionState.Disconnected
-        && MetaplayService.ConnectionState != ConnectionState.Connecting
-        && MetaplayService.ConnectionState != ConnectionState.Error;
+    private bool IsContentShown => Player != null && MetaplayService.ConnectionStatus == ConnectionStatus.Connected;
 
     private RunHostInterop _host = default!;
     private HomeControlsInterop _controls = default!;
@@ -115,6 +109,15 @@
     private DotNetObjectReference<TimeTrial>? _trialReference;
     private bool _loopRunning;
     private TaskCompletionSource<bool>? _trialReady;
+
+    /// <summary>
+    /// The session the run on screen was opened in has been lost. The run is stopped where it is until it has been
+    /// left, which the next session asks for (<see cref="FollowTheSessionAsync"/>).
+    /// </summary>
+    private bool _runInterrupted;
+
+    /// <summary>The interrupted run's leave has been asked for, so a later state change does not ask again.</summary>
+    private bool _interruptedRunLeaving;
 
     private RunView? _runView;
     private ScoreScreen? _scoreScreen;
@@ -199,14 +202,67 @@
     }
 
     /// <summary>
-    /// The connection or the player model changed: the page is drawn again, and a developer run waiting for
-    /// the session is opened once the player model is in.
+    /// The connection or the player model changed: the page is drawn again, the run on screen follows the
+    /// session, and a developer run waiting for the session is opened once the player model is in.
     /// </summary>
-    protected override void OnServiceStateChanged() => InvokeAsync(() =>
+    protected override void OnServiceStateChanged() => InvokeAsync(async () =>
     {
         StateHasChanged();
+        await FollowTheSessionAsync();
         _ = TryOpenPendingDeveloperRunAsync();
     });
+
+    /// <summary>
+    /// Keep the run on screen to the session it was opened in. When that session is lost, the connection dialog
+    /// comes up and the run stops where it is: its frame loop, and with it the run's clock, and its input. A drop
+    /// the SDK resumes on its own loses no session, so the run goes on through it. The next session, whether a
+    /// reconnect or the player taking the session back from another tab, did not issue the run's ticket, so it
+    /// leaves the run as the exit button does. A run the curtain has not uncovered yet is left at once instead,
+    /// so it is never uncovered (<see cref="AbandonRunUnderCoverAsync"/>).
+    /// </summary>
+    private async Task FollowTheSessionAsync()
+    {
+        bool connected = MetaplayService.ConnectionStatus == ConnectionStatus.Connected;
+        if (!connected && _timeTrial != null && !_runInterrupted)
+        {
+            _runInterrupted = true;
+
+            // A run its opening curtain still covers, its art perhaps still loading, has not been seen.
+            if (_opening == HomeView.Run && _transition.Phase == ScreenTransitionPhase.Covered)
+                await AbandonRunUnderCoverAsync();
+            else
+                await StopGameLoopAsync();
+        }
+        else if (connected && _runInterrupted && !_interruptedRunLeaving)
+        {
+            _interruptedRunLeaving = true;
+            if (!await _controls.LeaveViewEntryAsync(HistoryView.Run))
+                await OnHistoryLeftRunAsync();
+        }
+    }
+
+    /// <summary>
+    /// Leave a run whose session was lost before the curtain uncovered it: its opening pass still holds the curtain
+    /// covered, so the menu goes back in under it and is uncovered, and the run's history entry is stepped off, as
+    /// when no ticket comes.
+    /// </summary>
+    private async Task AbandonRunUnderCoverAsync()
+    {
+        if (_timeTrial != null)
+            _timeTrial.Finished -= OnRunFinished;
+
+        _timeTrial             = null;
+        _runInterrupted        = false;
+        _interruptedRunLeaving = false;
+        _view                  = HomeView.Menu;
+        _developerRun          = false;
+        _leaveQueued           = false;
+        await StopGameLoopAsync();
+        StateHasChanged();
+
+        await RevealAsync(enableGameInput: false);
+        await _controls.LeaveViewEntryAsync(HistoryView.Run);
+    }
 
     /// <summary>
     /// Hand the run to the frame loop once its canvas is in the document. The loop runs until the run is
@@ -231,6 +287,10 @@
         if (trial == null || _loopRunning || _runView == null)
             return;
 
+        // An interrupted run is not started again: the session it was opened in is gone.
+        if (_runInterrupted)
+            return;
+
         _loopRunning    = true;
         _trialReference = DotNetObjectReference.Create(trial);
         _selfReference ??= DotNetObjectReference.Create(this);
@@ -245,13 +305,17 @@
         _transition.BeginRunArtWait();
         try
         {
-            await _host.StartAsync(_runView.Canvas, _trialReference, course, AssetBaseUrl, AudioBaseUrl, _selfReference);
+            await _host.StartAsync(_runView.Canvas, _trialReference, course, AssetPaths.Art, AssetPaths.Audio, _selfReference);
         }
         finally
         {
             _transition.EndRunArtWait();
         }
         await _host.SetInputEnabledAsync(false);
+
+        // A session lost while the art loaded has had the run left already, behind the curtain, or stopped.
+        if (_timeTrial != trial || _runInterrupted)
+            return;
 
         if (_transition.Phase == ScreenTransitionPhase.Covered)
             await RevealAsync(enableGameInput: true);
@@ -627,8 +691,10 @@
 
         InvokeAsync(() =>
         {
-            _view      = HomeView.Run;
-            _timeTrial = new TimeTrial(ticket, course, gameConfig, lineup);
+            _view                  = HomeView.Run;
+            _runInterrupted        = false;
+            _interruptedRunLeaving = false;
+            _timeTrial             = new TimeTrial(ticket, course, gameConfig, lineup);
             _timeTrial.Finished += OnRunFinished;
             _trialReady?.TrySetResult(true);
             StateHasChanged();
@@ -764,18 +830,19 @@
         if (_timeTrial != null)
             _timeTrial.Finished -= OnRunFinished;
 
+        _timeTrial             = null;
+        _runInterrupted        = false;
+        _interruptedRunLeaving = false;
+        _view                  = HomeView.Menu;
+
         // A developer run goes back to the tools page it was opened from, behind the cover.
         if (_developerRun)
         {
             _developerRun = false;
-            _timeTrial    = null;
-            _view         = HomeView.Menu;
             Navigation.NavigateTo(_developerRunReturnPath);
             return;
         }
 
-        _timeTrial = null;
-        _view      = HomeView.Menu;
         StateHasChanged();
 
         await RevealAsync(enableGameInput: false, durationMs);

@@ -4,7 +4,7 @@
 @* ---------------- Main menu ----------------
    The title, the medallion and the one button that opens a run. A map has no name: it is shown by its
    geometry, so nothing is named here online; offline practice plays one fixed course and says which. The
-   player ID, connection status and reset controls live in the shared top bar (WebClientBase/MainLayout).
+   player ID, connection status and reset controls live in the debug bar (WebClientBase/MainLayout).
    Home.razor puts it in the portrait area behind the screen curtain, like every other view. *@
 <div class="menu-view" data-testid="main-menu">
 
@@ -64,9 +64,8 @@
     {
         get
         {
-            SharedGameConfig? gameConfig = MetaplayService.GameConfig;
-            CourseId? courseId = OfflineCourseOverride.RequestedCourseId ?? gameConfig?.Global.OfflinePracticeMapId;
-            return CourseResolver.TryResolve(courseId, gameConfig) != null ? "Practice map" : "—";
+            bool resolves = CourseResolver.TryResolve(MetaplayService.PracticeCourseId, MetaplayService.GameConfig) != null;
+            return resolves ? "Practice map" : "—";
         }
     }
 }

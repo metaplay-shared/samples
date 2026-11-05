@@ -1,5 +1,4 @@
 @using WebClient.Meta.Ui
-@inject NavigationManager Navigation
 
 @* The meta layer's button. Every tappable control in the meta layer except whole cards, tabs and switches
    uses it, so press, hover, focus and disabled styles are defined in one place. The variant selects the
@@ -13,7 +12,7 @@
 @if (Href is string href)
 {
     @* A disabled anchor renders without href, which makes it unfocusable and not navigable. *@
-    <a class="@CssClass" href="@(Disabled ? null : EnvironmentLink.Href(Navigation, href))"
+    <a class="@CssClass" href="@(Disabled ? null : href)"
        data-testid="@TestId" aria-label="@AriaLabel" aria-disabled="@(Disabled ? "true" : null)"
        @onclick="@(Disabled ? EventCallback<MouseEventArgs>.Empty : OnClick)"
        @attributes="AdditionalAttributes">@ChildContent</a>

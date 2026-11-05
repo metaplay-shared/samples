@@ -19,16 +19,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The Metaplay source generators. Required so this (the entry) assembly carries the generated integration
-         metadata that IntegrationAssembly.FindRoots() reads when TestHelper initializes the SDK. -->
-    <ProjectReference Include="$(MetaplayServerPath)\CodeAnalyzers\Metaplay.CodeAnalyzers.csproj">
-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-      <OutputItemType>Analyzer</OutputItemType>
-    </ProjectReference>
-    <ProjectReference Include="$(MetaplayServerPath)\CodeAnalyzers.Shared\Metaplay.CodeAnalyzers.Shared.csproj">
-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-      <OutputItemType>Analyzer</OutputItemType>
-    </ProjectReference>
     <ProjectReference Include="..\SharedCode\SharedCode.csproj" />
   </ItemGroup>
 

@@ -1,0 +1,70 @@
+@namespace WebClient.Components.Board
+@using Game.Logic
+@using WebClient.Services
+@using Metaplay.Core.Client
+@using WebClientBase.Services
+@inject IMetaplayConnectionService Connection
+@inject NavigationManager Navigation
+@inject MetaplayClientService Client
+@inject MatchService Match
+@implements IDisposable
+
+<nav class="board-chrome" aria-label="Match controls">
+    <span class="board-pill board-connection" data-testid="board-connection"
+          data-connected="@((!IsPreview && Connection.ConnectionStatus == ConnectionStatus.Connected).ToString().ToLowerInvariant())">
+        <span class="board-connection-dot" aria-hidden="true"></span>
+        <span>@Status · <span class="board-player-name">@DisplayName</span></span>
+    </span>
+    <button type="button" class="board-pill" data-testid="leave-match" @onclick="OnLeave">Leave</button>
+    @if ((IEnvironmentConfigProvider.Get().Id is "localhost" or "offline") || Client.PlayerModel?.IsDeveloper == true)
+    {
+    <details class="board-dev">
+        <summary class="board-pill" aria-label="Developer tools" title="Developer tools">···</summary>
+        <div class="board-dev-panel">
+            <strong>Developer tools</strong>
+            <span data-testid="board-player-id">@(Connection.PlayerId?.ToString() ?? "No player session")</span>
+            @if (!IsPreview && Client.PlayerModel?.IsDeveloper == true && Match.Model?.Result == null)
+            {
+                <button type="button" data-testid="debug-win-match" @onclick="DebugWin">Win now → Heist</button>
+                <span>This ends the match and awards real ranks and progress.</span>
+                <button type="button" data-testid="debug-lapse-deadline" @onclick="DebugLapseDeadline">Run out the clock</button>
+                <span>The deadline in force lapses now, whichever seat it is for.</span>
+            }
+            @if (Connection.ConnectionStatus == ConnectionStatus.Connected)
+            {
+                <button type="button" @onclick="Reset">Reset account</button>
+            }
+        </div>
+    </details>
+    }
+</nav>
+
+@code {
+    [Parameter] public string DisplayName { get; set; } = "You";
+    [Parameter] public bool IsPreview { get; set; }
+    [Parameter] public EventCallback OnLeave { get; set; }
+
+    string Status => IsPreview ? "Preview" : ConnectionStatusText.Describe(Connection);
+
+    protected override void OnInitialized()
+    {
+        Connection.OnStateChanged += Changed;
+    }
+
+    void Changed() => _ = InvokeAsync(StateHasChanged);
+
+    void DebugWin() => Match.SubmitSeatIntent(new DebugWinMatchIntent());
+
+    void DebugLapseDeadline() => Match.SubmitSeatIntent(new DebugLapseDeadlineIntent());
+
+    void Reset()
+    {
+        if (Connection.Reset())
+            StartPage.Reload(Navigation);
+    }
+
+    public void Dispose()
+    {
+        Connection.OnStateChanged -= Changed;
+    }
+}

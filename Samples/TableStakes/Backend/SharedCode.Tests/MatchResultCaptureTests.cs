@@ -155,7 +155,7 @@ namespace Game.Logic.Tests
                 if (model.Board.TurnPhase == MatchTurnPhase.AwaitingMove && model.Board.SeatOnTurn == 0)
                 {
                     List<Card> legal = MatchRules.GetLegalPlays(model.Engine.GetHand(0), model.Board.LedSuit);
-                    MatchHost.TrySubmitMove(model, Player(0), 0, model.Board.PlayIndex, legal[0], T0, host);
+                    MatchHost.TrySubmitMove(model, Player(0), model.Board.PlayIndex, legal[0], T0, host);
                 }
                 MatchHost.RunTable(model, pendingBotMove, T0, host);
             }

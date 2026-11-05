@@ -96,7 +96,7 @@ namespace Game.Server.Party
         }
 
         [EntityAskHandler]
-        public EntityAskOk HandlePlayerJoinOrUpdateRequest(EntityId player, PartyJoinOrUpdateRequest request)
+        EntityAskOk HandlePlayerJoinOrUpdateRequest(EntityId player, PartyJoinOrUpdateRequest request)
         {
             // Refuse join if entity hasn't been setup
             if (Model == null)

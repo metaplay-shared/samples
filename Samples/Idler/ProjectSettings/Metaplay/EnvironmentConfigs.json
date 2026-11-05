@@ -1,6 +1,5 @@
 [
   {
-    "MyExtendedInt": 0,
     "Version": 1,
     "Id": "offline",
     "DisplayName": "Offline Mode",
@@ -32,10 +31,15 @@
         "LocalCallbackUrls": [],
         "UseStateParameter": false
       }
-    }
+    },
+    "GameConfigMutationDetection": {
+      "Enabled": true,
+      "CheckIntervalSeconds": 30.0
+    },
+    "MyExtendedInt": 0,
+    "MyEditorOnlyString": ""
   },
   {
-    "MyExtendedInt": 0,
     "Version": 1,
     "Id": "localhost",
     "DisplayName": "",
@@ -67,10 +71,15 @@
         "LocalCallbackUrls": [],
         "UseStateParameter": false
       }
-    }
+    },
+    "GameConfigMutationDetection": {
+      "Enabled": true,
+      "CheckIntervalSeconds": 30.0
+    },
+    "MyExtendedInt": 0,
+    "MyEditorOnlyString": ""
   },
   {
-    "MyExtendedInt": 0,
     "Version": 1,
     "Id": "presently",
     "DisplayName": "Ad hoc tests [p2] (presently)",
@@ -104,10 +113,15 @@
         ],
         "UseStateParameter": true
       }
-    }
+    },
+    "GameConfigMutationDetection": {
+      "Enabled": true,
+      "CheckIntervalSeconds": 30.0
+    },
+    "MyExtendedInt": 0,
+    "MyEditorOnlyString": ""
   },
   {
-    "MyExtendedInt": 0,
     "Version": 1,
     "Id": "nimbly",
     "DisplayName": "New Develop [p2] (nimbly)",
@@ -141,10 +155,15 @@
         ],
         "UseStateParameter": true
       }
-    }
+    },
+    "GameConfigMutationDetection": {
+      "Enabled": true,
+      "CheckIntervalSeconds": 30.0
+    },
+    "MyExtendedInt": 0,
+    "MyEditorOnlyString": ""
   },
   {
-    "MyExtendedInt": 0,
     "Version": 1,
     "Id": "demo",
     "DisplayName": "",
@@ -178,10 +197,15 @@
         ],
         "UseStateParameter": true
       }
-    }
+    },
+    "GameConfigMutationDetection": {
+      "Enabled": true,
+      "CheckIntervalSeconds": 30.0
+    },
+    "MyExtendedInt": 0,
+    "MyEditorOnlyString": ""
   },
   {
-    "MyExtendedInt": 0,
     "Version": 1,
     "Id": "tough-falcons",
     "DisplayName": "test2 [p2] (tough-falcons)",
@@ -215,6 +239,12 @@
         ],
         "UseStateParameter": true
       }
-    }
+    },
+    "GameConfigMutationDetection": {
+      "Enabled": true,
+      "CheckIntervalSeconds": 30.0
+    },
+    "MyExtendedInt": 0,
+    "MyEditorOnlyString": ""
   }
 ]

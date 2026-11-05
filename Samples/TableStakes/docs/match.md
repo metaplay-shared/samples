@@ -44,10 +44,12 @@ Settings that are not per table, such as the matchmaking fill wait, stay runtime
 - **`MatchActor`** is the server's host shell. The matchmaker creates a table by asking a new random entity id to set
   itself up, so the actor spawns on that first message. It stays alive for a while after its last subscriber leaves,
   and that linger must be longer than the disconnect grace and the join window, or the actor would stop before those
-  timers ran out. `MatchOptions` refuses to load a linger that is not.
-- **`MatchClient`** attaches the web client and the bot client to the table. When a timeline update fails, the web
-  client closes the connection with a transient error, so the reconnect fetches a fresh model instead of stopping
-  ([`web-client.md`](web-client.md#connection-trouble)).
+  timers ran out. `MatchOptions` refuses to load a linger that is not. Before its first subscriber, the actor waits for
+  the restart grace plus the linger, so a table woken from the database outlives its
+  [restart grace](#restart-and-cold-wake).
+- **`MatchClient`** attaches the web client and the bot client to the table. When a timeline update fails, the SDK's
+  default handler closes the connection, and the player's reconnect fetches a fresh model
+  ([connection handling](https://github.com/metaplay-shared/blazor-starter-project/blob/main/docs/web-client.md#connection-handling)).
 
 ## Seat identity
 
@@ -103,20 +105,13 @@ where the browser already knows every hand ([`testing.md`](testing.md#seeds)).
 
 ### Delivering a hand
 
-A seat's hand reaches its client when the seat subscribes, which covers the deal and every reconnect. It is sent
-again whenever the host changes the hand without the seat playing it: a deadline auto-play, a covering bot's move or a
-reclaim. Between deliveries, the client derives its live hand as the delivered cards minus every card in the public
-play history.
+A seat's hand reaches its client in the member private state when the seat subscribes, which covers the deal and every
+reconnect. The client derives its live hand as the delivered cards minus every card in the public play history.
 
-Each delivery names the play index it was built at, and the client applies it only once its board has reached that
-index. A directed message is dispatched at once, while a timeline update is flushed on the actor's next turn, so a
-hand often arrives before the board update that explains it.
-
-The play index on the payloads, the client's hold and its retry exist because SDK 38 has no way to order a per-player
-payload against the timeline. A later SDK release adds `ExecuteActionPerMember`, an action on the timeline that one
-member's client executes while every other replica executes a no-op at the same position. A hand delivered that way
-cannot arrive early, so the directed message, the stamp, the hold and the retry go, replaced by one action that
-carries the whole hand.
+Nothing else is sent. A hand only loses cards, and only through public plays, so a card the host plays for the seat (a
+deadline auto-play or a covering bot's move) leaves the client's hand through the board like any other play. A rule
+that changed a hand without a public play, such as passing cards, would need a per-member action
+(`ExecuteActionPerMember`), which puts a private change on the timeline for one member only.
 
 ## Actions
 
@@ -154,8 +149,7 @@ lands.
 
 Clients send their intents to the table as directed messages: play a card, leave the table, and clock sync
 ([`MatchMessages.cs`](../SharedCode/Match/MatchMessages.cs)). A move names the card and the play index it answers,
-never a position in the hand. The seat named on the message is not trusted: the host checks it against the seat the
-sender occupies. Every move that is not played is answered with a refusal, which tells the client to release the card
+never a position in the hand, and no seat: the host plays it for the seat the sender occupies. Every move that is not played is answered with a refusal, which tells the client to release the card
 it lifted.
 
 ## Turn flow
@@ -204,7 +198,8 @@ Tests can make a table's stamps expire on demand ([`testing.md`](testing.md#forc
 The server takes a table's durations from the `Match` runtime options in
 [`MatchOptions`](../Backend/Server/Match/MatchOptions.cs). Their defaults are `MatchTimings.Default`, so the offline
 host and an unconfigured server start from the same timings. The actor's linger after its last subscriber is the one
-option the engine never sees ([Model, actor and client](#model-actor-and-client)).
+option the engine never sees, and the actor's initial wait is computed from it
+([Model, actor and client](#model-actor-and-client)).
 
 ## When players stop playing
 
@@ -224,7 +219,7 @@ client receives, which is a checksum mismatch on the first frame.
 ### Move deadlines and strikes
 
 When a connected player's deadline lapses, the table counts a strike, plays a card for them with the strongest bot
-profile and sends them a hand correction. Enough consecutive strikes hand the seat to a covering bot. Any move from the
+profile. Enough consecutive strikes hand the seat to a covering bot. Any move from the
 owner resets the count.
 
 ### Leaving the table
@@ -238,7 +233,7 @@ game is still played out and recorded. The offline server covers the seat and re
 
 A covered seat is played with the strongest bot profile ([`bots.md`](bots.md)). While the owner is still connected,
 for example after striking out, the covering bot waits a reclaim delay before each move, long enough for the owner to
-play a card and take the seat back. Any subscribe or move from the owner reclaims the seat and sends them their hand.
+play a card and take the seat back. Any subscribe or move from the owner reclaims the seat.
 
 The first loss reason recorded for a seat stays until the seat is reclaimed. Each loss is reported to the player's
 actor for analytics ([`analytics.md`](analytics.md)).

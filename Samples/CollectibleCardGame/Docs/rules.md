@@ -4,11 +4,16 @@ The part of Sticky Paws that knows how to play a game of Sticky Paws, and nothin
 deal, mana, the mulligan, the turn flow, combat, the keywords, the Weather hooks, the rank-track stats, Tuckered Out and
 the result. It does not own the network, the database, the clock, the players, or the wager.
 
-**The rules of Sticky Paws are the replicated match model and the actions that mutate it:** pure, seeded and timed by
-the model's own clock, with no engine object and no second state — the model the clients render is the state the rules
-run on.
-`MatchModel` is a `MultiplayerModelBase`, a rule is a `ModelAction` the match actor issues, and both clients re-execute
-it. What is secret hangs beneath one member.
+**The rules are the match model and the actions that change it.** `MatchModel` is a `MultiplayerModelBase`, and a
+rule is a `ModelAction`: the match actor issues it and both clients run it on their own copy of the model. There is no
+separate rules engine and no second copy of the state, so the model a client draws is the state the rules run on.
+The rules are pure, seeded and timed by the model's own clock, and what is secret hangs beneath one member.
+
+The common alternative is a **per-viewer projection**: the server keeps the game state to itself and sends each client
+its own filtered view, which the client only draws. This game does not need one, because every hidden input its rules
+use reduces to a count or arrives in an action's payload.
+[`hidden-information.md`](hidden-information.md#where-the-line-is-that-would-flip-this-decision) names the mechanics
+that would change that.
 
 [`match.md`](match.md#two-layers-deliberately-separated) draws the line between the rules and the actor that hosts
 them; this doc is the rules' own side of that line. The game they implement is [`game-design.md`](game-design.md); the data

@@ -28,12 +28,6 @@ namespace Game.Server.Player
     /// </summary>
     public sealed partial class PlayerActor : PlayerActorBase<PlayerModel>, IPlayerModelServerListener
     {
-        /// <summary>
-        /// The specialized SharedGameConfig (with any A/B experiment overrides) for this player. Only available
-        /// after PostLoad - i.e. in most methods outside Initialize, InitializePersisted, PostLoad and the ctor.
-        /// </summary>
-        SharedGameConfig SharedGameConfig => (SharedGameConfig)_specializedGameConfig.SharedConfig;
-
         protected override string RandomNewPlayerName()
         {
             return Invariant($"Guest {new Random().Next(100_000)}");
@@ -212,7 +206,7 @@ namespace Game.Server.Player
         /// </summary>
         MatchSetupParams BuildPracticeSetup(IReadOnlyList<CardId> deck, BotProfileId botProfile)
         {
-            SharedGameConfig config = SharedGameConfig;
+            SharedGameConfig config = Model.GameConfig;
             (MatchSeatSetup human, int powerScore) = MatchmakingTicketPolicy.FreezeSeat(Model, _entityId, deck, config);
 
             List<CardId>                botDeck  = BotDecks.DeckForOpponent(config, human.Deck, (int)botProfile).ToCardIds();

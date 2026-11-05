@@ -113,6 +113,10 @@ public class LiveServerWeeklyEventTests : PlaywrightPageTest
     {
         (string _, string theme) = await CreateWeekAsync();
 
+        // The player's name, to look the player up on the server before the reload at the end.
+        await Page.GotoAsync(ClientUrl());
+        string playerName = await ReadPlayerNameAsync();
+
         // ---- The week reaches the player ----
         await Page.GotoAsync(ClientUrl(MetaRoutes.WeeklyEvent));
         await WaitForLiveSessionAsync();
@@ -193,7 +197,9 @@ public class LiveServerWeeklyEventTests : PlaywrightPageTest
         Assert.That(await ReadBalanceAsync("gems"), Is.EqualTo(gemsBefore + 100), "the gem balance did not move by the week's reward");
 
         // ---- The reward is paid once. A reload rebuilds the client state from the server, so the page shows
-        //      the committed state rather than the client's prediction.
+        //      the committed state rather than the client's prediction. The claim is a client action, which the
+        //      page shows before the client has sent it, so the reload waits until the server has committed it.
+        await WaitForServerToHaveEventAsync(playerName, "PlayerEventWeeklyEventRewardClaimed");
         await ReloadOnStackAsync(Page);
         await WaitForLiveSessionAsync();
 

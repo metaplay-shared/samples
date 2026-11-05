@@ -1,11 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Offline game config build (see GameConfigBuildTool in Program.cs and docs/game-config.md).
+    Offline game config build. Reads the CSV sheets in GameConfigSource/ and writes both archives:
+    Backend/Server/GameConfig/StaticGameConfig.mpa (the one the server boots from) and
+    WebClient/wwwroot/Assets/SharedGameConfig.mpa (the client's built-in copy). It does not publish them to a
+    server: that is done from the LiveOps Dashboard. See Program.cs for the commands.
 
-    The tool references the Server project, not only SharedCode, so that it loads the same integration types
-    as the server. The SDK's integration registry picks the most derived implementation it finds, and some of
-    the game's implementations are in the server assembly. The sheet check also reads the server config type.
+    References Backend/Server rather than the client build in SharedCode/ because the config builder lives
+    in Metaplay.Cloud, the server-side SDK assembly, and this game's config validation reaches into server-only
+    integrations: the name vocabulary is checked against the server's PlayerRequirementsValidator. Referencing
+    only Backend/SharedCode would judge content by rules the server does not enforce.
+
+    Usage: run this project from the repo root. See README.
   -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -13,22 +19,12 @@
     <LangVersion>Latest</LangVersion>
     <Nullable>disable</Nullable>
     <Version>0.1.0.0</Version>
-    <!-- Run in the caller's working directory, not the project directory. The tool searches upward from
-         there for metaplay-project.yaml and resolves all paths against that directory. -->
+    <!-- Run with the caller's working directory (the repo root) so the default output paths land where the
+         user expects, rather than under the project directory. -->
     <RunWorkingDirectory>$(MSBuildStartupDirectory)</RunWorkingDirectory>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- The SDK's integration discovery reads source-generated type info from the entry assembly, so the tool
-         needs the Metaplay analyzers like every other Metaplay assembly. -->
-    <ProjectReference Include="..\..\..\..\MetaplaySDK\Backend\CodeAnalyzers\Metaplay.CodeAnalyzers.csproj">
-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-      <OutputItemType>Analyzer</OutputItemType>
-    </ProjectReference>
-    <ProjectReference Include="..\..\..\..\MetaplaySDK\Backend\CodeAnalyzers.Shared\Metaplay.CodeAnalyzers.Shared.csproj">
-      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-      <OutputItemType>Analyzer</OutputItemType>
-    </ProjectReference>
     <ProjectReference Include="..\..\Backend\Server\Server.csproj" />
   </ItemGroup>
 

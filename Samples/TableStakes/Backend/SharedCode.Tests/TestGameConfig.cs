@@ -5,20 +5,45 @@ using Metaplay.Core.InAppPurchase;
 using Metaplay.Core.Offers;
 using Metaplay.Core.Player;
 using Metaplay.Core.Schedule;
+using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Game.Logic.Tests
 {
     /// <summary>
-    /// A game config built in code, for tests that need a config without an archive.
+    /// The game config the tests run against: the committed archive, read the way a server reads it
+    /// (<see cref="LoadSharedAsync"/>), and a config built in code, for tests that change entries of their own.
     /// <para>
-    /// The values copy the shipped config in <c>GameConfigSource</c>, because this test assembly cannot reference
-    /// the server assembly that loads it. <c>GameConfigBuildTests</c> in the server tests checks the shipped
-    /// archive against the source content.
+    /// The values of the config built in code copy the shipped config in <c>GameConfigSource</c>.
+    /// <c>TestGameConfigTests</c> checks the copied wallet values against the committed archive, and
+    /// <c>GameConfigBuildTests</c> in <c>tools/GameConfigGen.Tests</c> checks the committed archive against the
+    /// sheets.
     /// </para>
     /// </summary>
     public static class TestGameConfig
     {
+        // \note Relative to the test project's directory (SharedCode.Tests/ or Server.Tests/), which is the test working directory.
+        const string StaticGameConfigPath = "../Server/GameConfig/StaticGameConfig.mpa";
+
+        /// <summary>
+        /// Load the game config archive file from disk, by default the committed one. The <see cref="SharedGameConfig"/>
+        /// part of the full archive is returned.
+        /// </summary>
+        public static async Task<SharedGameConfig> LoadSharedAsync(string staticGameConfigPath = StaticGameConfigPath)
+        {
+            // Read StaticGameConfig.mpa from disk
+            ConfigArchive staticGameConfigArchive = await ConfigArchive.FromFileAsync(staticGameConfigPath);
+
+            // Extract Shared.mpa from the parent archive
+            ReadOnlyMemory<byte> sharedGameConfigBytes = staticGameConfigArchive.GetEntryByName("Shared.mpa").Bytes;
+            ConfigArchive sharedGameConfigArchive = ConfigArchive.FromBytes(sharedGameConfigBytes);
+
+            // Create the SharedGameConfig from the bytes
+            ISharedGameConfig sharedGameConfig = GameConfigUtil.ImportSharedConfig(sharedGameConfigArchive);
+            return (SharedGameConfig)sharedGameConfig;
+        }
+
         public const int MaxCoins      = 9_999_999;
         public const int MaxGems       = 999_999;
         public const int MaxSpinTokens = 999;

@@ -26,6 +26,9 @@ The RNG **position** is secret for the same reason. It is held under the secret 
 including in a per-seat payload: the stream can be replayed forward in closed form, so a position plus a seed is the
 rest of the deal.
 
+The browser suites' server is the one exception: it deals every table from `Match:FixedDealSeed` and
+`Match:FixedBotSeed`, and the server refuses to start with either set outside a local or development environment.
+
 The Weather is drawn from the same stream and is immediately public, which looks like a leak and is not — but the
 reasoning has to be done rather than assumed. A pool of six Weathers reveals under three bits of a cryptographically
 random seed, which is not a search anybody can run. What follows is a rule rather than a case-by-case judgement:
@@ -63,13 +66,13 @@ value differs per viewer cannot live *on* it. It can nonetheless be carried *by*
 | What | Where it lives | Who receives it |
 |---|---|---|
 | The public board — Weather, stakes, seats, Den HP, mana, board critters and their full state, both graveyards, both unseen pools, hand and deck **counts**, both players' **locked cards**, phase, turn, action count, deadlines, the action history, the Heist eligibility lists | The replicated timeline | Both clients, identically |
-| The authoritative game — both hands, both deck **orders**, the RNG position, the bot seed, the hidden half of the card registry and a held peek's reveal | The one `ServerOnly` submodel tree, `MatchModel.Secret`: held only in the authoritative copy, never sent, never checksummed | Nobody |
-| A seat's own hand, and what a held peek is showing it | A client-only view beside the model, **carrying no serialization attribute at all**. The baseline arrives as subscribe-time private state; every change after it as an **addressed timeline operation** | That one client |
+| The authoritative game — both hands, both deck **orders**, the RNG position, the bot seed, the hidden half of the card registry and a held peek's reveal | The `ServerOnly` submodel tree `MatchModel.Secret`: held only in the authoritative copy, never sent, never checksummed | Nobody |
+| A seat's own hand, and what a held peek is showing it | The `ServerOnly` members `MatchModel.OwnHand` and `OwnPeek`, set only on that client. The baseline arrives as subscribe-time private state; every change after it as an **addressed timeline operation** | That one client |
 
 The second and third rows are mirror images. The secret is held by the server and by no client; the client's own view
-is held by one client and never by the server. The first is `ServerOnly` — stripped from the wire and from the
-checksum. The second is not serialized at all, because it has nothing to be hidden *from*: it never travels on this
-model's wire in either direction. What crosses between them goes one way only: the server reads the secret and
+is held by one client and never by the server. Both are `ServerOnly`, stripped from the wire and from the checksum. On
+the client's own view the name reads backwards, since the server never holds it, but unlike an unserialized field it is
+kept when the client copies the model. What crosses between them goes one way only: the server reads the secret and
 addresses what one seat may know to that seat.
 
 ## What is actually secret in this game
@@ -165,10 +168,8 @@ A hand reaches its client two ways, and the split is by *when*:
 - **Thereafter** — one **addressed timeline operation per card**: `MatchOwnCardGained` when one arrives,
   `MatchOwnCardLost` when one leaves, and `MatchOwnPeekRevealed` for what a held peek is showing. The addressed member
   receives the operation and every other subscriber a no-op at the same position, under the same checksum; the server
-  runs the no-op too, because it reads hands out of the secret. The SDK call behind this is `ExecuteActionPerMember`,
-  which this sample takes from a vendored copy of an SDK change not yet in a release
-  (`Backend/Server/SdkPreview/README.md`); [`protocol.md`](protocol.md#what-replication-actually-guarantees) has the
-  mechanics.
+  runs the no-op too, because it reads hands out of the secret. The SDK call behind this is `ExecuteActionPerMember`;
+  [`protocol.md`](protocol.md#what-replication-actually-guarantees) has the mechanics.
 
 That is not a short list of events: the mulligan, the start-of-turn draw on *every* turn, every draw or tutor effect,
 every bounce to hand, every card copied into a hand, hand overflow returning a card to the deck, a lapsed deadline
@@ -227,14 +228,14 @@ cannot disagree about it without the session ending.
 
 Secrecy that depends on nobody writing the wrong field is not secrecy.
 
-- **The secret is one member, reached through one file.** `MatchModel` has exactly **one** `ServerOnly` member — the
+- **The secret is one member, reached through one file.** `MatchModel` keeps it in **one** `ServerOnly` member — the
   secret tree, which only a host has — and every read and write of it lives in `SecretOps`, whose methods all begin by
   resolving the accessor and returning when it is null. A new field on the model is **public unless somebody puts it
-  under the secret**, which is the opposite default from a projection that names each public field. That is enforced
-  by tests rather than by a type: a shape test asserts that the secret is the only `ServerOnly` member anywhere in the
-  model's tree, another that the client's own view carries no serialization attribute, and a source-level test that no
-  file but the three entitled to it touches the secret. It is a real trade — a test can be deleted, and a type could
-  not be worked around — and the last section says when it would be the wrong one.
+  under the secret**, which is the opposite default from a projection that names each public field. The secret member
+  and its accessor are `internal` to the shared rules, which keeps server-only and client-only code out; that the
+  shared rules themselves, which also run on clients, go through `SecretOps` is a convention the compiler does not
+  check. Tests cover the rest: a shape test asserts that the secret and the client's own view are the only `ServerOnly`
+  members anywhere in the model's tree. The last section says when a single secret tree would be the wrong trade.
 - **The delivery of a hand is checked against the hand it describes.** A dropped, doubled or reordered operation leaves
   the public model identical and the client's hand wrong, so self-play replays the operations against a mirror after
   every action and compares it with the authority's hand. An addressed operation is also asserted to carry only what
@@ -263,8 +264,10 @@ broken no matter what its positive cases say. The catalogue is in [`bots.md`](bo
 ## Where the line is that would flip this decision
 
 This game keeps its whole hidden surface in two hands, two deck orders and one seeded stream, and every rule that
-touches one of them reduces to a count. That is what makes "the model is the game" safe here. Three mechanics would flip
-it, and a game with any of them should build a per-viewer projection instead:
+touches one of them reduces to a count. That is what makes it safe for the replicated model to be the game state and
+for both clients to run the rules on it ([`rules.md`](rules.md)). Three mechanics would flip it, and a game with any of
+them should build a per-viewer projection instead — the server keeping the state to itself and sending each client its
+own filtered view:
 
 - **Face-down cards.** A card in play whose identity is secret puts a hidden value inside the *public* board — the one
   structure that has to be identical on both clients. A projection can show a back and keep the identity in the
@@ -278,7 +281,7 @@ it, and a game with any of them should build a per-viewer projection instead:
   is simpler and safer.
 
 The tell, in one sentence: **if a hidden input has to drive a public mutation, project. If every hidden input reduces to
-a count or arrives in a payload, the model can be the game.**
+a count or arrives in a payload, the replicated model can be the game state.**
 
 ## See also
 

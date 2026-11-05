@@ -6,17 +6,15 @@ using System.Text.RegularExpressions;
 namespace WebClient.Tests;
 
 /// <summary>
-/// E2E tests for the developer course tools at <c>/dev/courses</c>, driven through <c>?env=offline</c>: the
+/// E2E tests for the developer course tools at <c>/dev/courses</c>, driven through <c>?offline</c>: the
 /// offline server runs developer-only actions, so the tools are there and need only the web client. The page
 /// lists every course, part and legal map in the session's config, draws the selected one with the run
 /// renderer, and opens practice or a race on it through the ordinary run screen.
 /// </summary>
-[Parallelizable(ParallelScope.Self)]
 [TestFixture]
-public class DeveloperCourseToolsOfflineModeTests : GamePageTest
+public class DeveloperCourseToolsOfflineModeTests : OfflinePageTest
 {
-    private static readonly string OfflineUrl =
-        (Environment.GetEnvironmentVariable("WEBCLIENT_BASE_URL") ?? "http://localhost:5290").TrimEnd('/') + "/?env=offline";
+    private static readonly string OfflineUrl = ClientUrl(query: "offline");
 
     /// <summary>Long enough for a composed map run with no input to reach the finish.</summary>
     private const int RunTimeoutMs = 150_000;
@@ -115,6 +113,7 @@ public class DeveloperCourseToolsOfflineModeTests : GamePageTest
     /// the score screen goes back to the tools.
     /// </summary>
     [Test]
+    [RunTimeScale(RunTimeScaleAttribute.Fastest)]
     public async Task PracticeOnAChosenMap_RunsThatMapAndEndsAsPractice()
     {
         await OpenCourseToolsAsync();

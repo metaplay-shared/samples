@@ -6,20 +6,16 @@ using System.Text.RegularExpressions;
 namespace WebClient.Tests;
 
 /// <summary>
-/// E2E tests for the wait on a run's art behind the menu transition, driven through <c>?env=offline</c> so they
+/// E2E tests for the wait on a run's art behind the menu transition, driven through <c>?offline</c> so they
 /// need only the web client. While the curtain is covered, the run's renderer loads every sheet the course
 /// draws from, and the reveal starts only once each has arrived and been decoded or failed to load. The canvas'
 /// <c>data-art-ready</c> attribute says when that is, and the curtain carries a loading notice while it waits.
 /// The art responses are held back or refused with a Playwright route to make the wait observable.
 /// </summary>
-[Parallelizable(ParallelScope.Self)]
 [TestFixture]
-public class RunArtLoadingOfflineModeTests : GamePageTest
+public class RunArtLoadingOfflineModeTests : OfflinePageTest
 {
-    private static readonly string BaseUrl =
-        (Environment.GetEnvironmentVariable("WEBCLIENT_BASE_URL") ?? "http://localhost:5290").TrimEnd('/');
-
-    private static readonly string OfflineUrl = BaseUrl + "/?env=offline";
+    private static readonly string OfflineUrl = ClientUrl(query: "offline");
 
     /// <summary>How long each held-back art response is delayed, which is long enough to see the wait.</summary>
     private const int ArtDelayMs = 1500;
